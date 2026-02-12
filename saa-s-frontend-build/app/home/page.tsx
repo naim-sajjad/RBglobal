@@ -1,6 +1,6 @@
 "use client"
 
-import Header from "@/components/Header"
+import Header from "@/components/web/Header"
 import Hero from "@/components/hero"
 import UserTypeCTA from "@/components/user-type-cta"
 import JobSearch from "@/components/job-search"

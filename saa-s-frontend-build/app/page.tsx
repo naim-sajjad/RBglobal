@@ -20,7 +20,8 @@ export default function Home() {
         if (isSuperAdmin) {
           router.push('/admin/tenants');
         } else {
-          router.push('/dashboard');
+          router.push('/home');
+       //   router.push('/dashboard');
         }
       } else {
         router.push('/home');
