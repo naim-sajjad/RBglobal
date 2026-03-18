@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,16 +19,23 @@ import { Spinner } from '@/components/ui/spinner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, ArrowLeft, Upload, X, FileImage } from 'lucide-react';
 import { apiClient } from '@/lib/api';
-import { CreateDriverData, Tenant } from '@/lib/types';
+import { CreateDriverData, Tenant, DriverClass } from '@/lib/types';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
 import { Textarea } from '@/components/ui/textarea';
 
 export default function CreateDriverPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user: currentUser } = useAuth();
+  const driverId = searchParams.get('id');
+  const isEditing = !!driverId;
+  const isDriver = currentUser?.roles?.some((role: any) => role.name === 'driver') || false;
+  
   const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [driverClasses, setDriverClasses] = useState<DriverClass[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingDriver, setIsLoadingDriver] = useState(isEditing);
   const [error, setError] = useState('');
   const [currentSection, setCurrentSection] = useState(1);
   const totalSections = 5;
@@ -58,6 +65,8 @@ export default function CreateDriverPage() {
     drug_alcohol_test: false,
     compliance_notes: '',
     status: 'pending_approval',
+    driver_class_id: undefined,
+    driver_class_effective_date: '',
   });
 
   const [documentFiles, setDocumentFiles] = useState<{
@@ -78,7 +87,63 @@ export default function CreateDriverPage() {
     if (currentUser?.is_global_admin) {
       fetchTenants();
     }
-  }, [currentUser]);
+    apiClient.getDriverClasses({ status: 'active' }).then((list) => setDriverClasses(Array.isArray(list) ? list : [])).catch(() => {});
+    if (isEditing && driverId) {
+      fetchDriverForEdit();
+    }
+  }, [currentUser, driverId, isEditing]);
+
+  const fetchDriverForEdit = async () => {
+    if (!driverId) return;
+    
+    setIsLoadingDriver(true);
+    try {
+      const driver = await apiClient.getDriver(driverId);
+      
+      // Check if driver is editing their own profile
+      if (isDriver && driver.user_id !== currentUser?.id) {
+        toast.error('You can only edit your own profile');
+        router.push('/driver/profile');
+        return;
+      }
+      
+      // Populate form with driver data
+      setFormData({
+        name: driver.user?.name || '',
+        email: driver.user?.email || '',
+        password: '', // Don't populate password
+        tenant_id: driver.tenant_id || '',
+        license_number: driver.license_number || '',
+        license_type: driver.license_type as any,
+        license_other: driver.license_other || '',
+        issuing_authority: driver.issuing_authority || '',
+        license_expiry_date: driver.license_expiry_date 
+          ? new Date(driver.license_expiry_date).toISOString().split('T')[0]
+          : '',
+        years_of_experience: driver.years_of_experience || 0,
+        driving_history: driver.driving_history || '',
+        vehicle_types: driver.vehicle_types || [],
+        vehicle_ownership: driver.vehicle_ownership as any,
+        vehicle_capacity: driver.vehicle_capacity || '',
+        route_type: driver.route_type as any,
+        route_details: driver.route_details || '',
+        shift_timing: driver.shift_timing as any,
+        pay_type: driver.pay_type as any,
+        drug_alcohol_test: driver.drug_alcohol_test || false,
+        compliance_notes: driver.compliance_notes || '',
+        status: driver.status as any,
+        driver_class_id: driver.driver_class_id ?? undefined,
+        driver_class_effective_date: driver.driver_class_effective_date
+          ? new Date(driver.driver_class_effective_date).toISOString().split('T')[0]
+          : '',
+      });
+    } catch (err: any) {
+      toast.error('Failed to load driver data');
+      router.push(isDriver ? '/driver/profile' : '/admin/drivers');
+    } finally {
+      setIsLoadingDriver(false);
+    }
+  };
 
   const fetchTenants = async () => {
     try {
@@ -115,8 +180,8 @@ export default function CreateDriverPage() {
     setError('');
     setIsLoading(true);
 
-    // Validation
-    if (!formData.password || formData.password.length < 8) {
+    // Validation - password only required for new drivers
+    if (!isEditing && (!formData.password || formData.password.length < 8)) {
       setError('Password is required and must be at least 8 characters');
       setIsLoading(false);
       return;
@@ -133,11 +198,26 @@ export default function CreateDriverPage() {
         safety_certificate: documentFiles.safety_certificate,
       };
 
-      await apiClient.createDriver(submitData);
-      toast.success('Driver created successfully');
-      router.push('/admin/drivers');
+      // Remove password if not provided (for editing)
+      if (isEditing && !submitData.password) {
+        delete submitData.password;
+      }
+      submitData.driver_class_id = formData.driver_class_id ?? null;
+      submitData.driver_class_effective_date = formData.driver_class_effective_date || null;
+
+      if (isEditing && driverId) {
+        // Update existing driver
+        await apiClient.updateDriver(driverId, submitData);
+        toast.success('Driver profile updated successfully');
+        router.push(isDriver ? '/driver/profile' : '/admin/drivers');
+      } else {
+        // Create new driver
+        await apiClient.createDriver(submitData);
+        toast.success('Driver created successfully');
+        router.push('/admin/drivers');
+      }
     } catch (err: any) {
-      const errorMessage = err.response?.data?.message || 'Failed to create driver';
+      const errorMessage = err.response?.data?.message || (isEditing ? 'Failed to update driver' : 'Failed to create driver');
       setError(errorMessage);
       toast.error(errorMessage);
     } finally {
@@ -215,6 +295,14 @@ export default function CreateDriverPage() {
     );
   };
 
+  if (isLoadingDriver) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Spinner className="h-8 w-8 text-blue-500" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -229,8 +317,12 @@ export default function CreateDriverPage() {
             Back
           </Button>
           <div>
-            <h1 className="text-3xl font-bold text-white">Add New Driver</h1>
-            <p className="text-slate-400 mt-2">Create a new driver account and profile</p>
+            <h1 className="text-3xl font-bold text-white">
+              {isEditing ? 'Edit Driver Profile' : 'Add New Driver'}
+            </h1>
+            <p className="text-slate-400 mt-2">
+              {isEditing ? 'Update driver information and profile' : 'Create a new driver account and profile'}
+            </p>
           </div>
         </div>
       </div>
@@ -312,17 +404,21 @@ export default function CreateDriverPage() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="password" className="text-slate-200">Password *</Label>
+                    <Label htmlFor="password" className="text-slate-200">
+                      Password {!isEditing && '*'}
+                      {isEditing && <span className="text-slate-400 text-xs ml-2">(Leave blank to keep current password)</span>}
+                    </Label>
                     <Input
                       id="password"
                       name="password"
                       type="password"
                       value={formData.password}
                       onChange={handleChange}
-                      placeholder="At least 8 characters"
-                      disabled={isLoading}
+                      placeholder={isEditing ? "Enter new password (optional)" : "At least 8 characters"}
+                      disabled={isLoading || isLoadingDriver}
                       className="bg-slate-700 border-slate-600 text-white"
-                      required
+                      required={!isEditing}
+                      minLength={8}
                     />
                   </div>
                   {currentUser?.is_global_admin && (
@@ -679,6 +775,39 @@ export default function CreateDriverPage() {
                     </SelectContent>
                   </Select>
                 </div>
+
+                {/* Driver Class (pay tier) */}
+                <div className="space-y-2">
+                  <Label htmlFor="driver_class_id" className="text-slate-200">Driver Class</Label>
+                  <Select
+                    value={formData.driver_class_id != null ? String(formData.driver_class_id) : ''}
+                    onValueChange={(value) => setFormData({ ...formData, driver_class_id: value ? Number(value) : undefined })}
+                    disabled={isLoading}
+                  >
+                    <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
+                      <SelectValue placeholder="Select class (optional)" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-700 border-slate-600">
+                      <SelectItem value="">None</SelectItem>
+                      {driverClasses.map((dc) => (
+                        <SelectItem key={dc.id} value={String(dc.id)}>
+                          {dc.code}{dc.name ? ` — ${dc.name}` : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="driver_class_effective_date" className="text-slate-200">Class Effective Date (optional)</Label>
+                  <Input
+                    id="driver_class_effective_date"
+                    type="date"
+                    value={formData.driver_class_effective_date ?? ''}
+                    onChange={(e) => setFormData({ ...formData, driver_class_effective_date: e.target.value })}
+                    disabled={isLoading}
+                    className="bg-slate-700 border-slate-600 text-white"
+                  />
+                </div>
               </div>
             )}
 
@@ -717,7 +846,9 @@ export default function CreateDriverPage() {
                   className="bg-blue-600 hover:bg-blue-700"
                 >
                   {isLoading && <Spinner className="mr-2 h-4 w-4" />}
-                  {isLoading ? 'Creating...' : 'Create Driver'}
+                  {isLoading 
+                    ? (isEditing ? 'Updating...' : 'Creating...') 
+                    : (isEditing ? 'Update Driver' : 'Create Driver')}
                 </Button>
               )}
             </div>

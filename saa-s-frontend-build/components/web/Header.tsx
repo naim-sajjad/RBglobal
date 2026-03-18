@@ -24,6 +24,7 @@ export default function Header() {
     { name: "Job Seekers", href: "#jobs" },
     { name: "Employer", href: "#employers" },
     { name: "Contact Us", href: "#contact" },
+    { name: "Driver Registration", href: "/driver/register/" },
   ]
 
   return (
@@ -46,10 +47,10 @@ export default function Header() {
             </span>
           </div>
           <div className="flex items-center gap-4">
-            <Link href="#" className="hover:text-[#D4AF37] transition-colors">
+            <Link href="/register" className="hover:text-[#D4AF37] transition-colors">
               Register
             </Link>
-            <Link href="#" className="hover:text-[#D4AF37] transition-colors">
+            <Link href="/login" className="hover:text-[#D4AF37] transition-colors">
               Login
             </Link>
           </div>

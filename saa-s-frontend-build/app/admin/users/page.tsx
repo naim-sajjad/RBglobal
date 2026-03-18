@@ -180,7 +180,9 @@ export default function UsersPage() {
       };
 
       if (formData.role_id) {
-        submitData.role_id = formData.role_id;
+        submitData.role_id = typeof formData.role_id === 'string'
+          ? parseInt(formData.role_id, 10)
+          : formData.role_id;
       }
 
       // Handle multiple tenant assignments

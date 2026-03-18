@@ -123,3 +123,8 @@
     @apply bg-background text-foreground;
   }
 }
+/* Add this to your global CSS or component styles */
+[data-form-container] {
+  scroll-margin-top: 20px;
+  overflow-anchor: none;
+}

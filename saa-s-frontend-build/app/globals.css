@@ -126,3 +126,6 @@
     @apply cursor-pointer;
   }
 }
+button{
+  cursor: pointer;
+}

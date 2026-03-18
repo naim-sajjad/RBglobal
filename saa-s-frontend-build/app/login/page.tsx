@@ -1,6 +1,6 @@
 'use client';
 
-import React from "react"
+import React from 'react';
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -9,24 +9,33 @@ import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle, Loader2 } from 'lucide-react';
+import { AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
   const { login } = useAuth();
-  
+
   const [formData, setFormData] = useState({
     email: '',
     password: '',
   });
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-
+  const [showPassword, setShowPassword] = useState(false);
+  const togglePasswordVisibility = () => {
+    setShowPassword(!showPassword);
+  };
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
     setError('');
   };
 
@@ -37,86 +46,117 @@ export default function LoginPage() {
 
     try {
       await login(formData.email, formData.password);
-      
+
       // Redirect based on user role
       const userStr = localStorage.getItem('auth_user');
       if (userStr) {
         const user = JSON.parse(userStr);
         if (user.is_global_admin) {
           router.push('/admin/tenants');
+        } else if (
+          user.roles?.some((r: { name?: string }) =>
+            r.name?.toLowerCase() === 'driver'
+          )
+        ) {
+          router.push('/driver/profile');
         } else {
           router.push('/dashboard');
         }
       }
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Login failed. Please check your credentials.');
+      setError(
+        err.response?.data?.message ||
+          'Login failed. Please check your credentials.',
+      );
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <Card className="border-slate-700 bg-slate-800">
-          <CardHeader className="space-y-2">
-            <CardTitle className="text-2xl text-white">Sign In</CardTitle>
-            <CardDescription className="text-slate-400">
+    <div className='min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center p-4'>
+      <div className='w-full max-w-md'>
+        <Card className='border-slate-700 bg-slate-800'>
+          <CardHeader className='space-y-2'>
+            <CardTitle className='text-2xl text-white'>Sign In</CardTitle>
+            <CardDescription className='text-slate-400'>
               Enter your email and password to sign in
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className='space-y-4'>
               {error && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
+                <Alert variant='destructive'>
+                  <AlertCircle className='h-4 w-4' />
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
               )}
 
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-slate-200">Email</Label>
+              <div className='space-y-2'>
+                <Label htmlFor='email' className='text-slate-200'>
+                  Email
+                </Label>
                 <Input
-                  id="email"
-                  name="email"
-                  type="email"
+                  id='email'
+                  name='email'
+                  type='email'
                   value={formData.email}
                   onChange={handleChange}
-                  placeholder="Enter your email"
+                  placeholder='Enter your email'
                   disabled={isLoading}
-                  className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
+                  className='bg-slate-700 border-slate-600 text-white placeholder:text-slate-400'
                   required
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="password" className="text-slate-200">Password</Label>
-                <Input
-                  id="password"
-                  name="password"
-                  type="password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  placeholder="Enter your password"
-                  disabled={isLoading}
-                  className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
-                  required
-                />
+              <div className='space-y-2'>
+                <Label htmlFor='password' className='text-slate-200'>
+                  Password
+                </Label>
+                <div className='relative'>
+                  <Input
+                    id='password'
+                    name='password'
+                    type={showPassword ? 'text' : 'password'}
+                    value={formData.password}
+                    onChange={handleChange}
+                    placeholder='Enter your password'
+                    disabled={isLoading}
+                    className='bg-slate-700 border-slate-600 text-white placeholder:text-slate-400'
+                    required
+                  />
+                  {/* 4. Add the toggle button */}
+                  <button
+                    type='button'
+                    onClick={() => setShowPassword(!showPassword)}
+                    className='absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition-colors'
+                    tabIndex={-1} // Prevents tabbing into the eye icon
+                  >
+                    {showPassword ? (
+                      <EyeOff className='h-4 w-4' />
+                    ) : (
+                      <Eye className='h-4 w-4' />
+                    )}
+                  </button>
+                </div>
               </div>
 
-              <Button 
-                type="submit" 
+              <Button
+                type='submit'
                 disabled={isLoading}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                className='w-full bg-blue-600 hover:bg-blue-700 text-white'
               >
-                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {isLoading && <Loader2 className='mr-2 h-4 w-4 animate-spin' />}
                 {isLoading ? 'Signing in...' : 'Sign In'}
               </Button>
 
-              <div className="text-center text-sm">
-                <p className="text-slate-400">
+              <div className='text-center text-sm'>
+                <p className='text-slate-400'>
                   Don't have an account?{' '}
-                  <Link href="/register" className="text-blue-400 hover:text-blue-300">
+                  <Link
+                    href='/register'
+                    className='text-blue-400 hover:text-blue-300'
+                  >
                     Register here
                   </Link>
                 </p>
