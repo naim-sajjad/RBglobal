@@ -13,6 +13,8 @@ class Driver extends Model
     protected $fillable = [
         'user_id',
         'tenant_id',
+        'driver_class_id',
+        'driver_class_effective_date',
         // License Information
         'license_number',
         'license_type',
@@ -46,6 +48,7 @@ class Driver extends Model
 
     protected $casts = [
         'license_expiry_date' => 'date',
+        'driver_class_effective_date' => 'date',
         'vehicle_types' => 'array',
         'drug_alcohol_test' => 'boolean',
         'years_of_experience' => 'integer',
@@ -65,6 +68,27 @@ class Driver extends Model
     public function tenant(): BelongsTo
     {
         return $this->belongsTo(\Stancl\Tenancy\Database\Models\Tenant::class, 'tenant_id');
+    }
+
+    /**
+     * Get the driver class (pay tier) assigned to this driver
+     */
+    public function driverClass(): BelongsTo
+    {
+        return $this->belongsTo(DriverClass::class);
+    }
+
+    public function timesheets(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(Timesheet::class)->orderBy('week_start_date', 'desc');
+    }
+
+    /**
+     * Get the reference checks for the driver
+     */
+    public function referenceChecks(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(ReferenceCheck::class);
     }
 
     /**

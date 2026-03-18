@@ -7,6 +7,12 @@ use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\PermissionController;
 use App\Http\Controllers\Api\DriverController;
+use App\Http\Controllers\Api\ReferenceCheckController;
+use App\Http\Controllers\Api\EmployerController;
+use App\Http\Controllers\Api\RateCardController;
+use App\Http\Controllers\Api\DriverClassController;
+use App\Http\Controllers\Api\PayItemTemplateController;
+use App\Http\Controllers\Api\TimesheetController;
 
 /*
 |--------------------------------------------------------------------------
@@ -21,6 +27,10 @@ Route::prefix('v1')->group(function () {
 
     // Public driver self-registration
     Route::post('/drivers/register', [DriverController::class, 'selfRegister']);
+
+    // Public reference check (referee form by link – no auth)
+    Route::get('/reference-check/{token}', [ReferenceCheckController::class, 'getByToken']);
+    Route::post('/reference-check/{token}/submit', [ReferenceCheckController::class, 'submitByToken']);
 
     // Protected routes (require authentication)
     Route::middleware(['auth:sanctum'])->group(function () {
@@ -62,9 +72,64 @@ Route::prefix('v1/tenant')->middleware([
     // Driver Management
     Route::get('/drivers', [DriverController::class, 'index'])->middleware('permission:drivers.view');
     Route::post('/drivers', [DriverController::class, 'store'])->middleware('permission:drivers.create');
+    Route::get('/drivers/my-profile', [DriverController::class, 'myProfile']); // Driver's own profile
     Route::get('/drivers/{driver}', [DriverController::class, 'show'])->middleware('permission:drivers.view');
     Route::put('/drivers/{driver}', [DriverController::class, 'update'])->middleware('permission:drivers.update');
     Route::delete('/drivers/{driver}', [DriverController::class, 'destroy'])->middleware('permission:drivers.delete');
     Route::post('/drivers/{driver}/approve', [DriverController::class, 'approve'])->middleware('permission:drivers.approve');
+
+    // Reference checks (per driver)
+    Route::get('/drivers/{driver}/reference-checks', [ReferenceCheckController::class, 'index'])->middleware('permission:drivers.view');
+    Route::post('/drivers/{driver}/reference-checks', [ReferenceCheckController::class, 'store'])->middleware('permission:drivers.view');
+    Route::get('/drivers/{driver}/reference-checks/{referenceCheck}', [ReferenceCheckController::class, 'show'])->middleware('permission:drivers.view');
+    Route::post('/drivers/{driver}/reference-checks/{referenceCheck}/send-link', [ReferenceCheckController::class, 'sendLink'])->middleware('permission:drivers.view');
+    Route::put('/drivers/{driver}/reference-checks/{referenceCheck}/fill', [ReferenceCheckController::class, 'fill'])->middleware('permission:drivers.view');
+
+    // Driver Classes (pay tiers)
+    Route::get('/driver-classes', [DriverClassController::class, 'index']);
+    Route::post('/driver-classes', [DriverClassController::class, 'store']);
+    Route::get('/driver-classes/{driverClass}', [DriverClassController::class, 'show']);
+    Route::put('/driver-classes/{driverClass}', [DriverClassController::class, 'update']);
+    Route::delete('/driver-classes/{driverClass}', [DriverClassController::class, 'destroy']);
+
+    // Employers (clients) & Rate Cards
+    Route::get('/employers', [EmployerController::class, 'index']);
+    Route::post('/employers', [EmployerController::class, 'store']);
+    Route::get('/employers/{employer}', [EmployerController::class, 'show']);
+    Route::put('/employers/{employer}', [EmployerController::class, 'update']);
+    Route::delete('/employers/{employer}', [EmployerController::class, 'destroy']);
+    Route::get('/employers/{employer}/rate-cards', [RateCardController::class, 'index']);
+    Route::post('/employers/{employer}/rate-cards', [RateCardController::class, 'store']);
+    Route::get('/employers/{employer}/rate-cards/{rateCard}', [RateCardController::class, 'show']);
+    Route::put('/employers/{employer}/rate-cards/{rateCard}', [RateCardController::class, 'update']);
+    Route::post('/employers/{employer}/rate-cards/{rateCard}/duplicate', [RateCardController::class, 'duplicate']);
+    Route::post('/employers/{employer}/rate-cards/{rateCard}/deactivate', [RateCardController::class, 'deactivate']);
+    Route::get('/employers/{employer}/pay-item-rates', [EmployerController::class, 'payItemRates']);
+    Route::put('/employers/{employer}/pay-item-rates', [EmployerController::class, 'updatePayItemRate']);
+
+    // Pay Item Templates
+    Route::get('/pay-item-templates', [PayItemTemplateController::class, 'index']);
+    Route::post('/pay-item-templates', [PayItemTemplateController::class, 'store']);
+    Route::get('/pay-item-templates/{payItemTemplate}', [PayItemTemplateController::class, 'show']);
+    Route::put('/pay-item-templates/{payItemTemplate}', [PayItemTemplateController::class, 'update']);
+    Route::delete('/pay-item-templates/{payItemTemplate}', [PayItemTemplateController::class, 'destroy']);
+
+    // Timesheets
+    Route::get('/timesheets', [TimesheetController::class, 'index']);
+    Route::post('/timesheets', [TimesheetController::class, 'store']);
+    Route::get('/timesheets/{timesheet}', [TimesheetController::class, 'show']);
+    Route::put('/timesheets/{timesheet}', [TimesheetController::class, 'update']);
+    Route::delete('/timesheets/{timesheet}', [TimesheetController::class, 'destroy']);
+    Route::post('/timesheets/{timesheet}/submit', [TimesheetController::class, 'submit']);
+    Route::post('/timesheets/{timesheet}/approve', [TimesheetController::class, 'approve']);
+    Route::post('/timesheets/{timesheet}/reject', [TimesheetController::class, 'reject']);
+    Route::post('/timesheets/{timesheet}/mark-paid', [TimesheetController::class, 'markPaid']);
+    Route::post('/timesheets/{timesheet}/recalculate', [TimesheetController::class, 'recalculate']);
+    Route::post('/timesheets/{timesheet}/trips', [TimesheetController::class, 'storeTrip']);
+    Route::put('/timesheets/{timesheet}/trips/{trip}', [TimesheetController::class, 'updateTrip']);
+    Route::delete('/timesheets/{timesheet}/trips/{trip}', [TimesheetController::class, 'destroyTrip']);
+    Route::post('/timesheets/{timesheet}/trips/{trip}/pay-items', [TimesheetController::class, 'storePayItem']);
+    Route::put('/timesheets/{timesheet}/trips/{trip}/pay-items/{payItem}', [TimesheetController::class, 'updatePayItem']);
+    Route::delete('/timesheets/{timesheet}/trips/{trip}/pay-items/{payItem}', [TimesheetController::class, 'destroyPayItem']);
 });
 
