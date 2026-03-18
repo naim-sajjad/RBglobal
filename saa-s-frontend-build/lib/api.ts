@@ -196,6 +196,11 @@ class ApiClient {
     return response.data;
   }
 
+  async getMyDriverProfile() {
+    const response = await this.client.get('/tenant/drivers/my-profile');
+    return response.data;
+  }
+
   async createDriver(driverData: any) {
     const formData = new FormData();
     
@@ -241,7 +246,7 @@ class ApiClient {
       'safety_certificate',
     ];
     
-    // Append all fields to FormData
+    // Append all fields to FormData (send empty string for null driver_class_id so backend can clear it)
     Object.keys(driverData).forEach((key) => {
       if (documentFields.includes(key) && driverData[key] instanceof File) {
         formData.append(key, driverData[key]);
@@ -249,6 +254,8 @@ class ApiClient {
         driverData[key].forEach((type: string) => {
           formData.append('vehicle_types[]', type);
         });
+      } else if (key === 'driver_class_id' && driverData[key] === null) {
+        formData.append(key, '');
       } else if (driverData[key] !== null && driverData[key] !== undefined) {
         formData.append(key, driverData[key]);
       }
@@ -306,9 +313,290 @@ class ApiClient {
     return response.data;
   }
 
+  // Reference Check APIs (tenant-scoped; for drivers)
+  async getReferenceChecks(driverId: string | number) {
+    const response = await this.client.get(`/tenant/drivers/${driverId}/reference-checks`);
+    return response.data;
+  }
+
+  async getReferenceCheck(driverId: string | number, referenceCheckId: string) {
+    const response = await this.client.get(`/tenant/drivers/${driverId}/reference-checks/${referenceCheckId}`);
+    return response.data;
+  }
+
+  async createReferenceCheckRequest(driverId: string | number, payload: {
+    referee_email?: string;
+    reference_request: import('./types').ReferenceRequestData;
+    applicant_consent?: import('./types').ApplicantConsentData;
+  }) {
+    const response = await this.client.post(`/tenant/drivers/${driverId}/reference-checks`, payload);
+    return response.data;
+  }
+
+  async sendReferenceCheckLink(driverId: string | number, referenceCheckId: string, refereeEmail: string) {
+    const response = await this.client.post(`/tenant/drivers/${driverId}/reference-checks/${referenceCheckId}/send-link`, {
+      referee_email: refereeEmail,
+    });
+    return response.data;
+  }
+
+  async submitReferenceCheckAsAdmin(driverId: string | number, referenceCheckId: string, formData: import('./types').ReferenceCheckFormData) {
+    const response = await this.client.put(`/tenant/drivers/${driverId}/reference-checks/${referenceCheckId}/fill`, {
+      form_data: formData,
+      filled_by: 'admin',
+    });
+    return response.data;
+  }
+
+  // Employers (clients) & Rate Cards (tenant-scoped)
+  async getEmployers(params?: { search?: string; status?: string }) {
+    const response = await this.client.get('/tenant/employers', { params });
+    return response.data;
+  }
+
+  async getEmployer(id: string | number) {
+    const response = await this.client.get(`/tenant/employers/${id}`);
+    return response.data;
+  }
+
+  async createEmployer(data: import('./types').EmployerFormData & { name: string }) {
+    const response = await this.client.post('/tenant/employers', data);
+    return response.data;
+  }
+
+  async updateEmployer(id: string | number, data: import('./types').EmployerFormData) {
+    const response = await this.client.put(`/tenant/employers/${id}`, data);
+    return response.data;
+  }
+
+  async deleteEmployer(id: string | number) {
+    const response = await this.client.delete(`/tenant/employers/${id}`);
+    return response.data;
+  }
+
+  // Driver Classes (pay tiers)
+  async getDriverClasses(params?: { status?: string }) {
+    const response = await this.client.get('/tenant/driver-classes', { params });
+    return response.data;
+  }
+
+  async getDriverClass(id: string | number) {
+    const response = await this.client.get(`/tenant/driver-classes/${id}`);
+    return response.data;
+  }
+
+  async createDriverClass(data: import('./types').DriverClassFormData) {
+    const response = await this.client.post('/tenant/driver-classes', data);
+    return response.data;
+  }
+
+  async updateDriverClass(id: string | number, data: Partial<import('./types').DriverClassFormData>) {
+    const response = await this.client.put(`/tenant/driver-classes/${id}`, data);
+    return response.data;
+  }
+
+  async deleteDriverClass(id: string | number) {
+    const response = await this.client.delete(`/tenant/driver-classes/${id}`);
+    return response.data;
+  }
+
+  async getRateCards(employerId: string | number) {
+    const response = await this.client.get(`/tenant/employers/${employerId}/rate-cards`);
+    return response.data;
+  }
+
+  async createRateCard(employerId: string | number, data: import('./types').RateCardFormData) {
+    const response = await this.client.post(`/tenant/employers/${employerId}/rate-cards`, data);
+    return response.data;
+  }
+
+  async getRateCard(employerId: string | number, rateCardId: string | number) {
+    const response = await this.client.get(`/tenant/employers/${employerId}/rate-cards/${rateCardId}`);
+    return response.data;
+  }
+
+  async updateRateCard(employerId: string | number, rateCardId: string | number, data: Partial<import('./types').RateCardFormData>) {
+    const response = await this.client.put(`/tenant/employers/${employerId}/rate-cards/${rateCardId}`, data);
+    return response.data;
+  }
+
+  async duplicateRateCard(employerId: string | number, rateCardId: string | number) {
+    const response = await this.client.post(`/tenant/employers/${employerId}/rate-cards/${rateCardId}/duplicate`);
+    return response.data;
+  }
+
+  async deactivateRateCard(employerId: string | number, rateCardId: string | number) {
+    const response = await this.client.post(`/tenant/employers/${employerId}/rate-cards/${rateCardId}/deactivate`);
+    return response.data;
+  }
+
+  async getEmployerPayItemRates(employerId: string | number) {
+    const response = await this.client.get(`/tenant/employers/${employerId}/pay-item-rates`);
+    return response.data;
+  }
+
+  async updateEmployerPayItemRate(employerId: string | number, payload: { pay_item_template_id: number; rate: number }) {
+    const response = await this.client.put(`/tenant/employers/${employerId}/pay-item-rates`, payload);
+    return response.data;
+  }
+
+  // Pay Item Templates
+  async getPayItemTemplates(params?: { active_only?: boolean }) {
+    const response = await this.client.get('/tenant/pay-item-templates', { params });
+    return response.data;
+  }
+
+  async createPayItemTemplate(data: { code: string; name: string; unit: string; is_active?: boolean }) {
+    const response = await this.client.post('/tenant/pay-item-templates', data);
+    return response.data;
+  }
+
+  async getPayItemTemplate(id: string | number) {
+    const response = await this.client.get(`/tenant/pay-item-templates/${id}`);
+    return response.data;
+  }
+
+  async updatePayItemTemplate(id: string | number, data: Partial<{ code: string; name: string; unit: string; is_active: boolean }>) {
+    const response = await this.client.put(`/tenant/pay-item-templates/${id}`, data);
+    return response.data;
+  }
+
+  async deletePayItemTemplate(id: string | number) {
+    const response = await this.client.delete(`/tenant/pay-item-templates/${id}`);
+    return response.data;
+  }
+
+  // Timesheets
+  async getTimesheets(params?: { driver_id?: number; status?: string; employer_id?: number }) {
+    const response = await this.client.get('/tenant/timesheets', { params });
+    return response.data;
+  }
+
+  async createTimesheet(data: { driver_id?: number; week_start_date: string; week_end_date: string }) {
+    const response = await this.client.post('/tenant/timesheets', data);
+    return response.data;
+  }
+
+  async getTimesheet(id: string | number) {
+    const response = await this.client.get(`/tenant/timesheets/${id}`);
+    return response.data;
+  }
+
+  async updateTimesheet(id: string | number, data: Partial<{ notes: string }>) {
+    const response = await this.client.put(`/tenant/timesheets/${id}`, data);
+    return response.data;
+  }
+
+  async deleteTimesheet(id: string | number) {
+    const response = await this.client.delete(`/tenant/timesheets/${id}`);
+    return response.data;
+  }
+
+  async submitTimesheet(id: string | number) {
+    const response = await this.client.post(`/tenant/timesheets/${id}/submit`);
+    return response.data;
+  }
+
+  async approveTimesheet(id: string | number) {
+    const response = await this.client.post(`/tenant/timesheets/${id}/approve`);
+    return response.data;
+  }
+
+  async rejectTimesheet(id: string | number, rejectReason?: string) {
+    const response = await this.client.post(`/tenant/timesheets/${id}/reject`, { reject_reason: rejectReason });
+    return response.data;
+  }
+
+  async markTimesheetPaid(id: string | number) {
+    const response = await this.client.post(`/tenant/timesheets/${id}/mark-paid`);
+    return response.data;
+  }
+
+  async recalculateTimesheet(id: string | number) {
+    const response = await this.client.post(`/tenant/timesheets/${id}/recalculate`);
+    return response.data;
+  }
+
+  async createTimesheetTrip(
+    timesheetId: string | number,
+    data: {
+      employer_id: number;
+      trip_date: string;
+      trip_number?: string;
+      distance: number;
+      stops_count?: number;
+      delay_hours?: number;
+      handbomb_count?: number;
+      notes?: string;
+    }
+  ) {
+    const response = await this.client.post(`/tenant/timesheets/${timesheetId}/trips`, data);
+    return response.data;
+  }
+
+  async updateTimesheetTrip(
+    timesheetId: string | number,
+    tripId: string | number,
+    data: Partial<{
+      employer_id: number;
+      trip_date: string;
+      trip_number: string;
+      distance: number;
+      stops_count: number;
+      delay_hours: number;
+      handbomb_count: number;
+      notes: string;
+    }>
+  ) {
+    const response = await this.client.put(`/tenant/timesheets/${timesheetId}/trips/${tripId}`, data);
+    return response.data;
+  }
+
+  async deleteTimesheetTrip(timesheetId: string | number, tripId: string | number) {
+    const response = await this.client.delete(`/tenant/timesheets/${timesheetId}/trips/${tripId}`);
+    return response.data;
+  }
+
+  async createTimesheetPayItem(
+    timesheetId: string | number,
+    tripId: string | number,
+    data: { pay_item_template_id: number; quantity: number; rate?: number }
+  ) {
+    const response = await this.client.post(`/tenant/timesheets/${timesheetId}/trips/${tripId}/pay-items`, data);
+    return response.data;
+  }
+
+  async updateTimesheetPayItem(
+    timesheetId: string | number,
+    tripId: string | number,
+    payItemId: string | number,
+    data: { quantity?: number; rate?: number }
+  ) {
+    const response = await this.client.put(`/tenant/timesheets/${timesheetId}/trips/${tripId}/pay-items/${payItemId}`, data);
+    return response.data;
+  }
+
+  async deleteTimesheetPayItem(timesheetId: string | number, tripId: string | number, payItemId: string | number) {
+    const response = await this.client.delete(`/tenant/timesheets/${timesheetId}/trips/${tripId}/pay-items/${payItemId}`);
+    return response.data;
+  }
+
   getClient() {
     return this.client;
   }
 }
 
 export const apiClient = new ApiClient();
+
+/** Public API for referee form (no auth; used with token in link) */
+export async function getReferenceCheckByToken(token: string) {
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost/api/v1';
+  const { data } = await axios.get(`${baseUrl}/reference-check/${token}`);
+  return data;
+}
+
+export async function submitReferenceCheckByToken(token: string, formData: import('./types').ReferenceCheckFormData) {
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost/api/v1';
+  const { data } = await axios.post(`${baseUrl}/reference-check/${token}/submit`, { form_data: formData });
+  return data;
+}

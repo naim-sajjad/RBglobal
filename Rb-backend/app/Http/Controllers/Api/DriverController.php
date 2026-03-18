@@ -18,7 +18,7 @@ class DriverController extends Controller
     public function index()
     {
         $currentUser = auth()->user();
-        $query = Driver::with(['user.roles', 'user.permissions', 'tenant']);
+        $query = Driver::with(['user.roles', 'user.permissions', 'tenant', 'driverClass']);
 
         // If tenant context is initialized, filter by tenant
         if (tenant('id')) {
@@ -40,6 +40,30 @@ class DriverController extends Controller
     }
 
     /**
+     * Get current user's driver profile
+     */
+    public function myProfile()
+    {
+        $currentUser = auth()->user();
+
+        // Find driver profile for current user
+        $query = Driver::where('user_id', $currentUser->id);
+
+        // If tenant context is initialized, filter by tenant
+        if (tenant('id')) {
+            $query->where('tenant_id', tenant('id'));
+        }
+
+        $driver = $query->first();
+
+        if (!$driver) {
+            return response()->json(['message' => 'Driver profile not found'], 404);
+        }
+
+        return response()->json($driver->load(['user.roles', 'user.permissions', 'tenant', 'driverClass']));
+    }
+
+    /**
      * Get a specific driver
      */
     public function show(Driver $driver)
@@ -54,7 +78,7 @@ class DriverController extends Controller
             }
         }
 
-        return response()->json($driver->load(['user.roles', 'user.permissions', 'tenant']));
+        return response()->json($driver->load(['user.roles', 'user.permissions', 'tenant', 'driverClass']));
     }
 
     /**
@@ -137,9 +161,11 @@ class DriverController extends Controller
             'drug_alcohol_test' => $drugAlcoholTest,
             'compliance_notes' => $validated['compliance_notes'] ?? null,
             'status' => $validated['status'] ?? 'pending_approval', // Admin can set initial status
+            'driver_class_id' => $validated['driver_class_id'] ?? null,
+            'driver_class_effective_date' => $validated['driver_class_effective_date'] ?? null,
         ]);
 
-        return response()->json($driver->load(['user.roles', 'user.permissions', 'tenant']), 201);
+        return response()->json($driver->load(['user.roles', 'user.permissions', 'tenant', 'driverClass']), 201);
     }
 
     /**
@@ -209,13 +235,15 @@ class DriverController extends Controller
             'drug_alcohol_test' => $drugAlcoholTest,
             'compliance_notes' => $validated['compliance_notes'] ?? null,
             'status' => 'pending_approval', // Always pending for self-registration
+            'driver_class_id' => $validated['driver_class_id'] ?? null,
+            'driver_class_effective_date' => $validated['driver_class_effective_date'] ?? null,
         ]);
 
         // Create auth token for immediate login
         $token = $user->createToken('api-token')->plainTextToken;
 
         return response()->json([
-            'driver' => $driver->load(['user.roles', 'user.permissions', 'tenant']),
+            'driver' => $driver->load(['user.roles', 'user.permissions', 'tenant', 'driverClass']),
             'user' => $user->load('roles', 'permissions', 'tenants'),
             'token' => $token,
             'message' => 'Driver registration successful. Your account is pending approval.',
@@ -234,6 +262,11 @@ class DriverController extends Controller
             if (!$currentUser->hasPermissionTo('drivers.update')) {
                 abort(403, 'You do not have permission to update this driver');
             }
+        }
+
+        // Normalize empty driver_class_id so clearing the class works (FormData sends empty string)
+        if ($request->has('driver_class_id') && ($request->input('driver_class_id') === '' || $request->input('driver_class_id') === null)) {
+            $request->merge(['driver_class_id' => null]);
         }
 
         $validated = $this->validateDriverData($request, false, true);
@@ -260,7 +293,7 @@ class DriverController extends Controller
 
         $driver->update($validated);
 
-        return response()->json($driver->load(['user.roles', 'user.permissions', 'tenant']));
+        return response()->json($driver->load(['user.roles', 'user.permissions', 'tenant', 'driverClass']));
     }
 
     /**
@@ -278,7 +311,7 @@ class DriverController extends Controller
 
         return response()->json([
             'message' => 'Driver approved successfully',
-            'driver' => $driver->load(['user.roles', 'user.permissions', 'tenant']),
+            'driver' => $driver->load(['user.roles', 'user.permissions', 'tenant', 'driverClass']),
         ]);
     }
 
@@ -363,6 +396,10 @@ class DriverController extends Controller
 
             // Status (admin only)
             'status' => ['nullable', Rule::in(['pending_approval', 'active', 'inactive', 'suspended'])],
+
+            // Driver class (pay tier) - required on create for contract-driven pricing; optional on update/self-register
+            'driver_class_id' => ($isSelfRegister || $isUpdate ? 'nullable' : 'required') . '|integer|exists:driver_classes,id',
+            'driver_class_effective_date' => 'nullable|date',
         ];
 
         return $request->validate($rules);

@@ -345,13 +345,13 @@ export default function DriversPage() {
                     <TableRow
                       key={driver.id}
                       className="border-slate-700 hover:bg-slate-700/50 cursor-pointer"
-                      onClick={() => router.push(`/admin/drivers/${driver.id}`)}
+                      onClick={() => router.push(`/admin/drivers/view?id=${driver.id}`)}
                     >
                       <TableCell className="text-white font-medium">
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            router.push(`/admin/drivers/${driver.id}`);
+                            router.push(`/admin/drivers/view?id=${driver.id}`);
                           }}
                           className="hover:text-blue-400 transition-colors"
                         >

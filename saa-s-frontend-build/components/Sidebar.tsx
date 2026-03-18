@@ -14,6 +14,11 @@ import {
   Menu,
   X,
   Truck,
+  User,
+  Briefcase,
+  Layers,
+  FileSpreadsheet,
+  Calendar,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -34,8 +39,26 @@ export function Sidebar() {
   const isSuperAdmin = user?.is_global_admin || 
     user?.roles?.some((role: any) => role.name === 'super-admin') || 
     false;
-
-  const navItems: NavItem[] = [
+  console.log(user);
+  // Check if user is a driver
+  const isDriver =
+  user?.roles?.some((role: any) =>
+    role.name?.toLowerCase() === 'driver'
+  ) || false;
+console.log('isDriver',isDriver);
+  // For drivers, show Profile and Timesheets
+  const navItems: NavItem[] = isDriver ? [
+    {
+      label: 'My Profile',
+      href: '/driver/profile',
+      icon: <User className="w-5 h-5" />,
+    },
+    {
+      label: 'Timesheets',
+      href: '/driver/timesheets',
+      icon: <FileSpreadsheet className="w-5 h-5" />,
+    },
+  ] : [
     {
       label: 'Dashboard',
       href: '/dashboard',
@@ -60,6 +83,21 @@ export function Sidebar() {
       label: 'Drivers',
       href: '/admin/drivers',
       icon: <Truck className="w-5 h-5" />,
+    },
+    {
+      label: 'Driver Classes',
+      href: '/admin/driver-classes',
+      icon: <Layers className="w-5 h-5" />,
+    },
+    {
+      label: 'Employers',
+      href: '/admin/employers',
+      icon: <Briefcase className="w-5 h-5" />,
+    },
+    {
+      label: 'Timesheets',
+      href: '/admin/timesheets',
+      icon: <Calendar className="w-5 h-5" />,
     },
     ...(isSuperAdmin ? [
       {

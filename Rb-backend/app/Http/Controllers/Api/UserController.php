@@ -130,39 +130,35 @@ class UserController extends Controller
             $validated['password'] = Hash::make($validated['password']);
         }
 
-        // Don't update tenant_id, tenant_ids, roles, or role_id directly - handle them separately
-        // Keep status in validated as it's a valid column
+        // Capture role/tenant data before unset (they are handled separately, not in $user->update())
+        $roleId = $validated['role_id'] ?? null;
+        $roles = $validated['roles'] ?? null;
+        $tenantIdsRequest = $validated['tenant_ids'] ?? null;
+        $tenantIdRequest = $validated['tenant_id'] ?? null;
+
+        // Don't update tenant_id, tenant_ids, roles, or role_id via $user->update()
         unset($validated['tenant_id'], $validated['tenant_ids'], $validated['roles'], $validated['role_id']);
 
         $user->update($validated);
 
         // Update roles if provided - handle both role_id and roles array
-        if (isset($validated['roles']) && is_array($validated['roles']) && !empty($validated['roles'])) {
-            // If roles is provided as array, sync them
-            $user->syncRoles($validated['roles']);
-        } elseif (isset($validated['role_id']) && $validated['role_id']) {
-            // If role_id is provided, find the role and sync it
-            // Convert to integer if it's a string
-            $roleId = is_numeric($validated['role_id']) ? (int) $validated['role_id'] : $validated['role_id'];
-            $role = \Spatie\Permission\Models\Role::findById($roleId, 'web');
+        if (is_array($roles) && !empty($roles)) {
+            $user->syncRoles($roles);
+        } elseif ($roleId) {
+            $roleIdInt = is_numeric($roleId) ? (int) $roleId : $roleId;
+            $role = \Spatie\Permission\Models\Role::findById($roleIdInt, 'web');
             if ($role) {
                 $user->syncRoles([$role]);
             }
         }
 
         // Update tenant assignments if provided
-        if ($request->has('tenant_ids') || $request->has('tenant_id')) {
+        if ($tenantIdsRequest !== null || $tenantIdRequest !== null) {
             if ($user->is_global_admin) {
-                // Super admins don't belong to tenants
                 $user->tenants()->detach();
             } else {
-                $tenantIds = [];
-                if ($request->has('tenant_ids') && is_array($request->tenant_ids)) {
-                    $tenantIds = $request->tenant_ids;
-                } elseif ($request->has('tenant_id')) {
-                    $tenantIds = [$request->tenant_id];
-                }
-                $user->tenants()->sync($tenantIds);
+                $ids = is_array($tenantIdsRequest) ? $tenantIdsRequest : ($tenantIdRequest ? [$tenantIdRequest] : []);
+                $user->tenants()->sync($ids);
             }
         }
 
