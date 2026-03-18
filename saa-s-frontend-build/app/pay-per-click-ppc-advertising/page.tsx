@@ -1,5 +1,5 @@
 import type { Metadata } from "next"
-import Header from "@/components/header"
+import Header from "@/components/web/Header"
 import Footer from "@/components/footer"
 import PPCHero from "@/components/ppc/ppc-hero"
 import PPCSpecialties from "@/components/ppc/ppc-specialties"

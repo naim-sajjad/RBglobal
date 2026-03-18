@@ -69,7 +69,7 @@ export default function Header() {
             </span>
           </div>
           <div className="flex items-center gap-4">
-            <Link href="/signup" className="hover:text-[#D4AF37] transition-colors">
+            <Link href="/register" className="hover:text-[#D4AF37] transition-colors">
               Register
             </Link>
             <Link href="/login" className="hover:text-[#D4AF37] transition-colors">
