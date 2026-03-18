@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
+
 @custom-variant dark (&:is(.dark *));
 
 :root {
@@ -37,6 +38,39 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+   
+    --foreground: 220 26% 12%;
+    --card: 220 14% 96%;
+    --card-foreground: 220 26% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 26% 12%;
+    --primary: 43 67% 52%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 26% 12%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 220 14% 96%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 220 14% 96%;
+    --accent-foreground: 220 26% 12%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 43 67% 52%;
+    --chart-1: 43 67% 52%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+    --radius: 0.5rem;
+    --sidebar-background: 220 26% 12%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 43 67% 52%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 20% 18%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 220 20% 22%;
+    --sidebar-ring: 43 67% 52%;
 }
 
 .dark {
@@ -124,5 +158,39 @@
   }
   a {
     @apply cursor-pointer;
+  }
+}
+
+/* Dot pattern utility */
+.bg-dot-pattern {
+  background-image: radial-gradient(circle, hsl(220 13% 91%) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+.bg-dot-pattern-light {
+  background-image: radial-gradient(circle, hsl(220 13% 91% / 0.5) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+.bg-grid-pattern {
+  background-image:
+    linear-gradient(hsl(220 13% 91% / 0.4) 1px, transparent 1px),
+    linear-gradient(90deg, hsl(220 13% 91% / 0.4) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+.bg-diagonal-pattern {
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 35px,
+    hsl(43 67% 52% / 0.03) 35px,
+    hsl(43 67% 52% / 0.03) 36px
+  );
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
   }
 }
