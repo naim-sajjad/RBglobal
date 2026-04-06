@@ -30,7 +30,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api';
-import { Employer, RateCard, EmployerFormData, EmployerPayItemRateRow } from '@/lib/types';
+import { Employer, RateCard, EmployerFormData } from '@/lib/types';
 import { toast } from 'sonner';
 
 const defaultForm: EmployerFormData & { name: string } = {
@@ -57,29 +57,16 @@ export default function EmployerDetailPage() {
   const [employer, setEmployer] = useState<Employer | null>(null);
   const [formData, setFormData] = useState<EmployerFormData & { name: string }>(defaultForm);
   const [rateCards, setRateCards] = useState<RateCard[]>([]);
-  const [payItemRates, setPayItemRates] = useState<EmployerPayItemRateRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
-  const [savingRateId, setSavingRateId] = useState<number | null>(null);
 
   useEffect(() => {
     if (id) {
       fetchEmployer();
       fetchRateCards();
-      fetchPayItemRates();
     }
   }, [id]);
-
-  const fetchPayItemRates = async () => {
-    if (!id) return;
-    try {
-      const data = await apiClient.getEmployerPayItemRates(Number(id));
-      setPayItemRates(Array.isArray(data) ? data : data?.data ?? []);
-    } catch {
-      setPayItemRates([]);
-    }
-  };
 
   const fetchEmployer = async () => {
     if (!id) return;
@@ -195,22 +182,6 @@ export default function EmployerDetailPage() {
     }
   };
 
-  const handleUpdatePayItemRate = async (payItemTemplateId: number, rate: number) => {
-    if (!id) return;
-    setSavingRateId(payItemTemplateId);
-    try {
-      await apiClient.updateEmployerPayItemRate(Number(id), { pay_item_template_id: payItemTemplateId, rate });
-      await fetchPayItemRates();
-      toast.success('Rate updated');
-    } catch (err: unknown) {
-      const msg = err && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
-        : 'Failed to update rate';
-      toast.error(msg as string);
-    } finally {
-      setSavingRateId(null);
-    }
-  };
 
   const getStatusBadge = (status: string) => {
     const map: Record<string, string> = {
@@ -564,88 +535,6 @@ export default function EmployerDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Timesheet pay item rates (for driver timesheet pay items) */}
-      <Card className="bg-slate-800 border-slate-700">
-        <CardHeader>
-          <CardTitle className="text-white">Timesheet pay item rates</CardTitle>
-          <CardDescription className="text-slate-400">
-            Rates used when drivers add pay items to timesheet trips for this employer. Used for minimum pay and auto-fill.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="rounded-lg border border-slate-700 overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow className="border-slate-700 bg-slate-700/50">
-                  <TableHead className="text-slate-300">Pay item</TableHead>
-                  <TableHead className="text-slate-300">Code</TableHead>
-                  <TableHead className="text-slate-300 w-[140px]">Rate</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {payItemRates.length === 0 ? (
-                  <TableRow className="border-slate-700">
-                    <TableCell colSpan={3} className="text-slate-400 text-center py-6">
-                      No pay item templates in tenant. Add templates in Pay Item Templates to set rates here.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  payItemRates.map((row) => (
-                    <PayItemRateRow
-                      key={row.pay_item_template_id}
-                      row={row}
-                      onSave={(rate) => handleUpdatePayItemRate(row.pay_item_template_id, rate)}
-                      saving={savingRateId === row.pay_item_template_id}
-                    />
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
     </div>
-  );
-}
-
-function PayItemRateRow({
-  row,
-  onSave,
-  saving,
-}: {
-  row: EmployerPayItemRateRow;
-  onSave: (rate: number) => void;
-  saving: boolean;
-}) {
-  const [value, setValue] = useState(String(row.rate ?? 0));
-  useEffect(() => {
-    setValue(String(row.rate ?? 0));
-  }, [row.rate]);
-  const handleBlur = () => {
-    const num = parseFloat(value);
-    if (!isNaN(num) && num >= 0 && num !== row.rate) {
-      onSave(num);
-    } else {
-      setValue(String(row.rate ?? 0));
-    }
-  };
-  return (
-    <TableRow className="border-slate-700">
-      <TableCell className="text-white">{row.pay_item_template?.name ?? row.pay_item_template_id}</TableCell>
-      <TableCell className="text-slate-300">{row.pay_item_template?.code ?? '—'}</TableCell>
-      <TableCell>
-        <Input
-          type="number"
-          min={0}
-          step="0.01"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onBlur={handleBlur}
-          disabled={saving}
-          className="w-28 bg-slate-700 border-slate-600 text-white"
-        />
-        {saving && <Spinner className="h-4 w-4 inline ml-1" />}
-      </TableCell>
-    </TableRow>
   );
 }

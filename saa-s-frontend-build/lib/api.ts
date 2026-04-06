@@ -524,10 +524,8 @@ class ApiClient {
       trip_date: string;
       trip_number?: string;
       distance: number;
-      stops_count?: number;
-      delay_hours?: number;
-      handbomb_count?: number;
       notes?: string;
+      additional_quantities?: Record<string, number>;
     }
   ) {
     const response = await this.client.post(`/tenant/timesheets/${timesheetId}/trips`, data);
@@ -542,10 +540,8 @@ class ApiClient {
       trip_date: string;
       trip_number: string;
       distance: number;
-      stops_count: number;
-      delay_hours: number;
-      handbomb_count: number;
       notes: string;
+      additional_quantities: Record<string, number>;
     }>
   ) {
     const response = await this.client.put(`/tenant/timesheets/${timesheetId}/trips/${tripId}`, data);

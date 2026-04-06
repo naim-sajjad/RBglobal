@@ -365,6 +365,8 @@ export interface DistanceBand {
 export type AdditionalChargeUnit = 'per_stop' | 'per_hour' | 'flat' | 'per_km' | 'per_mile' | 'other';
 
 export interface AdditionalCharge {
+  /** Stable key used to map trip.additional_quantities to this charge */
+  key?: string;
   charge_type: string;
   agency_rate: number;
   driver_rate: number; // legacy single-class

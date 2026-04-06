@@ -50,6 +50,8 @@ import {
   TimesheetTrip,
   Employer,
   TimesheetStatus,
+  RateCard,
+  RateCardRatesConfig,
 } from '@/lib/types';
 import { toast } from 'sonner';
 import { getApiErrorMessage } from '@/lib/utils';
@@ -80,15 +82,16 @@ export default function DriverTimesheetDetailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [updatingTripId, setUpdatingTripId] = useState<number | null>(null);
 
-  // Add trip form (contract-driven: distance, stops, delay, handbomb from Rate Card)
+  // Add trip form (contract-driven: distance + per-pay-item quantities from Rate Card)
   const [newTripEmployerId, setNewTripEmployerId] = useState<string>('');
   const [newTripDate, setNewTripDate] = useState('');
   const [newTripNumber, setNewTripNumber] = useState('');
   const [newTripDistance, setNewTripDistance] = useState('');
-  const [newTripStopsCount, setNewTripStopsCount] = useState('0');
-  const [newTripDelayHours, setNewTripDelayHours] = useState('0');
-  const [newTripHandbombCount, setNewTripHandbombCount] = useState('0');
   const [newTripNotes, setNewTripNotes] = useState('');
+  const [employerRateCards, setEmployerRateCards] = useState<Record<number, RateCard[]>>({});
+  const [activeRateConfig, setActiveRateConfig] = useState<RateCardRatesConfig | null>(null);
+  const [loadingCharges, setLoadingCharges] = useState(false);
+  const [additionalQuantities, setAdditionalQuantities] = useState<Record<string, string>>({});
 
   const fetchTimesheet = useCallback(async () => {
     if (!id) return;
@@ -117,6 +120,44 @@ export default function DriverTimesheetDetailPage() {
     }
   }, [id, fetchTimesheet]);
 
+  // When employer or trip date changes, load that employer's rate cards and pick the active one for the date
+  useEffect(() => {
+    const employerNumeric = newTripEmployerId ? Number(newTripEmployerId) : null;
+    if (!employerNumeric || !newTripDate) {
+      setActiveRateConfig(null);
+      return;
+    }
+
+    const load = async () => {
+      setLoadingCharges(true);
+      try {
+        let cards = employerRateCards[employerNumeric];
+        if (!cards) {
+          const data = await apiClient.getRateCards(employerNumeric);
+          cards = Array.isArray(data) ? data : data?.data ?? [];
+          setEmployerRateCards((prev) => ({ ...prev, [employerNumeric]: cards }));
+        }
+        const date = new Date(newTripDate);
+        const active = cards.find((c) => {
+          if (c.status !== 'active') return false;
+          const from = c.effective_from ? new Date(c.effective_from) : null;
+          const to = c.effective_to ? new Date(c.effective_to) : null;
+          const inRange =
+            (!from || date >= from) &&
+            (!to || date <= to);
+          return inRange;
+        });
+        setActiveRateConfig((active?.rates as RateCardRatesConfig) || null);
+      } catch {
+        setActiveRateConfig(null);
+      } finally {
+        setLoadingCharges(false);
+      }
+    };
+
+    load();
+  }, [newTripEmployerId, newTripDate, employerRateCards]);
+
   const canEdit = timesheet?.status === 'draft'; // Only drivers can edit when draft; admin can edit when submitted/under_review (separate page)
   const canSubmit = timesheet?.status === 'draft';
 
@@ -126,15 +167,19 @@ export default function DriverTimesheetDetailPage() {
     if (!id || !newTripEmployerId || !newTripDate || isNaN(distance) || distance < 0) return;
     setSaving(true);
     try {
+      const additional_quantities: Record<string, number> = Object.fromEntries(
+        Object.entries(additionalQuantities)
+          .map(([key, val]) => [key, parseFloat(val)])
+          .filter(([, num]) => !isNaN(num) && num > 0)
+      );
+
       await apiClient.createTimesheetTrip(id, {
         employer_id: parseInt(newTripEmployerId, 10),
         trip_date: newTripDate,
         trip_number: newTripNumber || undefined,
         distance,
-        stops_count: parseInt(newTripStopsCount, 10) || 0,
-        delay_hours: parseFloat(newTripDelayHours) || 0,
-        handbomb_count: parseInt(newTripHandbombCount, 10) || 0,
         notes: newTripNotes || undefined,
+        additional_quantities,
       });
       await fetchTimesheet();
       setAddTripOpen(false);
@@ -142,10 +187,8 @@ export default function DriverTimesheetDetailPage() {
       setNewTripDate('');
       setNewTripNumber('');
       setNewTripDistance('');
-      setNewTripStopsCount('0');
-      setNewTripDelayHours('0');
-      setNewTripHandbombCount('0');
       setNewTripNotes('');
+      setAdditionalQuantities({});
       toast.success('Trip added');
     } catch (err: any) {
       toast.error(getApiErrorMessage(err, 'Failed to add trip'));
@@ -156,7 +199,7 @@ export default function DriverTimesheetDetailPage() {
 
   const handleUpdateTrip = async (
     tripId: number,
-    data: Partial<{ distance: number; stops_count: number; delay_hours: number; handbomb_count: number; notes: string }>
+    data: Partial<{ distance: number; notes: string }>
   ) => {
     if (!id) return;
     setUpdatingTripId(tripId);
@@ -332,12 +375,12 @@ export default function DriverTimesheetDetailPage() {
 
       {/* Add trip dialog */}
       <Dialog open={addTripOpen} onOpenChange={setAddTripOpen}>
-        <DialogContent className="bg-slate-800 border-slate-700">
+        <DialogContent className="bg-slate-800 border-slate-700 max-w-3xl w-full max-h-[80vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="text-white">Add trip</DialogTitle>
             <DialogDescription className="text-slate-400">Rates are calculated from the employer&apos;s Rate Card. Enter trip details.</DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleAddTrip} className="space-y-4">
+          <form onSubmit={handleAddTrip} className="space-y-4 flex flex-col overflow-y-auto pr-1">
             <div className="space-y-2">
               <Label className="text-slate-300">Employer</Label>
               <Select value={newTripEmployerId} onValueChange={setNewTripEmployerId} required>
@@ -387,38 +430,43 @@ export default function DriverTimesheetDetailPage() {
                 className="bg-slate-700 border-slate-600 text-white"
               />
             </div>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label className="text-slate-300">Stops</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={newTripStopsCount}
-                  onChange={(e) => setNewTripStopsCount(e.target.value)}
-                  className="bg-slate-700 border-slate-600 text-white"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-slate-300">Delay (hrs)</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  value={newTripDelayHours}
-                  onChange={(e) => setNewTripDelayHours(e.target.value)}
-                  className="bg-slate-700 border-slate-600 text-white"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-slate-300">Handbomb</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={newTripHandbombCount}
-                  onChange={(e) => setNewTripHandbombCount(e.target.value)}
-                  className="bg-slate-700 border-slate-600 text-white"
-                />
-              </div>
+            <div className="space-y-3">
+              <p className="text-slate-400 text-sm">
+                Additional charges for this employer come from the active Rate Card. Enter quantities for each pay item.
+              </p>
+              {loadingCharges ? (
+                <div className="flex items-center gap-2 text-slate-300 text-sm">
+                  <Spinner className="h-4 w-4" />
+                  Loading additional charges...
+                </div>
+              ) : activeRateConfig && activeRateConfig.additional_charges && activeRateConfig.additional_charges.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {activeRateConfig.additional_charges
+                    .filter((c) => c.active)
+                    .map((c) => (
+                      <div key={c.key ?? c.charge_type} className="space-y-2">
+                        <Label className="text-slate-300">
+                          {c.charge_type || 'Pay item'} {c.unit ? `(${c.unit})` : ''}
+                        </Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          step={c.unit === 'per_hour' ? '0.01' : '1'}
+                          value={additionalQuantities[c.key ?? c.charge_type] ?? ''}
+                          onChange={(e) =>
+                            setAdditionalQuantities((prev) => ({
+                              ...prev,
+                              [c.key ?? c.charge_type]: e.target.value,
+                            }))
+                          }
+                          className="bg-slate-700 border-slate-600 text-white"
+                        />
+                      </div>
+                    ))}
+                </div>
+              ) : newTripEmployerId && newTripDate ? (
+                <p className="text-slate-500 text-sm">No additional charges defined on the active Rate Card for this date.</p>
+              ) : null}
             </div>
             <div className="space-y-2">
               <Label className="text-slate-300">Notes (optional)</Label>
@@ -429,7 +477,7 @@ export default function DriverTimesheetDetailPage() {
                 className="bg-slate-700 border-slate-600 text-white"
               />
             </div>
-            <DialogFooter>
+            <DialogFooter className="mt-4 border-t border-slate-700 pt-4 sticky bottom-0 bg-slate-800">
               <Button type="button" variant="outline" onClick={() => setAddTripOpen(false)} className="border-slate-600 text-slate-300">
                 Cancel
               </Button>
@@ -457,13 +505,10 @@ function TripCard({
   canEdit: boolean;
   timesheetId: string;
   updatingTripId: number | null;
-  onUpdateTrip: (tripId: number, data: Partial<{ distance: number; stops_count: number; delay_hours: number; handbomb_count: number; notes: string }>) => void;
+  onUpdateTrip: (tripId: number, data: Partial<{ distance: number; notes: string }>) => void;
   onDeleteTrip: (tripId: number) => void;
 }) {
   const [localDistance, setLocalDistance] = useState(String(trip.distance ?? 0));
-  const [localStops, setLocalStops] = useState(String(trip.stops_count ?? 0));
-  const [localDelay, setLocalDelay] = useState(String(trip.delay_hours ?? 0));
-  const [localHandbomb, setLocalHandbomb] = useState(String(trip.handbomb_count ?? 0));
   const [localNotes, setLocalNotes] = useState(trip.notes ?? '');
 
   const snapshot = trip.rate_snapshot;
@@ -473,17 +518,11 @@ function TripCard({
   const handleBlur = () => {
     const distance = parseFloat(localDistance);
     if (isNaN(distance) || distance < 0) return;
-    const stops = parseInt(localStops, 10) || 0;
-    const delay = parseFloat(localDelay) || 0;
-    const handbomb = parseInt(localHandbomb, 10) || 0;
     if (
       distance !== (trip.distance ?? 0) ||
-      stops !== (trip.stops_count ?? 0) ||
-      delay !== (trip.delay_hours ?? 0) ||
-      handbomb !== (trip.handbomb_count ?? 0) ||
       localNotes !== (trip.notes ?? '')
     ) {
-      onUpdateTrip(trip.id, { distance, stops_count: stops, delay_hours: delay, handbomb_count: handbomb, notes: localNotes || undefined });
+      onUpdateTrip(trip.id, { distance, notes: localNotes || undefined });
     }
   };
 
@@ -506,37 +545,13 @@ function TripCard({
         </div>
       </CardHeader>
       <CardContent className="pt-0 space-y-4">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+        <div className="grid grid-cols-2 sm:grid-cols-2 gap-2 text-sm">
           <div>
             <span className="text-slate-400">Distance</span>
             {canEdit ? (
               <Input type="number" min={0} step="0.01" value={localDistance} onChange={(e) => setLocalDistance(e.target.value)} onBlur={handleBlur} className="mt-1 h-8 bg-slate-700 border-slate-600 text-white" />
             ) : (
               <p className="text-white font-medium">{trip.distance ?? 0}</p>
-            )}
-          </div>
-          <div>
-            <span className="text-slate-400">Stops</span>
-            {canEdit ? (
-              <Input type="number" min={0} value={localStops} onChange={(e) => setLocalStops(e.target.value)} onBlur={handleBlur} className="mt-1 h-8 bg-slate-700 border-slate-600 text-white" />
-            ) : (
-              <p className="text-white font-medium">{trip.stops_count ?? 0}</p>
-            )}
-          </div>
-          <div>
-            <span className="text-slate-400">Delay (hrs)</span>
-            {canEdit ? (
-              <Input type="number" min={0} step="0.01" value={localDelay} onChange={(e) => setLocalDelay(e.target.value)} onBlur={handleBlur} className="mt-1 h-8 bg-slate-700 border-slate-600 text-white" />
-            ) : (
-              <p className="text-white font-medium">{trip.delay_hours ?? 0}</p>
-            )}
-          </div>
-          <div>
-            <span className="text-slate-400">Handbomb</span>
-            {canEdit ? (
-              <Input type="number" min={0} value={localHandbomb} onChange={(e) => setLocalHandbomb(e.target.value)} onBlur={handleBlur} className="mt-1 h-8 bg-slate-700 border-slate-600 text-white" />
-            ) : (
-              <p className="text-white font-medium">{trip.handbomb_count ?? 0}</p>
             )}
           </div>
         </div>
