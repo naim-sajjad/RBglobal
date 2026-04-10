@@ -50,9 +50,7 @@ class RateCardResolutionService
 
         $rates = $rateCard->rates;
         $distance = (float) ($trip->distance ?? 0);
-        $stopsCount = (int) ($trip->stops_count ?? 0);
-        $delayHours = (float) ($trip->delay_hours ?? 0);
-        $handbombCount = (int) ($trip->handbomb_count ?? 0);
+        $additionalQuantities = is_array($trip->additional_quantities) ? $trip->additional_quantities : [];
 
         $lines = [];
         $totalDriverPay = 0.0;
@@ -98,12 +96,12 @@ class RateCardResolutionService
             $unit = $charge['unit'] ?? '';
             $chargeType = $charge['charge_type'] ?? 'Other';
             $quantity = 0.0;
-            if ($unit === 'per_stop') {
-                $quantity = (float) $stopsCount;
-            } elseif ($unit === 'per_hour') {
-                $quantity = $delayHours;
-            } elseif (strtolower($unit) === 'flat' || strpos(strtolower($chargeType), 'handbomb') !== false) {
-                $quantity = (float) $handbombCount;
+            // Use explicit key when present; otherwise fall back to charge_type so it matches frontend mapping.
+            $key = $charge['key'] ?? ($chargeType ?? null);
+
+            // Per-charge quantity must come from additional_quantities (contract-driven).
+            if ($key !== null && array_key_exists($key, $additionalQuantities)) {
+                $quantity = (float) ($additionalQuantities[$key] ?? 0);
             }
             if ($quantity <= 0) {
                 continue;

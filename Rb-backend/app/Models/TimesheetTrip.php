@@ -17,14 +17,12 @@ class TimesheetTrip extends Model
         'trip_date',
         'trip_number',
         'distance',
-        'stops_count',
-        'delay_hours',
-        'handbomb_count',
         'notes',
         'trip_total',
         'minimum_applied',
         'rate_snapshot',
         'total_agency_billing',
+        'additional_quantities',
     ];
 
     protected $casts = [
@@ -33,8 +31,8 @@ class TimesheetTrip extends Model
         'total_agency_billing' => 'decimal:2',
         'minimum_applied' => 'boolean',
         'distance' => 'decimal:2',
-        'delay_hours' => 'decimal:2',
         'rate_snapshot' => 'array',
+        'additional_quantities' => 'array',
     ];
 
     public function timesheet(): BelongsTo

@@ -8,6 +8,7 @@ use App\Models\Timesheet;
 use App\Models\TimesheetTrip;
 use App\Services\TimesheetCalculationService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 
 class TimesheetController extends Controller
 {
@@ -45,8 +46,36 @@ class TimesheetController extends Controller
             $query->whereHas('trips', fn ($q) => $q->where('employer_id', $request->employer_id));
         }
 
+        if ($request->filled('week_start_from') || $request->filled('week_start_to')) {
+            $request->validate([
+                'week_start_from' => 'nullable|date',
+                'week_start_to' => 'nullable|date',
+            ]);
+
+            $fromStr = $request->filled('week_start_from')
+                ? Carbon::parse($request->query('week_start_from'))->format('Y-m-d')
+                : null;
+            $toStr = $request->filled('week_start_to')
+                ? Carbon::parse($request->query('week_start_to'))->format('Y-m-d')
+                : null;
+
+            if ($fromStr && $toStr && $toStr < $fromStr) {
+                abort(422, 'week_start_to must be on or after week_start_from.');
+            }
+
+            if ($fromStr !== null) {
+                $query->where('week_start_date', '>=', $fromStr);
+            }
+            if ($toStr !== null) {
+                $query->where('week_start_date', '<=', $toStr);
+            }
+        }
+
         $timesheets = $query->orderBy('week_start_date', 'desc')->paginate($request->input('per_page', 15));
-        return response()->json($timesheets);
+
+        return response()
+            ->json($timesheets)
+            ->header('Cache-Control', 'private, no-store, must-revalidate');
     }
 
     public function store(Request $request)
@@ -220,10 +249,9 @@ class TimesheetController extends Controller
             'trip_date' => "required|date|after_or_equal:{$weekStart}|before_or_equal:{$weekEnd}",
             'trip_number' => 'nullable|string|max:50',
             'distance' => 'required|numeric|min:0',
-            'stops_count' => 'nullable|integer|min:0',
-            'delay_hours' => 'nullable|numeric|min:0',
-            'handbomb_count' => 'nullable|integer|min:0',
             'notes' => 'nullable|string|max:1000',
+            'additional_quantities' => 'nullable|array',
+            'additional_quantities.*' => 'nullable|numeric|min:0',
         ]);
         $employer = Employer::findOrFail($validated['employer_id']);
         if ($employer->tenant_id !== tenant('id')) {
@@ -234,10 +262,8 @@ class TimesheetController extends Controller
             'trip_date' => $validated['trip_date'],
             'trip_number' => $validated['trip_number'] ?? null,
             'distance' => $validated['distance'],
-            'stops_count' => $validated['stops_count'] ?? 0,
-            'delay_hours' => $validated['delay_hours'] ?? 0,
-            'handbomb_count' => $validated['handbomb_count'] ?? 0,
             'notes' => $validated['notes'] ?? null,
+            'additional_quantities' => $validated['additional_quantities'] ?? null,
         ]);
         TimesheetCalculationService::recalculateTrip($trip);
         TimesheetCalculationService::recalculateTimesheet($timesheet);
@@ -257,10 +283,9 @@ class TimesheetController extends Controller
             'trip_date' => 'sometimes|date|after_or_equal:' . $timesheet->week_start_date->format('Y-m-d') . '|before_or_equal:' . $timesheet->week_end_date->format('Y-m-d'),
             'trip_number' => 'nullable|string|max:50',
             'distance' => 'sometimes|numeric|min:0',
-            'stops_count' => 'nullable|integer|min:0',
-            'delay_hours' => 'nullable|numeric|min:0',
-            'handbomb_count' => 'nullable|integer|min:0',
             'notes' => 'nullable|string|max:1000',
+            'additional_quantities' => 'nullable|array',
+            'additional_quantities.*' => 'nullable|numeric|min:0',
         ]);
         if (isset($validated['employer_id'])) {
             $employer = Employer::findOrFail($validated['employer_id']);
