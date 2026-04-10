@@ -1,6 +1,6 @@
 'use client';
 
-import React from "react"
+import React from 'react';
 
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
@@ -36,78 +36,82 @@ export function Sidebar() {
   const [isOpen, setIsOpen] = useState(false);
 
   // Check if user is super-admin
-  const isSuperAdmin = user?.is_global_admin || 
-    user?.roles?.some((role: any) => role.name === 'super-admin') || 
+  const isSuperAdmin =
+    user?.is_global_admin ||
+    user?.roles?.some((role: any) => role.name === 'super-admin') ||
     false;
   console.log(user);
   // Check if user is a driver
   const isDriver =
-  user?.roles?.some((role: any) =>
-    role.name?.toLowerCase() === 'driver'
-  ) || false;
-console.log('isDriver',isDriver);
+    user?.roles?.some((role: any) => role.name?.toLowerCase() === 'driver') ||
+    false;
+  console.log('isDriver', isDriver);
   // For drivers, show Profile and Timesheets
-  const navItems: NavItem[] = isDriver ? [
-    {
-      label: 'My Profile',
-      href: '/driver/profile',
-      icon: <User className="w-5 h-5" />,
-    },
-    {
-      label: 'Timesheets',
-      href: '/driver/timesheets',
-      icon: <FileSpreadsheet className="w-5 h-5" />,
-    },
-  ] : [
-    {
-      label: 'Dashboard',
-      href: '/dashboard',
-      icon: <LayoutDashboard className="w-5 h-5" />,
-    },
-    {
-      label: 'Users',
-      href: '/admin/users',
-      icon: <Users className="w-5 h-5" />,
-    },
-    {
-      label: 'Roles',
-      href: '/admin/roles',
-      icon: <Shield className="w-5 h-5" />,
-    },
-    {
-      label: 'Permissions',
-      href: '/admin/permissions',
-      icon: <Lock className="w-5 h-5" />,
-    },
-    {
-      label: 'Drivers',
-      href: '/admin/drivers',
-      icon: <Truck className="w-5 h-5" />,
-    },
-    {
-      label: 'Driver Classes',
-      href: '/admin/driver-classes',
-      icon: <Layers className="w-5 h-5" />,
-    },
-    {
-      label: 'Employers',
-      href: '/admin/employers',
-      icon: <Briefcase className="w-5 h-5" />,
-    },
-    {
-      label: 'Timesheets',
-      href: '/admin/timesheets',
-      icon: <Calendar className="w-5 h-5" />,
-    },
-    ...(isSuperAdmin ? [
-      {
-        label: 'Tenants',
-        href: '/admin/tenants',
-        icon: <Users className="w-5 h-5" />,
-        requiredRole: 'super-admin',
-      },
-    ] : []),
-  ];
+  const navItems: NavItem[] = isDriver
+    ? [
+        {
+          label: 'My Profile',
+          href: '/driver/profile',
+          icon: <User className='w-5 h-5' />,
+        },
+        {
+          label: 'Timesheets',
+          href: '/driver/timesheets',
+          icon: <FileSpreadsheet className='w-5 h-5' />,
+        },
+      ]
+    : [
+        {
+          label: 'Dashboard',
+          href: '/dashboard',
+          icon: <LayoutDashboard className='w-5 h-5' />,
+        },
+        {
+          label: 'Users',
+          href: '/admin/users',
+          icon: <Users className='w-5 h-5' />,
+        },
+        {
+          label: 'Roles',
+          href: '/admin/roles',
+          icon: <Shield className='w-5 h-5' />,
+        },
+        {
+          label: 'Permissions',
+          href: '/admin/permissions',
+          icon: <Lock className='w-5 h-5' />,
+        },
+        {
+          label: 'Drivers',
+          href: '/admin/drivers',
+          icon: <Truck className='w-5 h-5' />,
+        },
+        {
+          label: 'Driver Classes',
+          href: '/admin/driver-classes',
+          icon: <Layers className='w-5 h-5' />,
+        },
+        {
+          label: 'Employers',
+          href: '/admin/employers',
+          icon: <Briefcase className='w-5 h-5' />,
+        },
+        {
+          label: 'Timesheets',
+          href: '/admin/timesheets',
+          icon: <Calendar className='w-5 h-5' />,
+        },
+        ...(isSuperAdmin
+          ? [
+              {
+                label: 'Tenants',
+                href: '/admin/tenants',
+                icon: <Users className='w-5 h-5' />,
+                requiredRole: 'super-admin',
+              },
+            ]
+          : []),
+      ];
 
   const handleLogout = () => {
     logout();
@@ -117,18 +121,14 @@ console.log('isDriver',isDriver);
   return (
     <>
       {/* Mobile menu button */}
-      <div className="fixed top-4 left-4 z-50 md:hidden">
+      <div className='fixed top-4 left-4 z-50 md:hidden'>
         <Button
-          variant="outline"
-          size="icon"
+          variant='outline'
+          size='icon'
           onClick={() => setIsOpen(!isOpen)}
-          className="bg-slate-700 border-slate-600"
+          className='text-white bg-slate-700 border-slate-600'
         >
-          {isOpen ? (
-            <X className="h-4 w-4" />
-          ) : (
-            <Menu className="h-4 w-4" />
-          )}
+          {isOpen ? <X className='h-4 w-4' /> : <Menu className='h-4 w-4' />}
         </Button>
       </div>
 
@@ -138,20 +138,20 @@ console.log('isDriver',isDriver);
           isOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="flex flex-col h-full">
+        <div className='flex flex-col h-full'>
           {/* Logo */}
-          <div className="flex items-center justify-center h-16 border-b border-slate-700">
-            <h1 className="text-xl font-bold text-white">R&B Global</h1>
+          <div className='flex items-center justify-center h-16 border-b border-slate-700'>
+            <h1 className='text-xl font-bold text-white'>R&B Global</h1>
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 overflow-y-auto px-4 py-6 space-y-2">
+          <nav className='flex-1 overflow-y-auto px-4 py-6 space-y-2'>
             {navItems.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
                 onClick={() => setIsOpen(false)}
-                className="flex items-center gap-3 px-4 py-2 text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
+                className='flex items-center gap-3 px-4 py-2 text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg transition-colors'
               >
                 {item.icon}
                 <span>{item.label}</span>
@@ -160,20 +160,22 @@ console.log('isDriver',isDriver);
           </nav>
 
           {/* User section */}
-          <div className="border-t border-slate-700 p-4 space-y-4">
-            <div className="text-sm">
-              <p className="text-slate-400 text-xs">Signed in as</p>
-              <p className="text-white font-medium truncate">{user?.name || user?.email}</p>
-              <p className="text-slate-400 text-xs capitalize mt-1">
+          <div className='border-t border-slate-700 p-4 space-y-4'>
+            <div className='text-sm'>
+              <p className='text-slate-400 text-xs'>Signed in as</p>
+              <p className='text-white font-medium truncate'>
+                {user?.name || user?.email}
+              </p>
+              <p className='text-slate-400 text-xs capitalize mt-1'>
                 {user?.roles?.[0]?.name || 'user'}
               </p>
             </div>
             <Button
               onClick={handleLogout}
-              variant="outline"
-              className="w-full gap-2 border-slate-600 text-slate-300 hover:text-white hover:bg-slate-700 bg-transparent"
+              variant='outline'
+              className='w-full gap-2 border-slate-600 text-slate-300 hover:text-white hover:bg-slate-700 bg-transparent'
             >
-              <LogOut className="w-4 h-4" />
+              <LogOut className='w-4 h-4' />
               Logout
             </Button>
           </div>
@@ -183,7 +185,7 @@ console.log('isDriver',isDriver);
       {/* Mobile overlay */}
       {isOpen && (
         <div
-          className="fixed inset-0 z-30 bg-black/50 md:hidden"
+          className='fixed inset-0 z-30 bg-black/50 md:hidden'
           onClick={() => setIsOpen(false)}
         />
       )}

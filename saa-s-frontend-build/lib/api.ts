@@ -467,8 +467,20 @@ class ApiClient {
   }
 
   // Timesheets
-  async getTimesheets(params?: { driver_id?: number; status?: string; employer_id?: number }) {
-    const response = await this.client.get('/tenant/timesheets', { params });
+  async getTimesheets(params?: {
+    driver_id?: number;
+    status?: string;
+    employer_id?: number;
+    week_start_from?: string;
+    week_start_to?: string;
+  }) {
+    const response = await this.client.get('/tenant/timesheets', {
+      params,
+      headers: {
+        'Cache-Control': 'no-cache',
+        Pragma: 'no-cache',
+      },
+    });
     return response.data;
   }
 

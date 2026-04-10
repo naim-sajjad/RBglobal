@@ -3,12 +3,25 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import {
   Select,
   SelectContent,
@@ -55,7 +68,9 @@ export default function EmployerDetailPage() {
   const id = params?.id as string;
 
   const [employer, setEmployer] = useState<Employer | null>(null);
-  const [formData, setFormData] = useState<EmployerFormData & { name: string }>(defaultForm);
+  const [formData, setFormData] = useState<EmployerFormData & { name: string }>(
+    defaultForm,
+  );
   const [rateCards, setRateCards] = useState<RateCard[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -93,12 +108,17 @@ export default function EmployerDetailPage() {
     } catch (err: unknown) {
       const message =
         err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { data?: { message?: string }; status?: number } }).response
-              ?.data?.message
+          ? (
+              err as {
+                response?: { data?: { message?: string }; status?: number };
+              }
+            ).response?.data?.message
           : 'Failed to load employer';
       setError(message || 'Failed to load employer');
       toast.error('Failed to load employer');
-      if ((err as { response?: { status?: number } })?.response?.status === 404) {
+      if (
+        (err as { response?: { status?: number } })?.response?.status === 404
+      ) {
         router.push('/admin/employers');
       }
     } finally {
@@ -134,7 +154,8 @@ export default function EmployerDetailPage() {
     } catch (err: unknown) {
       const message =
         err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+          ? (err as { response?: { data?: { message?: string } } }).response
+              ?.data?.message
           : 'Failed to save employer';
       setError(message as string);
       toast.error(message as string);
@@ -145,7 +166,12 @@ export default function EmployerDetailPage() {
 
   const handleDeleteEmployer = async () => {
     if (!employer) return;
-    if (!confirm(`Delete employer "${employer.name}"? This will also delete all rate cards.`)) return;
+    if (
+      !confirm(
+        `Delete employer "${employer.name}"? This will also delete all rate cards.`,
+      )
+    )
+      return;
     try {
       await apiClient.deleteEmployer(employer.id);
       toast.success('Employer deleted');
@@ -153,7 +179,8 @@ export default function EmployerDetailPage() {
     } catch (err: unknown) {
       const message =
         err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+          ? (err as { response?: { data?: { message?: string } } }).response
+              ?.data?.message
           : 'Failed to delete employer';
       toast.error(message as string);
     }
@@ -182,7 +209,6 @@ export default function EmployerDetailPage() {
     }
   };
 
-
   const getStatusBadge = (status: string) => {
     const map: Record<string, string> = {
       active: 'bg-green-600',
@@ -193,197 +219,238 @@ export default function EmployerDetailPage() {
     return <Badge className={map[status] || 'bg-slate-600'}>{status}</Badge>;
   };
 
-  const formatDate = (d: string) => (d ? new Date(d).toLocaleDateString() : '—');
+  const formatDate = (d: string) =>
+    d ? new Date(d).toLocaleDateString() : '—';
 
   if (isLoading || !employer) {
     return (
-      <div className="flex justify-center py-12">
-        <Spinner className="h-8 w-8 text-blue-500" />
+      <div className='flex justify-center py-12'>
+        <Spinner className='h-8 w-8 text-blue-500' />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Link href="/admin/employers">
-            <Button variant="ghost" size="icon" className="text-slate-400 hover:text-white">
-              <ArrowLeft className="h-5 w-5" />
+    <div className='space-y-6'>
+      <div className='flex items-center justify-between'>
+        <div className='flex items-center gap-4'>
+          <Link href='/admin/employers'>
+            <Button
+              variant='ghost'
+              size='icon'
+              className='text-slate-400 hover:text-white'
+            >
+              <ArrowLeft className='h-5 w-5' />
             </Button>
           </Link>
           <div>
-            <h1 className="text-3xl font-bold text-white">{employer.name}</h1>
-            <p className="text-slate-400 mt-1">Edit employer and manage rate cards</p>
+            <h1 className='text-3xl font-bold text-white'>{employer.name}</h1>
+            <p className='text-slate-400 mt-1'>
+              Edit employer and manage rate cards
+            </p>
           </div>
         </div>
         <Button
-          variant="outline"
+          variant='outline'
           onClick={handleDeleteEmployer}
-          className="border-red-600 text-red-400 hover:bg-red-600/20"
+          className='border-red-600 text-red-400 hover:bg-red-600/20'
         >
-          <Trash2 className="h-4 w-4 mr-2" />
+          <Trash2 className='h-4 w-4 mr-2' />
           Delete Employer
         </Button>
       </div>
 
       {error && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
+        <Alert variant='destructive'>
+          <AlertCircle className='h-4 w-4' />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
 
       <form onSubmit={handleEmployerSubmit}>
-        <div className="space-y-8">
-          <Card className="bg-slate-800 border-slate-700">
+        <div className='space-y-8'>
+          <Card className='bg-slate-800 border-slate-700'>
             <CardHeader>
-              <CardTitle className="text-white">Basic Information</CardTitle>
-              <CardDescription className="text-slate-400">Company and contact details</CardDescription>
+              <CardTitle className='text-white'>Basic Information</CardTitle>
+              <CardDescription className='text-slate-400'>
+                Company and contact details
+              </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="md:col-span-2 space-y-2">
-                  <Label className="text-slate-200">Employer Name *</Label>
+            <CardContent className='space-y-4'>
+              <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+                <div className='md:col-span-2 space-y-2'>
+                  <Label className='text-slate-200'>Employer Name *</Label>
                   <Input
                     value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="Employer / company name"
-                    className="bg-slate-700 border-slate-600 text-white"
+                    onChange={(e) =>
+                      setFormData({ ...formData, name: e.target.value })
+                    }
+                    placeholder='Employer / company name'
+                    className='text-white bg-slate-700 border-slate-600 text-white'
                     required
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-slate-200">Company Code / ID</Label>
+                <div className='space-y-2'>
+                  <Label className='text-slate-200'>Company Code / ID</Label>
                   <Input
                     value={formData.company_code ?? ''}
-                    onChange={(e) => setFormData({ ...formData, company_code: e.target.value })}
-                    placeholder="e.g. EMP-001"
-                    className="bg-slate-700 border-slate-600 text-white"
+                    onChange={(e) =>
+                      setFormData({ ...formData, company_code: e.target.value })
+                    }
+                    placeholder='e.g. EMP-001'
+                    className='text-white bg-slate-700 border-slate-600 text-white'
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-slate-200">Contact Person</Label>
+                <div className='space-y-2'>
+                  <Label className='text-slate-200'>Contact Person</Label>
                   <Input
                     value={formData.contact_person ?? ''}
-                    onChange={(e) => setFormData({ ...formData, contact_person: e.target.value })}
-                    placeholder="Full name"
-                    className="bg-slate-700 border-slate-600 text-white"
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        contact_person: e.target.value,
+                      })
+                    }
+                    placeholder='Full name'
+                    className='text-white bg-slate-700 border-slate-600 text-white'
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-slate-200">Phone Number</Label>
+                <div className='space-y-2'>
+                  <Label className='text-slate-200'>Phone Number</Label>
                   <Input
                     value={formData.phone ?? ''}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    placeholder="Phone"
-                    className="bg-slate-700 border-slate-600 text-white"
+                    onChange={(e) =>
+                      setFormData({ ...formData, phone: e.target.value })
+                    }
+                    placeholder='Phone'
+                    className='text-white bg-slate-700 border-slate-600 text-white'
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-slate-200">Email</Label>
+                <div className='space-y-2'>
+                  <Label className='text-slate-200'>Email</Label>
                   <Input
-                    type="email"
+                    type='email'
                     value={formData.email ?? ''}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    placeholder="email@company.com"
-                    className="bg-slate-700 border-slate-600 text-white"
+                    onChange={(e) =>
+                      setFormData({ ...formData, email: e.target.value })
+                    }
+                    placeholder='email@company.com'
+                    className='text-white bg-slate-700 border-slate-600 text-white'
                   />
                 </div>
-                <div className="md:col-span-2 space-y-2">
-                  <Label className="text-slate-200">Billing Address</Label>
+                <div className='md:col-span-2 space-y-2'>
+                  <Label className='text-slate-200'>Billing Address</Label>
                   <Textarea
                     value={formData.billing_address ?? ''}
-                    onChange={(e) => setFormData({ ...formData, billing_address: e.target.value })}
-                    placeholder="Full address"
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        billing_address: e.target.value,
+                      })
+                    }
+                    placeholder='Full address'
                     rows={2}
-                    className="bg-slate-700 border-slate-600 text-white"
+                    className='text-white bg-slate-700 border-slate-600 text-white'
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-slate-200">Service Location / Depot Name</Label>
+                <div className='space-y-2'>
+                  <Label className='text-slate-200'>
+                    Service Location / Depot Name
+                  </Label>
                   <Input
                     value={formData.service_location ?? ''}
-                    onChange={(e) => setFormData({ ...formData, service_location: e.target.value })}
-                    placeholder="Depot or location name"
-                    className="bg-slate-700 border-slate-600 text-white"
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        service_location: e.target.value,
+                      })
+                    }
+                    placeholder='Depot or location name'
+                    className='text-white bg-slate-700 border-slate-600 text-white'
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-slate-200">Status</Label>
+                <div className='space-y-2'>
+                  <Label className='text-slate-200'>Status</Label>
                   <Select
                     value={formData.status ?? 'active'}
                     onValueChange={(v: 'active' | 'inactive') =>
                       setFormData({ ...formData, status: v })
                     }
                   >
-                    <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
+                    <SelectTrigger className='text-white bg-slate-700 border-slate-600 text-white'>
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="bg-slate-800 border-slate-700">
-                      <SelectItem value="active">Active</SelectItem>
-                      <SelectItem value="inactive">Inactive</SelectItem>
+                    <SelectContent className='bg-slate-800 border-slate-700'>
+                      <SelectItem value='active'>Active</SelectItem>
+                      <SelectItem value='inactive'>Inactive</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="md:col-span-2 space-y-2">
-                  <Label className="text-slate-200">Notes</Label>
+                <div className='md:col-span-2 space-y-2'>
+                  <Label className='text-slate-200'>Notes</Label>
                   <Textarea
                     value={formData.notes ?? ''}
-                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                    placeholder="Internal notes"
+                    onChange={(e) =>
+                      setFormData({ ...formData, notes: e.target.value })
+                    }
+                    placeholder='Internal notes'
                     rows={2}
-                    className="bg-slate-700 border-slate-600 text-white"
+                    className='text-white bg-slate-700 border-slate-600 text-white'
                   />
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="bg-slate-800 border-slate-700">
+          <Card className='bg-slate-800 border-slate-700'>
             <CardHeader>
-              <CardTitle className="text-white">Operational Settings</CardTitle>
-              <CardDescription className="text-slate-400">
+              <CardTitle className='text-white'>Operational Settings</CardTitle>
+              <CardDescription className='text-slate-400'>
                 Measurement, currency, and trip settings
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-slate-200">Measurement Unit</Label>
+            <CardContent className='space-y-4'>
+              <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+                <div className='space-y-2'>
+                  <Label className='text-slate-200'>Measurement Unit</Label>
                   <Select
                     value={formData.measurement_unit ?? 'km'}
                     onValueChange={(v: 'miles' | 'km') =>
                       setFormData({ ...formData, measurement_unit: v })
                     }
                   >
-                    <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
+                    <SelectTrigger className='text-white bg-slate-700 border-slate-600 text-white'>
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="bg-slate-800 border-slate-700">
-                      <SelectItem value="miles">Miles</SelectItem>
-                      <SelectItem value="km">KM</SelectItem>
+                    <SelectContent className='bg-slate-800 border-slate-700'>
+                      <SelectItem value='miles'>Miles</SelectItem>
+                      <SelectItem value='km'>KM</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-slate-200">Default Currency</Label>
+                <div className='space-y-2'>
+                  <Label className='text-slate-200'>Default Currency</Label>
                   <Input
                     value={formData.default_currency ?? 'CAD'}
                     onChange={(e) =>
-                      setFormData({ ...formData, default_currency: e.target.value })
+                      setFormData({
+                        ...formData,
+                        default_currency: e.target.value,
+                      })
                     }
-                    placeholder="CAD"
+                    placeholder='CAD'
                     maxLength={3}
-                    className="bg-slate-700 border-slate-600 text-white"
+                    className='text-white bg-slate-700 border-slate-600 text-white'
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-slate-200">Minimum Trip Guarantee (optional)</Label>
+                <div className='space-y-2'>
+                  <Label className='text-slate-200'>
+                    Minimum Trip Guarantee (optional)
+                  </Label>
                   <Input
-                    type="number"
+                    type='number'
                     min={0}
-                    step="0.01"
+                    step='0.01'
                     value={formData.minimum_trip_guarantee ?? ''}
                     onChange={(e) =>
                       setFormData({
@@ -391,15 +458,15 @@ export default function EmployerDetailPage() {
                         minimum_trip_guarantee: e.target.value || undefined,
                       })
                     }
-                    placeholder="0.00"
-                    className="bg-slate-700 border-slate-600 text-white"
+                    placeholder='0.00'
+                    className='text-white bg-slate-700 border-slate-600 text-white'
                   />
                 </div>
-                <div className="space-y-2 flex items-end pb-2">
-                  <div className="flex items-center gap-2">
+                <div className='space-y-2 flex items-end pb-2'>
+                  <div className='flex items-center gap-2'>
                     <input
-                      type="checkbox"
-                      id="requires_driver_rate_tracking"
+                      type='checkbox'
+                      id='requires_driver_rate_tracking'
                       checked={formData.requires_driver_rate_tracking ?? false}
                       onChange={(e) =>
                         setFormData({
@@ -407,11 +474,11 @@ export default function EmployerDetailPage() {
                           requires_driver_rate_tracking: e.target.checked,
                         })
                       }
-                      className="rounded border-slate-600 bg-slate-700"
+                      className='rounded border-slate-600 bg-slate-700'
                     />
                     <Label
-                      htmlFor="requires_driver_rate_tracking"
-                      className="text-slate-200 cursor-pointer"
+                      htmlFor='requires_driver_rate_tracking'
+                      className='text-slate-200 cursor-pointer'
                     >
                       Requires Driver Rate Tracking
                     </Label>
@@ -421,11 +488,15 @@ export default function EmployerDetailPage() {
             </CardContent>
           </Card>
 
-          <div className="flex justify-end">
-            <Button type="submit" disabled={isSaving} className="bg-blue-600 hover:bg-blue-700">
+          <div className='flex justify-end'>
+            <Button
+              type='submit'
+              disabled={isSaving}
+              className='bg-blue-600 hover:bg-blue-700'
+            >
               {isSaving ? (
                 <>
-                  <Spinner className="h-4 w-4 mr-2 animate-spin" />
+                  <Spinner className='h-4 w-4 mr-2 animate-spin' />
                   Saving...
                 </>
               ) : (
@@ -437,91 +508,108 @@ export default function EmployerDetailPage() {
       </form>
 
       {/* Rate Cards */}
-      <Card className="bg-slate-800 border-slate-700">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+      <Card className='bg-slate-800 border-slate-700'>
+        <CardHeader className='flex flex-row items-center justify-between space-y-0'>
           <div>
-            <CardTitle className="text-white">Rate Cards</CardTitle>
-            <CardDescription className="text-slate-400">
+            <CardTitle className='text-white'>Rate Cards</CardTitle>
+            <CardDescription className='text-slate-400'>
               Manage rate cards for this employer
             </CardDescription>
           </div>
           <Link href={`/admin/employers/${id}/rate-cards/new`}>
-            <Button className="bg-blue-600 hover:bg-blue-700">
-              <Plus className="h-4 w-4 mr-2" />
+            <Button className='bg-blue-600 hover:bg-blue-700'>
+              <Plus className='h-4 w-4 mr-2' />
               Create New Rate Card
             </Button>
           </Link>
         </CardHeader>
         <CardContent>
-          <div className="rounded-lg border border-slate-700 overflow-hidden">
+          <div className='rounded-lg border border-slate-700 overflow-hidden'>
             <Table>
               <TableHeader>
-                <TableRow className="border-slate-700 bg-slate-700/50">
-                  <TableHead className="text-slate-300">Rate Card Name</TableHead>
-                  <TableHead className="text-slate-300">Effective From</TableHead>
-                  <TableHead className="text-slate-300">Effective To</TableHead>
-                  <TableHead className="text-slate-300">Status</TableHead>
-                  <TableHead className="text-slate-300 w-[200px]">Actions</TableHead>
+                <TableRow className='border-slate-700 bg-slate-700/50'>
+                  <TableHead className='text-slate-300'>
+                    Rate Card Name
+                  </TableHead>
+                  <TableHead className='text-slate-300'>
+                    Effective From
+                  </TableHead>
+                  <TableHead className='text-slate-300'>Effective To</TableHead>
+                  <TableHead className='text-slate-300'>Status</TableHead>
+                  <TableHead className='text-slate-300 w-[200px]'>
+                    Actions
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {rateCards.length === 0 ? (
-                  <TableRow className="border-slate-700">
-                    <TableCell colSpan={5} className="text-slate-400 text-center py-8">
+                  <TableRow className='border-slate-700'>
+                    <TableCell
+                      colSpan={5}
+                      className='text-slate-400 text-center py-8'
+                    >
                       No rate cards. Create one to get started.
                     </TableCell>
                   </TableRow>
                 ) : (
                   rateCards.map((card) => (
-                    <TableRow key={card.id} className="border-slate-700">
-                      <TableCell className="text-white">{card.name}</TableCell>
-                      <TableCell className="text-slate-300">{formatDate(card.effective_from)}</TableCell>
-                      <TableCell className="text-slate-300">{formatDate(card.effective_to)}</TableCell>
+                    <TableRow key={card.id} className='border-slate-700'>
+                      <TableCell className='text-white'>{card.name}</TableCell>
+                      <TableCell className='text-slate-300'>
+                        {formatDate(card.effective_from)}
+                      </TableCell>
+                      <TableCell className='text-slate-300'>
+                        {formatDate(card.effective_to)}
+                      </TableCell>
                       <TableCell>{getStatusBadge(card.status)}</TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Link href={`/admin/employers/${id}/rate-cards/${card.id}`}>
+                        <div className='flex items-center gap-1'>
+                          <Link
+                            href={`/admin/employers/${id}/rate-cards/${card.id}`}
+                          >
                             <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              title="View"
+                              type='button'
+                              variant='ghost'
+                              size='icon'
+                              className='h-8 w-8'
+                              title='View'
                             >
-                              <Eye className="h-4 w-4" />
+                              <Eye className='h-4 w-4' />
                             </Button>
                           </Link>
-                          <Link href={`/admin/employers/${id}/rate-cards/${card.id}/edit`}>
+                          <Link
+                            href={`/admin/employers/${id}/rate-cards/${card.id}/edit`}
+                          >
                             <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              title="Edit"
+                              type='button'
+                              variant='ghost'
+                              size='icon'
+                              className='h-8 w-8'
+                              title='Edit'
                             >
-                              <Pencil className="h-4 w-4" />
+                              <Pencil className='h-4 w-4' />
                             </Button>
                           </Link>
                           <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
+                            type='button'
+                            variant='ghost'
+                            size='icon'
+                            className='h-8 w-8'
                             onClick={() => handleDuplicateRateCard(card)}
-                            title="Duplicate"
+                            title='Duplicate'
                           >
-                            <Copy className="h-4 w-4" />
+                            <Copy className='h-4 w-4' />
                           </Button>
                           {card.status !== 'expired' && (
                             <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-red-400"
+                              type='button'
+                              variant='ghost'
+                              size='icon'
+                              className='h-8 w-8 text-red-400'
                               onClick={() => handleDeactivateRateCard(card)}
-                              title="Deactivate"
+                              title='Deactivate'
                             >
-                              <PowerOff className="h-4 w-4" />
+                              <PowerOff className='h-4 w-4' />
                             </Button>
                           )}
                         </div>
@@ -534,7 +622,6 @@ export default function EmployerDetailPage() {
           </div>
         </CardContent>
       </Card>
-
     </div>
   );
 }

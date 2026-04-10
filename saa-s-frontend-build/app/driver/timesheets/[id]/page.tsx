@@ -66,7 +66,12 @@ const STATUS_COLORS: Record<TimesheetStatus, string> = {
 };
 
 function formatDate(d: string) {
-  return new Date(d).toLocaleDateString('en-CA', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  return new Date(d).toLocaleDateString('en-CA', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
 }
 
 export default function DriverTimesheetDetailPage() {
@@ -88,10 +93,15 @@ export default function DriverTimesheetDetailPage() {
   const [newTripNumber, setNewTripNumber] = useState('');
   const [newTripDistance, setNewTripDistance] = useState('');
   const [newTripNotes, setNewTripNotes] = useState('');
-  const [employerRateCards, setEmployerRateCards] = useState<Record<number, RateCard[]>>({});
-  const [activeRateConfig, setActiveRateConfig] = useState<RateCardRatesConfig | null>(null);
+  const [employerRateCards, setEmployerRateCards] = useState<
+    Record<number, RateCard[]>
+  >({});
+  const [activeRateConfig, setActiveRateConfig] =
+    useState<RateCardRatesConfig | null>(null);
   const [loadingCharges, setLoadingCharges] = useState(false);
-  const [additionalQuantities, setAdditionalQuantities] = useState<Record<string, string>>({});
+  const [additionalQuantities, setAdditionalQuantities] = useState<
+    Record<string, string>
+  >({});
 
   const fetchTimesheet = useCallback(async () => {
     if (!id) return;
@@ -107,7 +117,7 @@ export default function DriverTimesheetDetailPage() {
   const fetchEmployers = async () => {
     try {
       const data = await apiClient.getEmployers({ status: 'active' });
-      setEmployers(Array.isArray(data) ? data : data?.data ?? []);
+      setEmployers(Array.isArray(data) ? data : (data?.data ?? []));
     } catch {
       setEmployers([]);
     }
@@ -116,13 +126,17 @@ export default function DriverTimesheetDetailPage() {
   useEffect(() => {
     if (id) {
       setLoading(true);
-      Promise.all([fetchTimesheet(), fetchEmployers()]).finally(() => setLoading(false));
+      Promise.all([fetchTimesheet(), fetchEmployers()]).finally(() =>
+        setLoading(false),
+      );
     }
   }, [id, fetchTimesheet]);
 
   // When employer or trip date changes, load that employer's rate cards and pick the active one for the date
   useEffect(() => {
-    const employerNumeric = newTripEmployerId ? Number(newTripEmployerId) : null;
+    const employerNumeric = newTripEmployerId
+      ? Number(newTripEmployerId)
+      : null;
     if (!employerNumeric || !newTripDate) {
       setActiveRateConfig(null);
       return;
@@ -134,17 +148,18 @@ export default function DriverTimesheetDetailPage() {
         let cards = employerRateCards[employerNumeric];
         if (!cards) {
           const data = await apiClient.getRateCards(employerNumeric);
-          cards = Array.isArray(data) ? data : data?.data ?? [];
-          setEmployerRateCards((prev) => ({ ...prev, [employerNumeric]: cards }));
+          cards = Array.isArray(data) ? data : (data?.data ?? []);
+          setEmployerRateCards((prev) => ({
+            ...prev,
+            [employerNumeric]: cards,
+          }));
         }
         const date = new Date(newTripDate);
         const active = cards.find((c) => {
           if (c.status !== 'active') return false;
           const from = c.effective_from ? new Date(c.effective_from) : null;
           const to = c.effective_to ? new Date(c.effective_to) : null;
-          const inRange =
-            (!from || date >= from) &&
-            (!to || date <= to);
+          const inRange = (!from || date >= from) && (!to || date <= to);
           return inRange;
         });
         setActiveRateConfig((active?.rates as RateCardRatesConfig) || null);
@@ -164,13 +179,20 @@ export default function DriverTimesheetDetailPage() {
   const handleAddTrip = async (e: React.FormEvent) => {
     e.preventDefault();
     const distance = parseFloat(newTripDistance);
-    if (!id || !newTripEmployerId || !newTripDate || isNaN(distance) || distance < 0) return;
+    if (
+      !id ||
+      !newTripEmployerId ||
+      !newTripDate ||
+      isNaN(distance) ||
+      distance < 0
+    )
+      return;
     setSaving(true);
     try {
       const additional_quantities: Record<string, number> = Object.fromEntries(
         Object.entries(additionalQuantities)
           .map(([key, val]) => [key, parseFloat(val)])
-          .filter(([, num]) => !isNaN(num) && num > 0)
+          .filter(([, num]) => !isNaN(num) && num > 0),
       );
 
       await apiClient.createTimesheetTrip(id, {
@@ -199,7 +221,7 @@ export default function DriverTimesheetDetailPage() {
 
   const handleUpdateTrip = async (
     tripId: number,
-    data: Partial<{ distance: number; notes: string }>
+    data: Partial<{ distance: number; notes: string }>,
   ) => {
     if (!id) return;
     setUpdatingTripId(tripId);
@@ -257,97 +279,134 @@ export default function DriverTimesheetDetailPage() {
 
   if (loading || !timesheet) {
     return (
-      <div className="flex justify-center items-center min-h-[200px]">
-        {loading ? <Spinner className="h-8 w-8 text-white" /> : <p className="text-slate-400">{error || 'Not found'}</p>}
+      <div className='flex justify-center items-center min-h-[200px]'>
+        {loading ? (
+          <Spinner className='h-8 w-8 text-white' />
+        ) : (
+          <p className='text-slate-400'>{error || 'Not found'}</p>
+        )}
       </div>
     );
   }
 
   const trips = timesheet.trips ?? [];
-  const tripsByDate = trips.reduce<Record<string, TimesheetTrip[]>>((acc, t) => {
-    const d = t.trip_date;
-    if (!acc[d]) acc[d] = [];
-    acc[d].push(t);
-    return acc;
-  }, {});
+  const tripsByDate = trips.reduce<Record<string, TimesheetTrip[]>>(
+    (acc, t) => {
+      const d = t.trip_date;
+      if (!acc[d]) acc[d] = [];
+      acc[d].push(t);
+      return acc;
+    },
+    {},
+  );
   const sortedDates = Object.keys(tripsByDate).sort();
   const dailyTotals = sortedDates.map((d) => ({
     date: d,
-    total: tripsByDate[d].reduce((sum, t) => sum + Number(t.trip_total || 0), 0),
+    total: tripsByDate[d].reduce(
+      (sum, t) => sum + Number(t.trip_total || 0),
+      0,
+    ),
   }));
-  const weeklyTotal = typeof timesheet.weekly_total === 'number' ? timesheet.weekly_total : dailyTotals.reduce((s, d) => s + d.total, 0);
+  const weeklyTotal =
+    typeof timesheet.weekly_total === 'number'
+      ? timesheet.weekly_total
+      : dailyTotals.reduce((s, d) => s + d.total, 0);
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <Button variant="ghost" asChild className="text-slate-300 hover:text-white">
-          <Link href="/driver/timesheets" className="flex items-center gap-2">
-            <ArrowLeft className="h-4 w-4" />
+    <div className='max-w-5xl mx-auto space-y-6'>
+      <div className='flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4'>
+        <Button
+          variant='ghost'
+          asChild
+          className='text-slate-300 hover:text-white'
+        >
+          <Link href='/driver/timesheets' className='flex items-center gap-2'>
+            <ArrowLeft className='h-4 w-4' />
             Back to timesheets
           </Link>
         </Button>
-        <div className="flex items-center gap-2 flex-wrap">
-          <Badge className={STATUS_COLORS[timesheet.status]}>{timesheet.status.replace('_', ' ')}</Badge>
+        <div className='flex items-center gap-2 flex-wrap'>
+          <Badge className={STATUS_COLORS[timesheet.status]}>
+            {timesheet.status.replace('_', ' ')}
+          </Badge>
           {canEdit && (
             <Button
-              variant="outline"
-              size="sm"
+              variant='outline'
+              size='sm'
               onClick={handleRecalculate}
               disabled={saving}
-              className="border-slate-600 text-slate-200"
+              className='border-slate-600 text-slate-200'
             >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Calculator className="h-4 w-4 mr-1" />}
+              {saving ? (
+                <Loader2 className='h-4 w-4 animate-spin' />
+              ) : (
+                <Calculator className='h-4 w-4 mr-1' />
+              )}
               Recalculate
             </Button>
           )}
           {canSubmit && (
-            <Button onClick={handleSubmit} disabled={submitting || trips.length === 0}>
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4 mr-1" />}
+            <Button
+              onClick={handleSubmit}
+              disabled={submitting || trips.length === 0}
+            >
+              {submitting ? (
+                <Loader2 className='h-4 w-4 animate-spin' />
+              ) : (
+                <Send className='h-4 w-4 mr-1' />
+              )}
               Submit to employer
             </Button>
           )}
         </div>
       </div>
 
-      <Card className="bg-slate-800 border-slate-700">
+      <Card className='bg-slate-800 border-slate-700'>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-white">
-            <FileSpreadsheet className="h-6 w-6" />
-            {formatDate(timesheet.week_start_date)} – {formatDate(timesheet.week_end_date)}
+          <CardTitle className='flex items-center gap-2 text-white'>
+            <FileSpreadsheet className='h-6 w-6' />
+            {formatDate(timesheet.week_start_date)} –{' '}
+            {formatDate(timesheet.week_end_date)}
           </CardTitle>
-          <p className="text-sm text-slate-400">
-            Weekly total: <span className="font-semibold text-white">${Number(weeklyTotal).toFixed(2)}</span>
+          <p className='text-sm text-slate-400'>
+            Weekly total:{' '}
+            <span className='font-semibold text-white'>
+              ${Number(weeklyTotal).toFixed(2)}
+            </span>
           </p>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className='space-y-6'>
           {error && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
+            <Alert variant='destructive'>
+              <AlertCircle className='h-4 w-4' />
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
 
           {canEdit && (
-            <div className="flex gap-2">
-              <Button onClick={() => setAddTripOpen(true)} size="sm">
-                <Plus className="h-4 w-4 mr-2" />
+            <div className='flex gap-2'>
+              <Button onClick={() => setAddTripOpen(true)} size='sm'>
+                <Plus className='h-4 w-4 mr-2' />
                 Add trip
               </Button>
             </div>
           )}
 
           {trips.length === 0 ? (
-            <p className="text-slate-400 py-8 text-center">
+            <p className='text-slate-400 py-8 text-center'>
               No trips yet. Add a trip to start logging pay items.
             </p>
           ) : (
-            <div className="space-y-6">
+            <div className='space-y-6'>
               {sortedDates.map((dateStr) => (
                 <div key={dateStr}>
-                  <h3 className="text-sm font-medium text-slate-400 mb-2">
-                    {formatDate(dateStr)} — Daily total: ${dailyTotals.find((d) => d.date === dateStr)?.total.toFixed(2) ?? '0.00'}
+                  <h3 className='text-sm font-medium text-slate-400 mb-2'>
+                    {formatDate(dateStr)} — Daily total: $
+                    {dailyTotals
+                      .find((d) => d.date === dateStr)
+                      ?.total.toFixed(2) ?? '0.00'}
                   </h3>
-                  <div className="space-y-4">
+                  <div className='space-y-4'>
                     {(tripsByDate[dateStr] ?? []).map((trip) => (
                       <TripCard
                         key={trip.id}
@@ -363,8 +422,8 @@ export default function DriverTimesheetDetailPage() {
                 </div>
               ))}
 
-              <div className="border-t border-slate-700 pt-4 flex justify-end">
-                <p className="text-lg font-semibold text-white">
+              <div className='border-t border-slate-700 pt-4 flex justify-end'>
+                <p className='text-lg font-semibold text-white'>
                   Weekly total: ${Number(weeklyTotal).toFixed(2)}
                 </p>
               </div>
@@ -375,19 +434,29 @@ export default function DriverTimesheetDetailPage() {
 
       {/* Add trip dialog */}
       <Dialog open={addTripOpen} onOpenChange={setAddTripOpen}>
-        <DialogContent className="bg-slate-800 border-slate-700 max-w-3xl w-full max-h-[80vh] flex flex-col">
+        <DialogContent className='bg-slate-800 border-slate-700 max-w-3xl w-full max-h-[80vh] flex flex-col'>
           <DialogHeader>
-            <DialogTitle className="text-white">Add trip</DialogTitle>
-            <DialogDescription className="text-slate-400">Rates are calculated from the employer&apos;s Rate Card. Enter trip details.</DialogDescription>
+            <DialogTitle className='text-white'>Add trip</DialogTitle>
+            <DialogDescription className='text-slate-400'>
+              Rates are calculated from the employer&apos;s Rate Card. Enter
+              trip details.
+            </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleAddTrip} className="space-y-4 flex flex-col overflow-y-auto pr-1">
-            <div className="space-y-2">
-              <Label className="text-slate-300">Employer</Label>
-              <Select value={newTripEmployerId} onValueChange={setNewTripEmployerId} required>
-                <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
-                  <SelectValue placeholder="Select employer" />
+          <form
+            onSubmit={handleAddTrip}
+            className='space-y-4 flex flex-col overflow-y-auto pr-1'
+          >
+            <div className='space-y-2'>
+              <Label className='text-slate-300'>Employer</Label>
+              <Select
+                value={newTripEmployerId}
+                onValueChange={setNewTripEmployerId}
+                required
+              >
+                <SelectTrigger className='text-white bg-slate-700 border-slate-600 text-white'>
+                  <SelectValue placeholder='Select employer' />
                 </SelectTrigger>
-                <SelectContent className="bg-slate-800 border-slate-700">
+                <SelectContent className='bg-slate-800 border-slate-700'>
                   {employers.map((emp) => (
                     <SelectItem key={emp.id} value={String(emp.id)}>
                       {emp.name}
@@ -396,99 +465,116 @@ export default function DriverTimesheetDetailPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label className="text-slate-300">Trip date</Label>
+            <div className='space-y-2'>
+              <Label className='text-slate-300'>Trip date</Label>
               <Input
-                type="date"
+                type='date'
                 value={newTripDate}
                 onChange={(e) => setNewTripDate(e.target.value)}
                 min={timesheet?.week_start_date}
                 max={timesheet?.week_end_date}
                 required
-                className="bg-slate-700 border-slate-600 text-white"
+                className='text-white bg-slate-700 border-slate-600 text-white'
               />
             </div>
-            <div className="space-y-2">
-              <Label className="text-slate-300">Trip number (optional)</Label>
+            <div className='space-y-2'>
+              <Label className='text-slate-300'>Trip number (optional)</Label>
               <Input
                 value={newTripNumber}
                 onChange={(e) => setNewTripNumber(e.target.value)}
-                placeholder="e.g. 101"
-                className="bg-slate-700 border-slate-600 text-white"
+                placeholder='e.g. 101'
+                className='text-white bg-slate-700 border-slate-600 text-white'
               />
             </div>
-            <div className="space-y-2">
-              <Label className="text-slate-300">Distance *</Label>
+            <div className='space-y-2'>
+              <Label className='text-slate-300'>Distance *</Label>
               <Input
-                type="number"
+                type='number'
                 min={0}
-                step="0.01"
+                step='0.01'
                 value={newTripDistance}
                 onChange={(e) => setNewTripDistance(e.target.value)}
                 required
-                placeholder="0"
-                className="bg-slate-700 border-slate-600 text-white"
+                placeholder='0'
+                className='text-white bg-slate-700 border-slate-600 text-white'
               />
             </div>
-            <div className="space-y-3">
-              <p className="text-slate-400 text-sm">
-                Additional charges for this employer come from the active Rate Card. Enter quantities for each pay item.
+            <div className='space-y-3'>
+              <p className='text-slate-400 text-sm'>
+                Additional charges for this employer come from the active Rate
+                Card. Enter quantities for each pay item.
               </p>
               {loadingCharges ? (
-                <div className="flex items-center gap-2 text-slate-300 text-sm">
-                  <Spinner className="h-4 w-4" />
+                <div className='flex items-center gap-2 text-slate-300 text-sm'>
+                  <Spinner className='h-4 w-4' />
                   Loading additional charges...
                 </div>
-              ) : activeRateConfig && activeRateConfig.additional_charges && activeRateConfig.additional_charges.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              ) : activeRateConfig &&
+                activeRateConfig.additional_charges &&
+                activeRateConfig.additional_charges.length > 0 ? (
+                <div className='grid grid-cols-1 sm:grid-cols-3 gap-4'>
                   {activeRateConfig.additional_charges
                     .filter((c) => c.active)
                     .map((c) => (
-                      <div key={c.key ?? c.charge_type} className="space-y-2">
-                        <Label className="text-slate-300">
-                          {c.charge_type || 'Pay item'} {c.unit ? `(${c.unit})` : ''}
+                      <div key={c.key ?? c.charge_type} className='space-y-2'>
+                        <Label className='text-slate-300'>
+                          {c.charge_type || 'Pay item'}{' '}
+                          {c.unit ? `(${c.unit})` : ''}
                         </Label>
                         <Input
-                          type="number"
+                          type='number'
                           min={0}
                           step={c.unit === 'per_hour' ? '0.01' : '1'}
-                          value={additionalQuantities[c.key ?? c.charge_type] ?? ''}
+                          value={
+                            additionalQuantities[c.key ?? c.charge_type] ?? ''
+                          }
                           onChange={(e) =>
                             setAdditionalQuantities((prev) => ({
                               ...prev,
                               [c.key ?? c.charge_type]: e.target.value,
                             }))
                           }
-                          className="bg-slate-700 border-slate-600 text-white"
+                          className='text-white bg-slate-700 border-slate-600 text-white'
                         />
                       </div>
                     ))}
                 </div>
               ) : newTripEmployerId && newTripDate ? (
-                <p className="text-slate-500 text-sm">No additional charges defined on the active Rate Card for this date.</p>
+                <p className='text-slate-500 text-sm'>
+                  No additional charges defined on the active Rate Card for this
+                  date.
+                </p>
               ) : null}
             </div>
-            <div className="space-y-2">
-              <Label className="text-slate-300">Notes (optional)</Label>
+            <div className='space-y-2'>
+              <Label className='text-slate-300'>Notes (optional)</Label>
               <Input
                 value={newTripNotes}
                 onChange={(e) => setNewTripNotes(e.target.value)}
-                placeholder="Notes"
-                className="bg-slate-700 border-slate-600 text-white"
+                placeholder='Notes'
+                className='text-white bg-slate-700 border-slate-600 text-white'
               />
             </div>
-            <DialogFooter className="mt-4 border-t border-slate-700 pt-4 sticky bottom-0 bg-slate-800">
-              <Button type="button" variant="outline" onClick={() => setAddTripOpen(false)} className="border-slate-600 text-slate-300">
+            <DialogFooter className='mt-4 border-t border-slate-700 pt-4 sticky bottom-0 bg-slate-800'>
+              <Button
+                type='button'
+                variant='outline'
+                onClick={() => setAddTripOpen(false)}
+                className='border-slate-600 text-slate-300'
+              >
                 Cancel
               </Button>
-              <Button type="submit" disabled={saving}>
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Add trip'}
+              <Button type='submit' disabled={saving}>
+                {saving ? (
+                  <Loader2 className='h-4 w-4 animate-spin' />
+                ) : (
+                  'Add trip'
+                )}
               </Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
-
     </div>
   );
 }
@@ -505,10 +591,15 @@ function TripCard({
   canEdit: boolean;
   timesheetId: string;
   updatingTripId: number | null;
-  onUpdateTrip: (tripId: number, data: Partial<{ distance: number; notes: string }>) => void;
+  onUpdateTrip: (
+    tripId: number,
+    data: Partial<{ distance: number; notes: string }>,
+  ) => void;
   onDeleteTrip: (tripId: number) => void;
 }) {
-  const [localDistance, setLocalDistance] = useState(String(trip.distance ?? 0));
+  const [localDistance, setLocalDistance] = useState(
+    String(trip.distance ?? 0),
+  );
   const [localNotes, setLocalNotes] = useState(trip.notes ?? '');
 
   const snapshot = trip.rate_snapshot;
@@ -527,75 +618,108 @@ function TripCard({
   };
 
   return (
-    <Card className="border-l-4 border-l-slate-500 bg-slate-800 border-slate-700">
-      <CardHeader className="py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-medium text-white">Trip #{trip.trip_number || trip.id}</span>
-            <span className="text-slate-400">— {trip.employer?.name ?? `Employer #${trip.employer_id}`}</span>
+    <Card className='border-l-4 border-l-slate-500 bg-slate-800 border-slate-700'>
+      <CardHeader className='py-3'>
+        <div className='flex items-center justify-between'>
+          <div className='flex flex-wrap items-center gap-2'>
+            <span className='font-medium text-white'>
+              Trip #{trip.trip_number || trip.id}
+            </span>
+            <span className='text-slate-400'>
+              — {trip.employer?.name ?? `Employer #${trip.employer_id}`}
+            </span>
             {trip.minimum_applied && (
-              <Badge variant="secondary" className="text-xs">Min pay applied</Badge>
+              <Badge variant='secondary' className='text-xs'>
+                Min pay applied
+              </Badge>
             )}
           </div>
           {canEdit && (
-            <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => onDeleteTrip(trip.id)}>
-              <Trash2 className="h-4 w-4" />
+            <Button
+              variant='ghost'
+              size='sm'
+              className='text-destructive hover:text-destructive'
+              onClick={() => onDeleteTrip(trip.id)}
+            >
+              <Trash2 className='h-4 w-4' />
             </Button>
           )}
         </div>
       </CardHeader>
-      <CardContent className="pt-0 space-y-4">
-        <div className="grid grid-cols-2 sm:grid-cols-2 gap-2 text-sm">
+      <CardContent className='pt-0 space-y-4'>
+        <div className='grid grid-cols-2 sm:grid-cols-2 gap-2 text-sm'>
           <div>
-            <span className="text-slate-400">Distance</span>
+            <span className='text-slate-400'>Distance</span>
             {canEdit ? (
-              <Input type="number" min={0} step="0.01" value={localDistance} onChange={(e) => setLocalDistance(e.target.value)} onBlur={handleBlur} className="mt-1 h-8 bg-slate-700 border-slate-600 text-white" />
+              <Input
+                type='number'
+                min={0}
+                step='0.01'
+                value={localDistance}
+                onChange={(e) => setLocalDistance(e.target.value)}
+                onBlur={handleBlur}
+                className='mt-1 h-8 bg-slate-700 border-slate-600 text-white'
+              />
             ) : (
-              <p className="text-white font-medium">{trip.distance ?? 0}</p>
+              <p className='text-white font-medium'>{trip.distance ?? 0}</p>
             )}
           </div>
         </div>
         {canEdit && (
           <div>
-            <span className="text-slate-400 text-sm">Notes</span>
-            <Input value={localNotes} onChange={(e) => setLocalNotes(e.target.value)} onBlur={handleBlur} placeholder="Optional" className="mt-1 bg-slate-700 border-slate-600 text-white" />
+            <span className='text-slate-400 text-sm'>Notes</span>
+            <Input
+              value={localNotes}
+              onChange={(e) => setLocalNotes(e.target.value)}
+              onBlur={handleBlur}
+              placeholder='Optional'
+              className='mt-1 bg-slate-700 border-slate-600 text-white'
+            />
           </div>
         )}
         {snapshot?.error && (
-          <p className="text-amber-400 text-sm">{snapshot.error}</p>
+          <p className='text-amber-400 text-sm'>{snapshot.error}</p>
         )}
         {lines.length > 0 && (
           <Table>
             <TableHeader>
-              <TableRow className="border-slate-700">
-                <TableHead className="text-slate-300">Item</TableHead>
-                <TableHead className="text-slate-300">Qty</TableHead>
-                <TableHead className="text-slate-300">Rate</TableHead>
-                <TableHead className="text-slate-300 text-right">Driver pay</TableHead>
+              <TableRow className='border-slate-700'>
+                <TableHead className='text-slate-300'>Item</TableHead>
+                <TableHead className='text-slate-300'>Qty</TableHead>
+                <TableHead className='text-slate-300'>Rate</TableHead>
+                <TableHead className='text-slate-300 text-right'>
+                  Driver pay
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {lines.map((line, idx) => (
-                <TableRow key={idx} className="border-slate-700">
-                  <TableCell className="text-white">{line.label}</TableCell>
-                  <TableCell className="text-white">{line.quantity}</TableCell>
-                  <TableCell className="text-white">${Number(line.rate).toFixed(2)}</TableCell>
-                  <TableCell className="text-white text-right">${Number(line.driver_amount).toFixed(2)}</TableCell>
+                <TableRow key={idx} className='border-slate-700'>
+                  <TableCell className='text-white'>{line.label}</TableCell>
+                  <TableCell className='text-white'>{line.quantity}</TableCell>
+                  <TableCell className='text-white'>
+                    ${Number(line.rate).toFixed(2)}
+                  </TableCell>
+                  <TableCell className='text-white text-right'>
+                    ${Number(line.driver_amount).toFixed(2)}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         )}
-        <div className="flex justify-between items-center pt-2 border-t border-slate-700">
-          <span className="text-slate-400 text-sm">Rates from Rate Card (read-only)</span>
+        <div className='flex justify-between items-center pt-2 border-t border-slate-700'>
+          <span className='text-slate-400 text-sm'>
+            Rates from Rate Card (read-only)
+          </span>
           {isUpdating ? (
-            <Spinner className="h-4 w-4" />
+            <Spinner className='h-4 w-4' />
           ) : (
-            <p className="font-medium text-white">
+            <p className='font-medium text-white'>
               Trip total: ${Number(trip.trip_total ?? 0).toFixed(2)}
-              {trip.total_agency_billing != null && trip.total_agency_billing > 0 && (
+              {/* {trip.total_agency_billing != null && trip.total_agency_billing > 0 && (
                 <span className="text-slate-400 ml-2">Agency: ${Number(trip.total_agency_billing).toFixed(2)}</span>
-              )}
+              )} */}
             </p>
           )}
         </div>

@@ -1,14 +1,27 @@
 'use client';
 
-import React from "react"
+import React from 'react';
 
 import { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import {
   Dialog,
   DialogContent,
@@ -29,7 +42,9 @@ export default function PermissionsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingPermission, setEditingPermission] = useState<Permission | null>(null);
+  const [editingPermission, setEditingPermission] = useState<Permission | null>(
+    null,
+  );
   const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
@@ -104,7 +119,11 @@ export default function PermissionsPage() {
   };
 
   const handleDelete = async (permission: Permission) => {
-    if (!confirm(`Are you sure you want to delete "${permission.name}"? This action cannot be undone.`)) {
+    if (
+      !confirm(
+        `Are you sure you want to delete "${permission.name}"? This action cannot be undone.`,
+      )
+    ) {
       return;
     }
 
@@ -117,44 +136,51 @@ export default function PermissionsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className='space-y-6'>
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className='flex items-center justify-between'>
         <div>
-          <h1 className="text-3xl font-bold text-white">Permissions</h1>
-          <p className="text-slate-400 mt-2">Define system permissions and assign them to roles</p>
+          <h1 className='text-3xl font-bold text-white'>Permissions</h1>
+          <p className='text-slate-400 mt-2'>
+            Define system permissions and assign them to roles
+          </p>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
-            <Button onClick={() => handleOpenDialog()} className="bg-blue-600 hover:bg-blue-700">
-              <Plus className="mr-2 h-4 w-4" />
+            <Button
+              onClick={() => handleOpenDialog()}
+              className='bg-blue-600 hover:bg-blue-700'
+            >
+              <Plus className='mr-2 h-4 w-4' />
               New Permission
             </Button>
           </DialogTrigger>
-          <DialogContent className="bg-slate-800 border-slate-700">
+          <DialogContent className='bg-slate-800 border-slate-700'>
             <DialogHeader>
-              <DialogTitle className="text-white">
+              <DialogTitle className='text-white'>
                 {editingPermission ? 'Edit Permission' : 'Create Permission'}
               </DialogTitle>
-              <DialogDescription className="text-slate-400">
+              <DialogDescription className='text-slate-400'>
                 {editingPermission
                   ? 'Update permission information'
                   : 'Create a new permission in the system'}
               </DialogDescription>
             </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name" className="text-slate-200">Permission Name</Label>
+            <form onSubmit={handleSubmit} className='space-y-4'>
+              <div className='space-y-2'>
+                <Label htmlFor='name' className='text-slate-200'>
+                  Permission Name
+                </Label>
                 <Input
-                  id="name"
+                  id='name'
                   value={formData.name}
                   onChange={(e) => {
                     setFormData({ ...formData, name: e.target.value });
                     //handleSlugGeneration(e.target.value);
                   }}
-                  placeholder="e.g., View Reports"
+                  placeholder='e.g., View Reports'
                   disabled={isSaving}
-                  className="bg-slate-700 border-slate-600 text-white"
+                  className='text-white bg-slate-700 border-slate-600 text-white'
                   required
                 />
               </div>
@@ -167,39 +193,43 @@ export default function PermissionsPage() {
                   onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
                   placeholder="view-reports"
                   disabled={isSaving}
-                  className="bg-slate-700 border-slate-600 text-white text-sm"
+                  className="text-white bg-slate-700 border-slate-600 text-white text-sm"
                   required
                 />
                 <p className="text-xs text-slate-400">Used internally to identify permissions</p>
               </div> */}
 
-              <div className="space-y-2">
-                <Label htmlFor="description" className="text-slate-200">Description</Label>
+              <div className='space-y-2'>
+                <Label htmlFor='description' className='text-slate-200'>
+                  Description
+                </Label>
                 <Textarea
-                  id="description"
+                  id='description'
                   value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="What does this permission allow?"
+                  onChange={(e) =>
+                    setFormData({ ...formData, description: e.target.value })
+                  }
+                  placeholder='What does this permission allow?'
                   disabled={isSaving}
-                  className="bg-slate-700 border-slate-600 text-white text-sm"
+                  className='text-white bg-slate-700 border-slate-600 text-white text-sm'
                   rows={3}
                 />
               </div>
 
-              <div className="flex gap-3 justify-end pt-4">
+              <div className='flex gap-3 justify-end pt-4'>
                 <Button
-                  type="button"
-                  variant="outline"
+                  type='button'
+                  variant='outline'
                   onClick={handleCloseDialog}
                   disabled={isSaving}
-                  className="border-slate-600 bg-transparent"
+                  className='border-slate-600 bg-transparent'
                 >
                   Cancel
                 </Button>
                 <Button
-                  type="submit"
+                  type='submit'
                   disabled={isSaving}
-                  className="bg-blue-600 hover:bg-blue-700"
+                  className='bg-blue-600 hover:bg-blue-700'
                 >
                   {isSaving ? 'Saving...' : 'Save'}
                 </Button>
@@ -211,54 +241,61 @@ export default function PermissionsPage() {
 
       {/* Error Alert */}
       {error && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
+        <Alert variant='destructive'>
+          <AlertCircle className='h-4 w-4' />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
 
       {/* Table Card */}
-      <Card className="bg-slate-800 border-slate-700">
+      <Card className='bg-slate-800 border-slate-700'>
         <CardHeader>
-          <CardTitle className="text-white">All Permissions</CardTitle>
+          <CardTitle className='text-white'>All Permissions</CardTitle>
           <CardDescription>
-            {permissions.length} permission{permissions.length !== 1 ? 's' : ''} defined
+            {permissions.length} permission{permissions.length !== 1 ? 's' : ''}{' '}
+            defined
           </CardDescription>
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Spinner className="h-6 w-6 text-blue-500" />
+            <div className='flex items-center justify-center py-8'>
+              <Spinner className='h-6 w-6 text-blue-500' />
             </div>
           ) : permissions.length === 0 ? (
-            <div className="text-center py-8 text-slate-400">
+            <div className='text-center py-8 text-slate-400'>
               <p>No permissions found. Create one to get started.</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className='overflow-x-auto'>
               <Table>
                 <TableHeader>
-                  <TableRow className="border-slate-700 hover:bg-transparent">
-                    <TableHead className="text-slate-300">Name</TableHead>
-                    <TableHead className="text-slate-300">Slug</TableHead>
-                    <TableHead className="text-slate-300">Description</TableHead>
-                    <TableHead className="text-right text-slate-300">Actions</TableHead>
+                  <TableRow className='border-slate-700 hover:bg-transparent'>
+                    <TableHead className='text-slate-300'>Name</TableHead>
+                    <TableHead className='text-slate-300'>Slug</TableHead>
+                    <TableHead className='text-slate-300'>
+                      Description
+                    </TableHead>
+                    <TableHead className='text-right text-slate-300'>
+                      Actions
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {permissions.map((permission) => (
                     <TableRow
                       key={permission.id}
-                      className="border-slate-700 hover:bg-slate-700/50"
+                      className='border-slate-700 hover:bg-slate-700/50'
                     >
-                      <TableCell className="text-white font-medium">{permission.name}</TableCell>
-                      <TableCell className="text-slate-300 font-mono text-sm">
+                      <TableCell className='text-white font-medium'>
+                        {permission.name}
+                      </TableCell>
+                      <TableCell className='text-slate-300 font-mono text-sm'>
                         {permission.slug}
                       </TableCell>
-                      <TableCell className="text-slate-400 text-sm max-w-xs truncate">
+                      <TableCell className='text-slate-400 text-sm max-w-xs truncate'>
                         {permission.description || '-'}
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className='text-right'>
                         <TableActions
                           onEdit={() => handleOpenDialog(permission)}
                           onDelete={() => handleDelete(permission)}
