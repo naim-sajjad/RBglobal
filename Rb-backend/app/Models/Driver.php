@@ -20,6 +20,7 @@ class Driver extends Model
         'license_type',
         'license_other',
         'issuing_authority',
+        'license_issue_date',
         'license_expiry_date',
         // Driving Experience
         'years_of_experience',
@@ -35,18 +36,25 @@ class Driver extends Model
         'pay_type',
         // Compliance Requirements & Documents
         'medical_certificate_path',
+        'pcc_document_path',
         'license_document_path',
+        'license_front_image_path',
+        'license_back_image_path',
         'abstract_document_path',
         'cvor_document_path',
         'safety_certificate_path',
         'background_check_status',
         'drug_alcohol_test',
         'compliance_notes',
+        // Remittance slip (payment to — e.g. corporation name & mailing address)
+        'payee_business_name',
+        'payee_address',
         // Status
         'status',
     ];
 
     protected $casts = [
+        'license_issue_date' => 'date',
         'license_expiry_date' => 'date',
         'driver_class_effective_date' => 'date',
         'vehicle_types' => 'array',

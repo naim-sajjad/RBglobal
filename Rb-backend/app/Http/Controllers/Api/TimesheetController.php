@@ -4,11 +4,14 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Employer;
+use App\Models\DriverNotification;
 use App\Models\Timesheet;
+use App\Models\TimesheetAdjustmentLog;
 use App\Models\TimesheetTrip;
 use App\Services\TimesheetCalculationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Mail;
 
 class TimesheetController extends Controller
 {
@@ -294,9 +297,112 @@ class TimesheetController extends Controller
             }
         }
         $trip->update($validated);
-        TimesheetCalculationService::recalculateTrip($trip);
+        // If admin manually adjusted the trip, avoid overwriting the manual snapshot unless explicitly forced.
+        $force = (bool) $request->boolean('force_recalculate', false);
+        if (! $trip->is_adjusted || $force) {
+            if ($force) {
+                $trip->update(['is_adjusted' => false, 'adjusted_at' => null, 'adjusted_reason' => null, 'manual_rate_snapshot' => null]);
+            }
+            TimesheetCalculationService::recalculateTrip($trip);
+        }
         TimesheetCalculationService::recalculateTimesheet($timesheet);
         return response()->json($trip->fresh()->load('employer'));
+    }
+
+    /**
+     * Admin-only: manually override rate snapshot for a trip to match employer-provided invoice.
+     */
+    public function adjustTrip(Request $request, Timesheet $timesheet, TimesheetTrip $trip)
+    {
+        if ($trip->timesheet_id !== $timesheet->id || $timesheet->tenant_id !== tenant('id')) {
+            abort(403, 'Unauthorized');
+        }
+        if (! auth()->user()?->hasPermissionTo('drivers.view')) {
+            abort(403, 'Unauthorized');
+        }
+        if (! in_array($timesheet->status, ['draft', 'submitted', 'under_review', 'approved', 'paid'])) {
+            return response()->json(['message' => 'Cannot adjust timesheet.'], 422);
+        }
+
+        $validated = $request->validate([
+            'reason' => 'nullable|string|max:255',
+            'manual_rate_snapshot' => 'required|array',
+            'manual_rate_snapshot.lines' => 'required|array|min:1',
+            'manual_rate_snapshot.total_driver_pay' => 'required|numeric|min:0',
+            'manual_rate_snapshot.total_agency_billing' => 'required|numeric|min:0',
+            'notify_driver' => 'nullable|boolean',
+            'email_driver' => 'nullable|boolean',
+        ]);
+
+        $before = [
+            'rate_snapshot' => $trip->rate_snapshot,
+            'trip_total' => (float) $trip->trip_total,
+            'total_agency_billing' => (float) $trip->total_agency_billing,
+            'is_adjusted' => (bool) $trip->is_adjusted,
+            'adjusted_reason' => $trip->adjusted_reason,
+            'manual_rate_snapshot' => $trip->manual_rate_snapshot,
+        ];
+
+        $snap = $validated['manual_rate_snapshot'];
+        $trip->update([
+            'manual_rate_snapshot' => $snap,
+            'rate_snapshot' => $snap,
+            'trip_total' => round((float) $snap['total_driver_pay'], 2),
+            'total_agency_billing' => round((float) $snap['total_agency_billing'], 2),
+            'is_adjusted' => true,
+            'adjusted_at' => now(),
+            'adjusted_reason' => $validated['reason'] ?? null,
+        ]);
+        $timesheet->update([
+            'adjusted_at' => now(),
+            'adjusted_by' => auth()->id(),
+        ]);
+        TimesheetCalculationService::recalculateTimesheet($timesheet);
+
+        TimesheetAdjustmentLog::create([
+            'tenant_id' => tenant('id'),
+            'timesheet_id' => $timesheet->id,
+            'timesheet_trip_id' => $trip->id,
+            'admin_user_id' => auth()->id(),
+            'reason' => $validated['reason'] ?? null,
+            'before' => $before,
+            'after' => [
+                'manual_rate_snapshot' => $snap,
+                'trip_total' => (float) $trip->trip_total,
+                'total_agency_billing' => (float) $trip->total_agency_billing,
+            ],
+        ]);
+
+        $notify = (bool) ($validated['notify_driver'] ?? true);
+        $email = (bool) ($validated['email_driver'] ?? false);
+        if ($notify) {
+            DriverNotification::create([
+                'tenant_id' => tenant('id'),
+                'driver_id' => $timesheet->driver_id,
+                'type' => 'timesheet_updated',
+                'title' => 'Timesheet updated',
+                'message' => 'Your timesheet has been updated. Please review the changes.',
+                'meta' => ['timesheet_id' => $timesheet->id, 'timesheet_trip_id' => $trip->id],
+                'created_by_user_id' => auth()->id(),
+            ]);
+        }
+        if ($email) {
+            $driverUser = $timesheet->driver?->user;
+            $to = $driverUser?->email;
+            if (is_string($to) && $to !== '') {
+                $subject = 'Timesheet अपडेट / Updated';
+                $body = 'Your timesheet has been updated by the admin based on employer-provided invoice. Please log in and review the changes.';
+                Mail::raw($body, function ($m) use ($to, $subject) {
+                    $m->to($to)->subject($subject);
+                });
+            }
+        }
+
+        return response()->json([
+            'message' => 'Trip adjusted.',
+            'timesheet' => $timesheet->fresh()->load(['driver.user', 'driver.driverClass', 'trips.employer']),
+            'trip' => $trip->fresh()->load('employer'),
+        ]);
     }
 
     public function destroyTrip(Timesheet $timesheet, TimesheetTrip $trip)

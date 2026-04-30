@@ -30,6 +30,20 @@ class RateCardResolutionService
      */
     public static function resolveTrip(TimesheetTrip $trip): void
     {
+        // If admin manually adjusted this trip, keep the manual snapshot unless recalculation is forced elsewhere.
+        if (! empty($trip->is_adjusted) && is_array($trip->manual_rate_snapshot) && $trip->manual_rate_snapshot !== []) {
+            $snap = $trip->manual_rate_snapshot;
+            $tripTotal = (float) ($snap['total_driver_pay'] ?? 0);
+            $agencyTotal = (float) ($snap['total_agency_billing'] ?? 0);
+            $trip->update([
+                'rate_snapshot' => $snap,
+                'trip_total' => round($tripTotal, 2),
+                'total_agency_billing' => round($agencyTotal, 2),
+                'minimum_applied' => (bool) ($snap['minimum_applied'] ?? false),
+            ]);
+            return;
+        }
+
         $trip->load(['timesheet.driver.driverClass', 'employer']);
         $driver = $trip->timesheet->driver;
         if (! $driver) {
@@ -83,6 +97,8 @@ class RateCardResolutionService
             'agency_rate' => $agencyDistanceRate,
             'driver_amount' => $driverDistancePay,
             'agency_amount' => $agencyDistancePay,
+            'is_payable' => $driverDistancePay != 0.0,
+            'is_billable' => $agencyDistancePay != 0.0,
         ];
         $totalDriverPay += $driverDistancePay;
         $totalAgencyBilling += $agencyDistancePay;
@@ -122,6 +138,8 @@ class RateCardResolutionService
                 'agency_rate' => $agencyRate,
                 'driver_amount' => $driverAmount,
                 'agency_amount' => $agencyAmount,
+                'is_payable' => $driverAmount != 0.0,
+                'is_billable' => $agencyAmount != 0.0,
             ];
             $totalDriverPay += $driverAmount;
             $totalAgencyBilling += $agencyAmount;
@@ -147,6 +165,8 @@ class RateCardResolutionService
                 'agency_rate' => 0,
                 'driver_amount' => $minimumAdjustment,
                 'agency_amount' => 0,
+                'is_payable' => true,
+                'is_billable' => false,
             ];
             $totalDriverPay = $minimumDriver;
             $minimumApplied = true;

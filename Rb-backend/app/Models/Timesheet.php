@@ -25,6 +25,8 @@ class Timesheet extends Model
         'reject_reason',
         'notes',
         'weekly_total',
+        'adjusted_at',
+        'adjusted_by',
     ];
 
     protected $casts = [
@@ -34,6 +36,7 @@ class Timesheet extends Model
         'approved_at' => 'datetime',
         'paid_at' => 'datetime',
         'weekly_total' => 'decimal:2',
+        'adjusted_at' => 'datetime',
     ];
 
     public function driver(): BelongsTo
@@ -54,5 +57,10 @@ class Timesheet extends Model
     public function trips(): HasMany
     {
         return $this->hasMany(TimesheetTrip::class)->orderBy('trip_date')->orderBy('id');
+    }
+
+    public function adjustmentLogs(): HasMany
+    {
+        return $this->hasMany(TimesheetAdjustmentLog::class)->orderByDesc('id');
     }
 }

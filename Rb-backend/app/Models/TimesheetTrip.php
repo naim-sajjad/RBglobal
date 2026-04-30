@@ -13,6 +13,8 @@ class TimesheetTrip extends Model
 
     protected $fillable = [
         'timesheet_id',
+        'invoice_id',
+        'payslip_id',
         'employer_id',
         'trip_date',
         'trip_number',
@@ -21,8 +23,12 @@ class TimesheetTrip extends Model
         'trip_total',
         'minimum_applied',
         'rate_snapshot',
+        'manual_rate_snapshot',
         'total_agency_billing',
         'additional_quantities',
+        'is_adjusted',
+        'adjusted_at',
+        'adjusted_reason',
     ];
 
     protected $casts = [
@@ -32,7 +38,10 @@ class TimesheetTrip extends Model
         'minimum_applied' => 'boolean',
         'distance' => 'decimal:2',
         'rate_snapshot' => 'array',
+        'manual_rate_snapshot' => 'array',
         'additional_quantities' => 'array',
+        'is_adjusted' => 'boolean',
+        'adjusted_at' => 'datetime',
     ];
 
     public function timesheet(): BelongsTo
@@ -43,6 +52,16 @@ class TimesheetTrip extends Model
     public function employer(): BelongsTo
     {
         return $this->belongsTo(Employer::class);
+    }
+
+    public function invoice(): BelongsTo
+    {
+        return $this->belongsTo(Invoice::class);
+    }
+
+    public function payslip(): BelongsTo
+    {
+        return $this->belongsTo(Payslip::class);
     }
 
     public function payItems(): HasMany

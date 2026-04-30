@@ -128,12 +128,6 @@ class DriverController extends Controller
         // Handle document uploads
         $documentPaths = $this->handleDocumentUploads($request);
 
-        // Convert drug_alcohol_test to boolean
-        $drugAlcoholTest = false;
-        if (isset($validated['drug_alcohol_test'])) {
-            $drugAlcoholTest = filter_var($validated['drug_alcohol_test'], FILTER_VALIDATE_BOOLEAN);
-        }
-
         // Create driver profile
         $driver = Driver::create([
             'user_id' => $user->id,
@@ -142,27 +136,24 @@ class DriverController extends Controller
             'license_type' => $validated['license_type'] ?? null,
             'license_other' => $validated['license_other'] ?? null,
             'issuing_authority' => $validated['issuing_authority'] ?? null,
+            'license_issue_date' => $validated['license_issue_date'] ?? null,
             'license_expiry_date' => $validated['license_expiry_date'] ?? null,
-            'years_of_experience' => $validated['years_of_experience'] ?? 0,
-            'driving_history' => $validated['driving_history'] ?? null,
             'vehicle_types' => $validated['vehicle_types'] ?? null,
-            'vehicle_ownership' => $validated['vehicle_ownership'] ?? null,
-            'vehicle_capacity' => $validated['vehicle_capacity'] ?? null,
-            'route_type' => $validated['route_type'] ?? null,
-            'route_details' => $validated['route_details'] ?? null,
-            'shift_timing' => $validated['shift_timing'] ?? null,
-            'pay_type' => $validated['pay_type'] ?? null,
             'medical_certificate_path' => $documentPaths['medical_certificate'] ?? null,
+            'pcc_document_path' => $documentPaths['pcc_document'] ?? null,
             'license_document_path' => $documentPaths['license_document'] ?? null,
+            'license_front_image_path' => $documentPaths['license_front_image'] ?? null,
+            'license_back_image_path' => $documentPaths['license_back_image'] ?? null,
             'abstract_document_path' => $documentPaths['abstract_document'] ?? null,
             'cvor_document_path' => $documentPaths['cvor_document'] ?? null,
             'safety_certificate_path' => $documentPaths['safety_certificate'] ?? null,
             'background_check_status' => $validated['background_check_status'] ?? 'pending',
-            'drug_alcohol_test' => $drugAlcoholTest,
             'compliance_notes' => $validated['compliance_notes'] ?? null,
             'status' => $validated['status'] ?? 'pending_approval', // Admin can set initial status
             'driver_class_id' => $validated['driver_class_id'] ?? null,
             'driver_class_effective_date' => $validated['driver_class_effective_date'] ?? null,
+            'payee_business_name' => $validated['payee_business_name'] ?? null,
+            'payee_address' => $validated['payee_address'] ?? null,
         ]);
 
         return response()->json($driver->load(['user.roles', 'user.permissions', 'tenant', 'driverClass']), 201);
@@ -202,12 +193,6 @@ class DriverController extends Controller
         // Handle document uploads
         $documentPaths = $this->handleDocumentUploads($request);
 
-        // Convert drug_alcohol_test to boolean
-        $drugAlcoholTest = false;
-        if (isset($validated['drug_alcohol_test'])) {
-            $drugAlcoholTest = filter_var($validated['drug_alcohol_test'], FILTER_VALIDATE_BOOLEAN);
-        }
-
         // Create driver profile with pending_approval status
         $driver = Driver::create([
             'user_id' => $user->id,
@@ -216,27 +201,24 @@ class DriverController extends Controller
             'license_type' => $validated['license_type'] ?? null,
             'license_other' => $validated['license_other'] ?? null,
             'issuing_authority' => $validated['issuing_authority'] ?? null,
+            'license_issue_date' => $validated['license_issue_date'] ?? null,
             'license_expiry_date' => $validated['license_expiry_date'] ?? null,
-            'years_of_experience' => $validated['years_of_experience'] ?? 0,
-            'driving_history' => $validated['driving_history'] ?? null,
             'vehicle_types' => $validated['vehicle_types'] ?? null,
-            'vehicle_ownership' => $validated['vehicle_ownership'] ?? null,
-            'vehicle_capacity' => $validated['vehicle_capacity'] ?? null,
-            'route_type' => $validated['route_type'] ?? null,
-            'route_details' => $validated['route_details'] ?? null,
-            'shift_timing' => $validated['shift_timing'] ?? null,
-            'pay_type' => $validated['pay_type'] ?? null,
             'medical_certificate_path' => $documentPaths['medical_certificate'] ?? null,
+            'pcc_document_path' => $documentPaths['pcc_document'] ?? null,
             'license_document_path' => $documentPaths['license_document'] ?? null,
+            'license_front_image_path' => $documentPaths['license_front_image'] ?? null,
+            'license_back_image_path' => $documentPaths['license_back_image'] ?? null,
             'abstract_document_path' => $documentPaths['abstract_document'] ?? null,
             'cvor_document_path' => $documentPaths['cvor_document'] ?? null,
             'safety_certificate_path' => $documentPaths['safety_certificate'] ?? null,
             'background_check_status' => 'pending',
-            'drug_alcohol_test' => $drugAlcoholTest,
             'compliance_notes' => $validated['compliance_notes'] ?? null,
             'status' => 'pending_approval', // Always pending for self-registration
             'driver_class_id' => $validated['driver_class_id'] ?? null,
             'driver_class_effective_date' => $validated['driver_class_effective_date'] ?? null,
+            'payee_business_name' => $validated['payee_business_name'] ?? null,
+            'payee_address' => $validated['payee_address'] ?? null,
         ]);
 
         // Create auth token for immediate login
@@ -279,11 +261,6 @@ class DriverController extends Controller
             if ($path) {
                 $validated[$key . '_path'] = $path;
             }
-        }
-
-        // Convert drug_alcohol_test to boolean if provided
-        if (isset($validated['drug_alcohol_test'])) {
-            $validated['drug_alcohol_test'] = filter_var($validated['drug_alcohol_test'], FILTER_VALIDATE_BOOLEAN);
         }
 
         // Drivers can only update their own profile, not status
@@ -329,7 +306,9 @@ class DriverController extends Controller
         // Delete all documents if they exist
         $documentFields = [
             'medical_certificate_path',
-            'license_document_path',
+            'pcc_document_path',
+            'license_front_image_path',
+            'license_back_image_path',
             'abstract_document_path',
             'cvor_document_path',
             'safety_certificate_path',
@@ -362,11 +341,12 @@ class DriverController extends Controller
                 : ($isSelfRegister ? 'required|string|min:8' : 'nullable|string|min:8'),
 
             // License Information
-            'license_number' => 'nullable|string|max:255',
-            'license_type' => ['nullable', Rule::in(['AZ', 'DZ', 'G-Class', 'G1/G2', 'Other'])],
+            'license_number' => ($isUpdate ? 'sometimes|required' : 'required') . '|string|max:255',
+            'license_type' => [($isUpdate ? 'sometimes' : 'required'), Rule::in(['AZ', 'DZ', 'G-Class', 'G1/G2', 'Other'])],
             'license_other' => 'nullable|string|max:255|required_if:license_type,Other',
-            'issuing_authority' => 'nullable|string|max:255',
-            'license_expiry_date' => 'nullable|date|after:today',
+            'issuing_authority' => ($isUpdate ? 'sometimes|required' : 'required') . '|string|max:255',
+            'license_issue_date' => ($isUpdate ? 'sometimes|required' : 'required') . '|date|before_or_equal:today',
+            'license_expiry_date' => ($isUpdate ? 'sometimes|required' : 'required') . '|date|after_or_equal:today',
 
             // Driving Experience
             'years_of_experience' => 'nullable|integer|min:0',
@@ -378,20 +358,16 @@ class DriverController extends Controller
             'vehicle_ownership' => ['nullable', Rule::in(['company-owned', 'self-owned'])],
             'vehicle_capacity' => 'nullable|string|max:255',
 
-            // Route & Shift Details
-            'route_type' => ['nullable', Rule::in(['local', 'regional', 'long-haul', 'intercity'])],
-            'route_details' => 'nullable|string',
-            'shift_timing' => ['nullable', Rule::in(['day', 'night', 'rotational'])],
-            'pay_type' => ['nullable', Rule::in(['hourly', 'per_mile', 'per_trip', 'fixed_salary'])],
-
             // Compliance Requirements & Documents
-            'medical_certificate' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120', // 5MB max
+            'medical_certificate' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120', // legacy
+            'pcc_document' => ($isUpdate ? 'nullable' : 'required') . '|file|mimes:pdf,jpg,jpeg,png|max:5120',
             'license_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
+            'license_front_image' => ($isUpdate ? 'nullable' : 'required') . '|file|mimes:jpg,jpeg,png|max:5120',
+            'license_back_image' => ($isUpdate ? 'nullable' : 'required') . '|file|mimes:jpg,jpeg,png|max:5120',
             'abstract_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
             'cvor_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
             'safety_certificate' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
             'background_check_status' => ['nullable', Rule::in(['pending', 'completed'])],
-            'drug_alcohol_test' => 'nullable|string|in:true,false,1,0',
             'compliance_notes' => 'nullable|string',
 
             // Status (admin only)
@@ -400,6 +376,9 @@ class DriverController extends Controller
             // Driver class (pay tier) - required on create for contract-driven pricing; optional on update/self-register
             'driver_class_id' => ($isSelfRegister || $isUpdate ? 'nullable' : 'required') . '|integer|exists:driver_classes,id',
             'driver_class_effective_date' => 'nullable|date',
+
+            'payee_business_name' => 'nullable|string|max:255',
+            'payee_address' => 'nullable|string|max:4000',
         ];
 
         return $request->validate($rules);
@@ -413,7 +392,10 @@ class DriverController extends Controller
         $documentPaths = [];
         $documentFields = [
             'medical_certificate' => 'drivers/medical',
+            'pcc_document' => 'drivers/pcc',
             'license_document' => 'drivers/license',
+            'license_front_image' => 'drivers/license',
+            'license_back_image' => 'drivers/license',
             'abstract_document' => 'drivers/abstract',
             'cvor_document' => 'drivers/cvor',
             'safety_certificate' => 'drivers/safety',

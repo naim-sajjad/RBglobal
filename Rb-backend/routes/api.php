@@ -13,6 +13,9 @@ use App\Http\Controllers\Api\RateCardController;
 use App\Http\Controllers\Api\DriverClassController;
 use App\Http\Controllers\Api\PayItemTemplateController;
 use App\Http\Controllers\Api\TimesheetController;
+use App\Http\Controllers\Api\InvoiceFinancialController;
+use App\Http\Controllers\Api\PayrollFinancialController;
+use App\Http\Controllers\Api\TenantCompanyProfileController;
 
 /*
 |--------------------------------------------------------------------------
@@ -127,9 +130,39 @@ Route::prefix('v1/tenant')->middleware([
     Route::post('/timesheets/{timesheet}/recalculate', [TimesheetController::class, 'recalculate']);
     Route::post('/timesheets/{timesheet}/trips', [TimesheetController::class, 'storeTrip']);
     Route::put('/timesheets/{timesheet}/trips/{trip}', [TimesheetController::class, 'updateTrip']);
+    Route::post('/timesheets/{timesheet}/trips/{trip}/adjust', [TimesheetController::class, 'adjustTrip']);
     Route::delete('/timesheets/{timesheet}/trips/{trip}', [TimesheetController::class, 'destroyTrip']);
     Route::post('/timesheets/{timesheet}/trips/{trip}/pay-items', [TimesheetController::class, 'storePayItem']);
     Route::put('/timesheets/{timesheet}/trips/{trip}/pay-items/{payItem}', [TimesheetController::class, 'updatePayItem']);
     Route::delete('/timesheets/{timesheet}/trips/{trip}/pay-items/{payItem}', [TimesheetController::class, 'destroyPayItem']);
+
+    // Client billing (invoices from approved timesheet trips — billable lines only)
+    Route::post('/billing/invoice-preview', [InvoiceFinancialController::class, 'preview']);
+    Route::get('/billing/invoices', [InvoiceFinancialController::class, 'index']);
+    Route::post('/billing/invoices', [InvoiceFinancialController::class, 'store']);
+    Route::get('/billing/invoices/{invoice}', [InvoiceFinancialController::class, 'show']);
+    Route::patch('/billing/invoices/{invoice}', [InvoiceFinancialController::class, 'update']);
+    Route::patch('/billing/invoices/{invoice}/status', [InvoiceFinancialController::class, 'updateStatus']);
+    Route::post('/billing/invoices/{invoice}/payments', [InvoiceFinancialController::class, 'storePayment']);
+    Route::get('/billing/invoices/{invoice}/pdf', [InvoiceFinancialController::class, 'downloadPdf']);
+
+    // Tenant company profile (invoice client / billing identity)
+    Route::get('/company-profile', [TenantCompanyProfileController::class, 'show']);
+    Route::put('/company-profile', [TenantCompanyProfileController::class, 'update']);
+
+    // Driver payroll (payslips from approved trips — payable lines only)
+    Route::get('/payroll/billing-tax-settings', [PayrollFinancialController::class, 'getBillingTaxSettings']);
+    Route::put('/payroll/billing-tax-settings', [PayrollFinancialController::class, 'putBillingTaxSettings']);
+    Route::post('/payroll/calculation-preview', [PayrollFinancialController::class, 'previewCalculations']);
+    Route::post('/payroll/generate', [PayrollFinancialController::class, 'generate']);
+    Route::get('/payroll/payslips', [PayrollFinancialController::class, 'payslipsIndex']);
+    Route::get('/payroll/payslips/{payslip}', [PayrollFinancialController::class, 'payslipShow']);
+    Route::delete('/payroll/payslips/{payslip}', [PayrollFinancialController::class, 'payslipDestroy']);
+    Route::post('/payroll/payslips/{payslip}/remittances', [PayrollFinancialController::class, 'storeRemittance']);
+    Route::get('/payroll/payslips/{payslip}/pdf', [PayrollFinancialController::class, 'payslipPdf']);
+    Route::post('/payroll/payslips/{payslip}/email-pay-stub', [PayrollFinancialController::class, 'emailPayStub']);
+    Route::get('/payroll/payslips/{payslip}/invoice-pdf', [PayrollFinancialController::class, 'payslipInvoicePdf']);
+    Route::get('/payroll/payslips/{payslip}/remittance-pdf', [PayrollFinancialController::class, 'remittancePdf']);
+    Route::get('/payroll/driver-calculations/{driverCalculation}/pdf', [PayrollFinancialController::class, 'calculationPdf']);
 });
 
