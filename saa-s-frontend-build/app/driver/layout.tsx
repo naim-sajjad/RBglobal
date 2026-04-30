@@ -1,5 +1,6 @@
 'use client';
 
+import '@/frontend/globals.css';
 import React from 'react';
 import { usePathname } from 'next/navigation';
 import { Sidebar } from '@/components/Sidebar';

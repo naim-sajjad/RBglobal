@@ -1,3 +1,4 @@
+import '@/frontend/globals.css';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 

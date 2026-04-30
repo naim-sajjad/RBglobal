@@ -19,6 +19,11 @@ import {
   Layers,
   FileSpreadsheet,
   Calendar,
+  Receipt,
+  Banknote,
+  Percent,
+  Building2,
+  UserPlus,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -40,12 +45,10 @@ export function Sidebar() {
     user?.is_global_admin ||
     user?.roles?.some((role: any) => role.name === 'super-admin') ||
     false;
-  console.log(user);
   // Check if user is a driver
   const isDriver =
     user?.roles?.some((role: any) => role.name?.toLowerCase() === 'driver') ||
     false;
-  console.log('isDriver', isDriver);
   // For drivers, show Profile and Timesheets
   const navItems: NavItem[] = isDriver
     ? [
@@ -87,6 +90,11 @@ export function Sidebar() {
           icon: <Truck className='w-5 h-5' />,
         },
         {
+          label: 'Driver registration',
+          href: '/driver/register',
+          icon: <UserPlus className='w-5 h-5' />,
+        },
+        {
           label: 'Driver Classes',
           href: '/admin/driver-classes',
           icon: <Layers className='w-5 h-5' />,
@@ -100,6 +108,26 @@ export function Sidebar() {
           label: 'Timesheets',
           href: '/admin/timesheets',
           icon: <Calendar className='w-5 h-5' />,
+        },
+        {
+          label: 'Client billing',
+          href: '/admin/billing/invoices',
+          icon: <Receipt className='w-5 h-5' />,
+        },
+        {
+          label: 'Payroll',
+          href: '/admin/payroll',
+          icon: <Banknote className='w-5 h-5' />,
+        },
+        {
+          label: 'Tax configuration',
+          href: '/admin/settings/billing-tax',
+          icon: <Percent className='w-5 h-5' />,
+        },
+        {
+          label: 'Company profile',
+          href: '/admin/settings/company-profile',
+          icon: <Building2 className='w-5 h-5' />,
         },
         ...(isSuperAdmin
           ? [

@@ -1,0 +1,286 @@
+/**
+ * Frontend (user-facing) design system — marketing & customer experience.
+ * Tailwind engine lives in app/globals.css (imported from root layout). Do not @import tailwindcss here.
+ * Do not import this file into admin routes; admin uses ../admin/globals.css only.
+ */
+
+/* Semantic tokens (HSL triplets for hsl(var(--token)) in tailwind.config) */
+:root {
+  --background: 0 0% 100%;
+  --foreground: 220 26% 12%;
+  --card: 220 14% 96%;
+  --card-foreground: 220 26% 12%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 220 26% 12%;
+  --primary: 43 67% 52%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 220 26% 12%;
+  --secondary-foreground: 0 0% 100%;
+  --muted: 220 14% 96%;
+  --muted-foreground: 215 16% 47%;
+  --accent: 220 14% 96%;
+  --accent-foreground: 220 26% 12%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 220 13% 91%;
+  --input: 220 13% 91%;
+  --ring: 43 67% 52%;
+  --chart-1: 43 67% 52%;
+  --chart-2: 160 60% 45%;
+  --chart-3: 30 80% 55%;
+  --chart-4: 280 65% 60%;
+  --chart-5: 340 75% 55%;
+  --radius: 0.5rem;
+  --sidebar-background: 220 26% 12%;
+  --sidebar-foreground: 0 0% 100%;
+  --sidebar-primary: 43 67% 52%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 220 20% 18%;
+  --sidebar-accent-foreground: 0 0% 100%;
+  --sidebar-border: 220 20% 22%;
+  --sidebar-ring: 43 67% 52%;
+
+  /* Typography scale (rem) */
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-3xl: 1.875rem;
+  --text-4xl: 2.25rem;
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+
+  /* Spacing scale — align with Tailwind (4, 8, 12, 16, 24, 32…) */
+  --spacing-1: 0.25rem;
+  --spacing-2: 0.5rem;
+  --spacing-3: 0.75rem;
+  --spacing-4: 1rem;
+  --spacing-5: 1.25rem;
+  --spacing-6: 1.5rem;
+  --spacing-8: 2rem;
+  --spacing-10: 2.5rem;
+  --spacing-12: 3rem;
+
+  /* Radius */
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  /* Elevation — richer than admin; use sparingly */
+  --shadow-sm: 0 1px 2px 0 hsl(220 26% 12% / 0.06);
+  --shadow-md: 0 4px 6px -1px hsl(220 26% 12% / 0.08), 0 2px 4px -2px hsl(220 26% 12% / 0.05);
+  --shadow-lg: 0 10px 15px -3px hsl(220 26% 12% / 0.1), 0 4px 6px -4px hsl(220 26% 12% / 0.06);
+  --shadow-xl: 0 20px 25px -5px hsl(220 26% 12% / 0.12), 0 8px 10px -6px hsl(220 26% 12% / 0.08);
+}
+
+/*
+ * Light UI under html.dark — shadcn primitives use hsl(var(--foreground)) etc.
+ * Without this, white form fields get light-on-light text. Use class "light" on
+ * a wrapper (e.g. driver registration, marketing forms). Portaled Select
+ * dropdowns are NOT inside that wrapper; use "frontend-select-content-light".
+ */
+html.dark .light {
+  color-scheme: light;
+  --background: 0 0% 100%;
+  --foreground: 220 26% 12%;
+  --card: 220 14% 96%;
+  --card-foreground: 220 26% 12%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 220 26% 12%;
+  --primary: 43 67% 52%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 220 26% 12%;
+  --secondary-foreground: 0 0% 100%;
+  --muted: 220 14% 96%;
+  --muted-foreground: 215 16% 47%;
+  --accent: 220 14% 96%;
+  --accent-foreground: 220 26% 12%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 220 13% 91%;
+  --input: 220 13% 91%;
+  --ring: 43 67% 52%;
+  --chart-1: 43 67% 52%;
+  --chart-2: 160 60% 45%;
+  --chart-3: 30 80% 55%;
+  --chart-4: 280 65% 60%;
+  --chart-5: 340 75% 55%;
+}
+
+/*
+ * Portaled Select menus under html.dark — force light surface + dark copy so
+ * tokens and Radix highlights never inherit dark-theme grays.
+ */
+html.dark .frontend-select-content-light {
+  color-scheme: light;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 11%;
+  --accent: 220 14% 94%;
+  --accent-foreground: 222 47% 11%;
+  --muted-foreground: 220 9% 40%;
+  background-color: hsl(0 0% 100%) !important;
+  color: hsl(222 47% 11%) !important;
+  border-color: hsl(220 13% 91%) !important;
+}
+
+html.dark .frontend-select-content-light [data-radix-select-viewport] {
+  background-color: hsl(0 0% 100%);
+}
+
+/*
+ * Portaled Popover/Calendar under html.dark (e.g. date pickers) — force a light
+ * surface so the calendar doesn't appear translucent over the hero.
+ */
+html.dark .frontend-popover-content-light {
+  color-scheme: light;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 11%;
+  --accent: 220 14% 94%;
+  --accent-foreground: 222 47% 11%;
+  --muted-foreground: 220 9% 40%;
+  background-color: hsl(0 0% 100%) !important;
+  color: hsl(222 47% 11%) !important;
+  border-color: hsl(220 13% 91%) !important;
+}
+
+/* shadcn SelectItem: relative flex w-full cursor-pointer select-none … */
+html.dark .frontend-select-content-light .relative.flex.w-full.cursor-pointer.select-none {
+  color: hsl(222 47% 11%);
+  background-color: hsl(0 0% 100%);
+}
+
+html.dark
+  .frontend-select-content-light
+  .relative.flex.w-full.cursor-pointer.select-none[data-highlighted] {
+  background-color: hsl(220 14% 94%) !important;
+  color: hsl(222 47% 11%) !important;
+}
+
+html.dark
+  .frontend-select-content-light
+  .relative.flex.w-full.cursor-pointer.select-none[data-disabled] {
+  color: hsl(220 9% 46%) !important;
+  opacity: 0.55;
+}
+
+.dark {
+  --background: 222 47% 11%;
+  --foreground: 210 40% 98%;
+  --card: 222 47% 14%;
+  --card-foreground: 210 40% 98%;
+  --popover: 222 47% 12%;
+  --popover-foreground: 210 40% 98%;
+  --primary: 43 67% 52%;
+  --primary-foreground: 222 47% 11%;
+  --secondary: 217 19% 27%;
+  --secondary-foreground: 210 40% 98%;
+  --muted: 217 19% 22%;
+  --muted-foreground: 215 20% 72%;
+  --accent: 217 19% 24%;
+  --accent-foreground: 210 40% 98%;
+  --destructive: 0 62.8% 50%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 217 19% 27%;
+  --input: 217 19% 27%;
+  --ring: 43 67% 52%;
+  --chart-1: 43 67% 52%;
+  --chart-2: 160 60% 48%;
+  --chart-3: 30 80% 55%;
+  --chart-4: 280 65% 60%;
+  --chart-5: 340 75% 58%;
+  --sidebar-background: 222 47% 9%;
+  --sidebar-foreground: 210 40% 98%;
+  --sidebar-primary: 43 67% 52%;
+  --sidebar-primary-foreground: 222 47% 11%;
+  --sidebar-accent: 217 19% 18%;
+  --sidebar-accent-foreground: 210 40% 98%;
+  --sidebar-border: 217 19% 22%;
+  --sidebar-ring: 43 67% 52%;
+}
+
+@theme inline {
+  --font-sans: 'Geist', 'Geist Fallback';
+  --font-mono: 'Geist Mono', 'Geist Mono Fallback';
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-chart-1: hsl(var(--chart-1));
+  --color-chart-2: hsl(var(--chart-2));
+  --color-chart-3: hsl(var(--chart-3));
+  --color-chart-4: hsl(var(--chart-4));
+  --color-chart-5: hsl(var(--chart-5));
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+  --color-sidebar: hsl(var(--sidebar-background));
+  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-sidebar-primary: hsl(var(--sidebar-primary));
+  --color-sidebar-primary-foreground: hsl(var(--sidebar-primary-foreground));
+  --color-sidebar-accent: hsl(var(--sidebar-accent));
+  --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
+  --color-sidebar-border: hsl(var(--sidebar-border));
+  --color-sidebar-ring: hsl(var(--sidebar-ring));
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+  a {
+    @apply cursor-pointer;
+  }
+}
+
+/* Marketing utilities — patterns & gradients (frontend only) */
+.bg-dot-pattern {
+  background-image: radial-gradient(circle, hsl(220 13% 91%) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+.bg-dot-pattern-light {
+  background-image: radial-gradient(circle, hsl(220 13% 91% / 0.5) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+.bg-grid-pattern {
+  background-image:
+    linear-gradient(hsl(220 13% 91% / 0.4) 1px, transparent 1px),
+    linear-gradient(90deg, hsl(220 13% 91% / 0.4) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+.bg-diagonal-pattern {
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 35px,
+    hsl(43 67% 52% / 0.03) 35px,
+    hsl(43 67% 52% / 0.03) 36px
+  );
+}
+
+[data-form-container] {
+  scroll-margin-top: 20px;
+  overflow-anchor: none;
+}

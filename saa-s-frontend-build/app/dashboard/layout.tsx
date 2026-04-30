@@ -1,5 +1,6 @@
 'use client';
 
+import '@/frontend/globals.css';
 import React from "react"
 import { Sidebar } from '@/components/Sidebar';
 import {Header} from '@/components/Header';

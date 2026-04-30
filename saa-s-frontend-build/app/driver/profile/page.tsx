@@ -589,7 +589,11 @@ export default function DriverProfilePage() {
                               {addr.address || 'N/A'}
                             </p>
                             <p className='text-slate-400 text-xs mt-1'>
-                              Duration: {addr.duration || 'N/A'}
+                              {addr.from_date && addr.to_date
+                                ? `Dates: ${addr.from_date} – ${addr.to_date}`
+                                : addr.duration
+                                  ? `Duration: ${addr.duration}`
+                                  : 'Dates: N/A'}
                             </p>
                           </div>
                         ),

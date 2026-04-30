@@ -177,6 +177,9 @@ export interface Driver {
   background_check_status?: 'pending' | 'completed';
   drug_alcohol_test?: boolean;
   compliance_notes?: string;
+  /** Remittance slip “Payment to” (e.g. corporation + mailing address) */
+  payee_business_name?: string | null;
+  payee_address?: string | null;
   // Status
   status: 'pending_approval' | 'active' | 'inactive' | 'suspended';
   created_at: string;
@@ -428,6 +431,10 @@ export interface TimesheetTripRateSnapshotLine {
   agency_rate?: number;
   driver_amount: number;
   agency_amount: number;
+  /** Payroll: include in driver pay snapshot */
+  is_payable?: boolean;
+  /** Client billing: include on invoice when agency bills */
+  is_billable?: boolean;
 }
 
 export interface TimesheetTripRateSnapshot {
@@ -442,6 +449,8 @@ export interface TimesheetTripRateSnapshot {
 export interface TimesheetTrip {
   id: number;
   timesheet_id: number;
+  invoice_id?: number | null;
+  payslip_id?: number | null;
   employer_id: number;
   trip_date: string;
   trip_number: string | null;
@@ -453,6 +462,10 @@ export interface TimesheetTrip {
   trip_total: number;
   minimum_applied: boolean;
   rate_snapshot?: TimesheetTripRateSnapshot | null;
+  manual_rate_snapshot?: TimesheetTripRateSnapshot | null;
+  is_adjusted?: boolean;
+  adjusted_at?: string | null;
+  adjusted_reason?: string | null;
   total_agency_billing?: number;
   employer?: Employer;
   pay_items?: TimesheetTripPayItem[];
@@ -467,6 +480,8 @@ export interface Timesheet {
   week_start_date: string;
   week_end_date: string;
   status: TimesheetStatus;
+  adjusted_at?: string | null;
+  adjusted_by?: number | null;
   submitted_at: string | null;
   approved_at: string | null;
   approved_by: number | null;
@@ -489,3 +504,179 @@ export type RateCardFormData = {
   status?: 'draft' | 'active' | 'scheduled' | 'expired';
   rates?: RateCardRatesConfig;
 };
+
+// --- Client billing (employer invoices from approved trips) ---
+
+export type ClientInvoiceStatus = 'draft' | 'sent' | 'paid' | 'partially_paid' | 'overdue';
+
+export interface ClientInvoiceItem {
+  id: number;
+  invoice_id: number;
+  timesheet_trip_id: number;
+  driver_id: number;
+  trip_date: string;
+  pay_item_type: string;
+  line_type: string | null;
+  quantity: string | number;
+  unit: string | null;
+  rate: string | number;
+  amount: string | number;
+  line_index: number;
+  driver?: DriverWithDetails;
+}
+
+export interface ClientInvoicePayment {
+  id: number;
+  invoice_id: number;
+  amount: string | number;
+  payment_date: string;
+  reference: string | null;
+  created_at: string;
+}
+
+export interface ClientInvoice {
+  id: number;
+  tenant_id: string | null;
+  employer_id: number;
+  start_date: string;
+  end_date: string;
+  status: ClientInvoiceStatus;
+  subtotal: string | number;
+  tax_rate: string | number;
+  tax_amount: string | number;
+  total: string | number;
+  invoice_number: string | null;
+  notes: string | null;
+  employer?: Employer;
+  items?: ClientInvoiceItem[];
+  payments?: ClientInvoicePayment[];
+  paid_total?: string | number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InvoicePreviewDriverRow {
+  driver_id: number;
+  driver_name: string;
+  total_billing: number;
+  quantities_by_unit: Record<string, number>;
+  trip_count: number;
+}
+
+export interface InvoicePreviewResponse {
+  employer_id: number;
+  /** Omitted or null when “all drivers” */
+  driver_id?: number | null;
+  start_date: string;
+  end_date: string;
+  trip_count: number;
+  billable_trip_count: number;
+  subtotal: number;
+  drivers: InvoicePreviewDriverRow[];
+}
+
+// --- Driver payroll (payslips / remittances) ---
+
+export interface PayrollPreviewDriverRow {
+  driver_id: number;
+  driver_name: string;
+  gross_pay: number;
+  vacation_pay: number;
+  deductions: number;
+  net_pay: number;
+  breakdown: Record<string, number>;
+  trip_count: number;
+  /** Sum of agency billable lines on the driver’s trips (before tax). */
+  agency_billing_subtotal?: number;
+  billing_tax_rate?: number;
+  billing_tax_from_percent?: number;
+  billing_tax_fixed?: number;
+  billing_tax_amount?: number;
+  agency_billing_total?: number;
+  /** Computed line amounts for this driver. */
+  billing_tax_lines?: PayrollBillingTaxLineSnapshot[];
+}
+
+export interface PayrollPreviewResponse {
+  period_start: string;
+  period_end: string;
+  vacation_percent: number;
+  default_deductions: number;
+  /** Saved tenant tax rules (name, type, value — no amounts). */
+  billing_taxes?: PayrollBillingTaxRule[];
+  drivers: PayrollPreviewDriverRow[];
+}
+
+export type PayrollBillingTaxType = 'percentage' | 'fixed';
+
+export interface PayrollBillingTaxRule {
+  id?: number;
+  name: string;
+  type: PayrollBillingTaxType;
+  /** Percentage 0–100, or fixed dollar amount per driver when type is fixed. */
+  value: number;
+  sort_order?: number;
+}
+
+export interface PayrollBillingTaxLineSnapshot {
+  name: string;
+  type: PayrollBillingTaxType;
+  value: number;
+  amount: number;
+}
+
+export interface PayrollBillingTaxSettingsResponse {
+  taxes: PayrollBillingTaxRule[];
+}
+
+/** Tenant company profile (Settings → Company); used on driver invoice PDF client block when set. */
+export interface TenantCompanyProfile {
+  company_legal_name: string;
+  company_address: string;
+  company_phone?: string;
+  company_email?: string;
+  /** Comma or newline separated; CC’d on pay stub emails to drivers. */
+  pay_stub_cc_emails?: string;
+}
+
+export interface Payslip {
+  id: number;
+  tenant_id: string | null;
+  driver_calculation_id: number;
+  driver_id: number;
+  period_start: string;
+  period_end: string;
+  total_pay: string | number;
+  vacation_pay: string | number;
+  deductions: string | number;
+  net_pay: string | number;
+  agency_billing_subtotal?: string | number;
+  billing_tax_rate?: string | number;
+  billing_tax_from_percent?: string | number;
+  billing_tax_fixed?: string | number;
+  billing_tax_amount?: string | number;
+  agency_billing_total?: string | number;
+  billing_tax_lines?: PayrollBillingTaxLineSnapshot[] | null;
+  breakdown: Record<string, number> | null;
+  status: 'pending' | 'paid';
+  driver?: DriverWithDetails;
+  driver_calculation?: {
+    id: number;
+    gross_pay: string | number;
+    status: string;
+    billing_tax_lines?: PayrollBillingTaxLineSnapshot[] | null;
+  };
+  remittances?: Remittance[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Remittance {
+  id: number;
+  payslip_id: number;
+  driver_id: number;
+  amount_paid: string | number;
+  payment_date: string;
+  reference: string | null;
+  created_at: string;
+}

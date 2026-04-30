@@ -23,7 +23,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Spinner } from '@/components/ui/spinner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Calendar, AlertCircle, ChevronRight } from 'lucide-react';
+import { Calendar, AlertCircle, ChevronRight, PencilLine } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import {
   Timesheet,
@@ -147,7 +147,7 @@ export default function AdminTimesheetsPage() {
                 <SelectItem value='all'>All drivers</SelectItem>
                 {drivers.map((d) => (
                   <SelectItem key={d.id} value={String(d.id)}>
-                    {d.user?.name ?? d.name ?? `Driver #${d.id}`}
+                    {d.user?.name ?? `Driver #${d.id}`}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -241,6 +241,7 @@ export default function AdminTimesheetsPage() {
                   <TableHead className='text-slate-300'>Driver</TableHead>
                   <TableHead className='text-slate-300'>Week</TableHead>
                   <TableHead className='text-slate-300'>Status</TableHead>
+                  <TableHead className='text-slate-300'>Adjusted</TableHead>
                   <TableHead className='text-slate-300 text-right'>
                     Weekly total
                   </TableHead>
@@ -255,7 +256,6 @@ export default function AdminTimesheetsPage() {
                   >
                     <TableCell className='text-white'>
                       {ts.driver?.user?.name ??
-                        ts.driver?.name ??
                         `Driver #${ts.driver_id}`}
                     </TableCell>
                     <TableCell className='text-slate-300'>
@@ -267,17 +267,41 @@ export default function AdminTimesheetsPage() {
                         {ts.status.replace('_', ' ')}
                       </Badge>
                     </TableCell>
+                    <TableCell>
+                      {ts.adjusted_at ? (
+                        <Badge className='bg-violet-700'>adjusted</Badge>
+                      ) : (
+                        <span className='text-slate-500'>—</span>
+                      )}
+                    </TableCell>
                     <TableCell className='text-right text-white'>
                       {typeof ts.weekly_total === 'number'
                         ? `$${Number(ts.weekly_total).toFixed(2)}`
                         : '—'}
                     </TableCell>
                     <TableCell>
-                      <Button variant='ghost' size='icon' asChild>
-                        <Link href={`/admin/timesheets/${ts.id}`}>
-                          <ChevronRight className='h-4 w-4 text-slate-400' />
-                        </Link>
-                      </Button>
+                      <div className='flex items-center justify-end gap-1'>
+                        <Button
+                          variant='ghost'
+                          size='icon'
+                          asChild
+                          title='Open timesheet (review)'
+                        >
+                          <Link href={`/admin/timesheets/${ts.id}`}>
+                            <ChevronRight className='h-4 w-4 text-slate-400' />
+                          </Link>
+                        </Button>
+                        <Button
+                          variant='ghost'
+                          size='icon'
+                          asChild
+                          title='Open timesheet (adjust)'
+                        >
+                          <Link href={`/admin/timesheets/${ts.id}?adjust=1`}>
+                            <PencilLine className='h-4 w-4 text-slate-400' />
+                          </Link>
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

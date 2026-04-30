@@ -1,4 +1,4 @@
-import axios, { AxiosInstance } from 'axios';
+import axios, { AxiosInstance, isAxiosError } from 'axios';
 import { LoginResponse, RegisterResponse } from './types';
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost/api/v1';
@@ -206,8 +206,9 @@ class ApiClient {
     
     // Document fields that should be uploaded as files
     const documentFields = [
-      'medical_certificate',
-      'license_document',
+      'pcc_document',
+      'license_front_image',
+      'license_back_image',
       'abstract_document',
       'cvor_document',
       'safety_certificate',
@@ -239,8 +240,9 @@ class ApiClient {
     
     // Document fields that should be uploaded as files
     const documentFields = [
-      'medical_certificate',
-      'license_document',
+      'pcc_document',
+      'license_front_image',
+      'license_back_image',
       'abstract_document',
       'cvor_document',
       'safety_certificate',
@@ -285,8 +287,9 @@ class ApiClient {
     
     // Document fields that should be uploaded as files
     const documentFields = [
-      'medical_certificate',
-      'license_document',
+      'pcc_document',
+      'license_front_image',
+      'license_back_image',
       'abstract_document',
       'cvor_document',
       'safety_certificate',
@@ -560,6 +563,20 @@ class ApiClient {
     return response.data;
   }
 
+  async adjustTimesheetTrip(
+    timesheetId: string | number,
+    tripId: string | number,
+    data: {
+      reason?: string;
+      manual_rate_snapshot: any;
+      notify_driver?: boolean;
+      email_driver?: boolean;
+    }
+  ) {
+    const response = await this.client.post(`/tenant/timesheets/${timesheetId}/trips/${tripId}/adjust`, data);
+    return response.data;
+  }
+
   async deleteTimesheetTrip(timesheetId: string | number, tripId: string | number) {
     const response = await this.client.delete(`/tenant/timesheets/${timesheetId}/trips/${tripId}`);
     return response.data;
@@ -587,6 +604,212 @@ class ApiClient {
   async deleteTimesheetPayItem(timesheetId: string | number, tripId: string | number, payItemId: string | number) {
     const response = await this.client.delete(`/tenant/timesheets/${timesheetId}/trips/${tripId}/pay-items/${payItemId}`);
     return response.data;
+  }
+
+  // Client billing (employer invoices)
+  async previewClientInvoice(data: {
+    employer_id: number;
+    start_date: string;
+    end_date: string;
+    driver_id?: number;
+  }) {
+    const response = await this.client.post('/tenant/billing/invoice-preview', data);
+    return response.data;
+  }
+
+  async getClientInvoices(params?: { employer_id?: number; status?: string; per_page?: number }) {
+    const response = await this.client.get('/tenant/billing/invoices', { params });
+    return response.data;
+  }
+
+  async createClientInvoice(data: {
+    employer_id: number;
+    start_date: string;
+    end_date: string;
+    tax_rate: number;
+    notes?: string;
+    driver_id?: number;
+  }) {
+    const response = await this.client.post('/tenant/billing/invoices', data);
+    return response.data;
+  }
+
+  async getClientInvoice(id: string | number) {
+    const response = await this.client.get(`/tenant/billing/invoices/${id}`);
+    return response.data;
+  }
+
+  async updateClientInvoice(id: string | number, data: { invoice_number?: string; notes?: string }) {
+    const response = await this.client.patch(`/tenant/billing/invoices/${id}`, data);
+    return response.data;
+  }
+
+  async updateClientInvoiceStatus(id: string | number, status: string) {
+    const response = await this.client.patch(`/tenant/billing/invoices/${id}/status`, { status });
+    return response.data;
+  }
+
+  async recordClientInvoicePayment(
+    id: string | number,
+    data: { amount: number; payment_date: string; reference?: string }
+  ) {
+    const response = await this.client.post(`/tenant/billing/invoices/${id}/payments`, data);
+    return response.data;
+  }
+
+  private parseFilenameFromContentDisposition(header: string | undefined): string | null {
+    if (!header || typeof header !== 'string') return null;
+    const utf8 = /filename\*=UTF-8''([^;\s]+)/i.exec(header);
+    if (utf8?.[1]) {
+      try {
+        return decodeURIComponent(utf8[1].replace(/\+/g, ' '));
+      } catch {
+        /* ignore */
+      }
+    }
+    const quoted = /filename="((?:\\.|[^"\\])*)"/i.exec(header);
+    if (quoted?.[1]) return quoted[1].replace(/\\"/g, '"');
+    const simple = /filename=([^;\s]+)/i.exec(header);
+    if (simple?.[1]) return simple[1].replace(/^["']|["']$/g, '');
+    return null;
+  }
+
+  private async downloadPdf(path: string, fallbackFilename: string): Promise<void> {
+    try {
+      const response = await this.client.get(path, {
+        responseType: 'blob',
+        headers: { Accept: 'application/pdf' },
+      });
+      const blob = response.data as Blob;
+      const cd = response.headers['content-disposition'] as string | undefined;
+      const filename = this.parseFilenameFromContentDisposition(cd) ?? fallbackFilename;
+      const url = window.URL.createObjectURL(blob);
+      try {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      } finally {
+        window.URL.revokeObjectURL(url);
+      }
+    } catch (err: unknown) {
+      if (isAxiosError(err) && err.response?.data instanceof Blob) {
+        const t = await err.response.data.text();
+        let msg = 'PDF download failed';
+        try {
+          const j = JSON.parse(t) as { message?: string };
+          if (j.message) msg = j.message;
+        } catch {
+          /* keep default */
+        }
+        throw new Error(msg);
+      }
+      throw err;
+    }
+  }
+
+  async downloadInvoicePdf(id: string | number, invoiceNumber?: string | null) {
+    const label = invoiceNumber ? String(invoiceNumber).replace(/[^\w.-]+/g, '_') : id;
+    await this.downloadPdf(`/tenant/billing/invoices/${id}/pdf`, `invoice-${label}.pdf`);
+  }
+
+  async downloadPayslipPdf(payslipId: string | number) {
+    await this.downloadPdf(`/tenant/payroll/payslips/${payslipId}/pdf`, `payslip-${payslipId}.pdf`);
+  }
+
+  async downloadPayslipInvoicePdf(payslipId: string | number) {
+    await this.downloadPdf(
+      `/tenant/payroll/payslips/${payslipId}/invoice-pdf`,
+      `payslip-invoice-${payslipId}.pdf`
+    );
+  }
+
+  async downloadRemittancePdf(payslipId: string | number) {
+    await this.downloadPdf(`/tenant/payroll/payslips/${payslipId}/remittance-pdf`, `remittance-${payslipId}.pdf`);
+  }
+
+  async downloadDriverCalculationPdf(calculationId: string | number) {
+    await this.downloadPdf(
+      `/tenant/payroll/driver-calculations/${calculationId}/pdf`,
+      `driver-calculation-${calculationId}.pdf`
+    );
+  }
+
+  // Driver payroll
+  async getTenantCompanyProfile() {
+    const response = await this.client.get('/tenant/company-profile');
+    return response.data;
+  }
+
+  async putTenantCompanyProfile(data: {
+    company_legal_name: string;
+    company_address: string;
+    company_phone?: string;
+    company_email?: string;
+    pay_stub_cc_emails?: string;
+  }) {
+    const response = await this.client.put('/tenant/company-profile', data);
+    return response.data;
+  }
+
+  async getPayrollBillingTaxSettings() {
+    const response = await this.client.get('/tenant/payroll/billing-tax-settings');
+    return response.data;
+  }
+
+  async putPayrollBillingTaxSettings(data: { taxes: Array<{ name: string; type: 'percentage' | 'fixed'; value: number }> }) {
+    const response = await this.client.put('/tenant/payroll/billing-tax-settings', data);
+    return response.data;
+  }
+
+  async previewPayrollCalculation(data: {
+    period_start: string;
+    period_end: string;
+    vacation_percent?: number;
+    default_deductions?: number;
+  }) {
+    const response = await this.client.post('/tenant/payroll/calculation-preview', data);
+    return response.data;
+  }
+
+  async generatePayroll(data: {
+    period_start: string;
+    period_end: string;
+    vacation_percent?: number;
+    default_deductions?: number;
+  }) {
+    const response = await this.client.post('/tenant/payroll/generate', data);
+    return response.data;
+  }
+
+  async getPayslips(params?: { driver_id?: number; status?: string; per_page?: number }) {
+    const response = await this.client.get('/tenant/payroll/payslips', { params });
+    return response.data;
+  }
+
+  async getPayslip(id: string | number) {
+    const response = await this.client.get(`/tenant/payroll/payslips/${id}`);
+    return response.data;
+  }
+
+  async deletePayslip(id: string | number) {
+    const response = await this.client.delete(`/tenant/payroll/payslips/${id}`);
+    return response.data;
+  }
+
+  async recordRemittance(
+    payslipId: string | number,
+    data: { amount_paid: number; payment_date: string; reference?: string }
+  ) {
+    const response = await this.client.post(`/tenant/payroll/payslips/${payslipId}/remittances`, data);
+    return response.data;
+  }
+
+  async sendPayStubEmail(payslipId: string | number) {
+    const response = await this.client.post(`/tenant/payroll/payslips/${payslipId}/email-pay-stub`);
+    return response.data as { message: string };
   }
 
   getClient() {

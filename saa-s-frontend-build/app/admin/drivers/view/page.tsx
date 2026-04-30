@@ -594,9 +594,13 @@ export default function DriverDetailPage() {
               35,
               120,
             );
+            const period =
+              addr.from_date && addr.to_date
+                ? `${addr.from_date} to ${addr.to_date}`
+                : (addr.duration as string) || '';
             yPos = addFormField(
-              'How long',
-              addr.duration || '',
+              'Dates lived there',
+              period,
               margin + 80,
               yPos - lineHeight,
               25,
@@ -1602,7 +1606,7 @@ export default function DriverDetailPage() {
                       onValueChange={handleDriverClassChange}
                       disabled={updatingDriverClass}
                     >
-                      <SelectTrigger className='text-white bg-slate-700 border-slate-600 text-white w-full max-w-[280px]'>
+                      <SelectTrigger className='bg-slate-700 border-slate-600 text-white w-full max-w-[280px]'>
                         <SelectValue placeholder='Select class' />
                       </SelectTrigger>
                       <SelectContent className='bg-slate-800 border-slate-700'>
@@ -1914,6 +1918,15 @@ export default function DriverDetailPage() {
                         {parsedComplianceData.address.cell_phone || 'N/A'}
                       </p>
                     </div>
+                    <div>
+                      <p className='text-slate-400 text-sm'>
+                        Living Since / Time Period
+                      </p>
+                      <p className='text-white font-medium'>
+                        {parsedComplianceData.address.current_address_living_since ||
+                          'N/A'}
+                      </p>
+                    </div>
                   </div>
                 </div>
 
@@ -1937,7 +1950,11 @@ export default function DriverDetailPage() {
                               {addr.address || 'N/A'}
                             </p>
                             <p className='text-slate-400 text-xs mt-1'>
-                              Duration: {addr.duration || 'N/A'}
+                              {addr.from_date && addr.to_date
+                                ? `Dates: ${addr.from_date} – ${addr.to_date}`
+                                : addr.duration
+                                  ? `Duration: ${addr.duration}`
+                                  : 'Dates: N/A'}
                             </p>
                           </div>
                         ),
@@ -2035,21 +2052,23 @@ export default function DriverDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className='overflow-x-auto'>
+                <div className='overflow-x-auto rounded-lg border border-slate-700'>
                   <table className='w-full text-sm'>
                     <thead>
-                      <tr className='border-b border-slate-700'>
-                        <th className='text-left text-slate-300 p-2'>Make</th>
-                        <th className='text-left text-slate-300 p-2'>
+                      <tr className='border-b border-slate-700 bg-slate-900/40'>
+                        <th className='text-left text-slate-300 px-3 py-2 text-xs font-semibold uppercase tracking-wide'>
+                          Make
+                        </th>
+                        <th className='text-left text-slate-300 px-3 py-2 text-xs font-semibold uppercase tracking-wide'>
                           Tractor Type
                         </th>
-                        <th className='text-left text-slate-300 p-2'>
+                        <th className='text-left text-slate-300 px-3 py-2 text-xs font-semibold uppercase tracking-wide'>
                           Transmissions
                         </th>
-                        <th className='text-left text-slate-300 p-2'>
+                        <th className='text-left text-slate-300 px-3 py-2 text-xs font-semibold uppercase tracking-wide'>
                           Trailer Type
                         </th>
-                        <th className='text-left text-slate-300 p-2'>
+                        <th className='text-left text-slate-300 px-3 py-2 text-xs font-semibold uppercase tracking-wide'>
                           Areas Operated
                         </th>
                       </tr>
@@ -2059,21 +2078,21 @@ export default function DriverDetailPage() {
                         (equip: any, index: number) => (
                           <tr
                             key={index}
-                            className='border-b border-slate-700/50'
+                            className='border-b border-slate-700/50 last:border-0 hover:bg-slate-700/20'
                           >
-                            <td className='text-white p-2'>
+                            <td className='text-white px-3 py-2 align-top'>
                               {equip.make || 'N/A'}
                             </td>
-                            <td className='text-white p-2'>
+                            <td className='text-white px-3 py-2 align-top'>
                               {equip.tractor_type || 'N/A'}
                             </td>
-                            <td className='text-white p-2'>
+                            <td className='text-white px-3 py-2 align-top'>
                               {equip.transmissions || 'N/A'}
                             </td>
-                            <td className='text-white p-2'>
+                            <td className='text-white px-3 py-2 align-top'>
                               {equip.trailer_type || 'N/A'}
                             </td>
-                            <td className='text-white p-2'>
+                            <td className='text-white px-3 py-2 align-top'>
                               {equip.areas_operated || 'N/A'}
                             </td>
                           </tr>
@@ -2148,18 +2167,20 @@ export default function DriverDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className='overflow-x-auto'>
+                <div className='overflow-x-auto rounded-lg border border-slate-700'>
                   <table className='w-full text-sm'>
                     <thead>
-                      <tr className='border-b border-slate-700'>
-                        <th className='text-left text-slate-300 p-2'>Date</th>
-                        <th className='text-left text-slate-300 p-2'>
+                      <tr className='border-b border-slate-700 bg-slate-900/40'>
+                        <th className='text-left text-slate-300 px-3 py-2 text-xs font-semibold uppercase tracking-wide'>
+                          Date
+                        </th>
+                        <th className='text-left text-slate-300 px-3 py-2 text-xs font-semibold uppercase tracking-wide'>
                           Location
                         </th>
-                        <th className='text-left text-slate-300 p-2'>
+                        <th className='text-left text-slate-300 px-3 py-2 text-xs font-semibold uppercase tracking-wide'>
                           Violation/Charge
                         </th>
-                        <th className='text-left text-slate-300 p-2'>
+                        <th className='text-left text-slate-300 px-3 py-2 text-xs font-semibold uppercase tracking-wide'>
                           Penalty
                         </th>
                       </tr>
@@ -2169,18 +2190,18 @@ export default function DriverDetailPage() {
                         (violation: any, index: number) => (
                           <tr
                             key={index}
-                            className='border-b border-slate-700/50'
+                            className='border-b border-slate-700/50 last:border-0 hover:bg-slate-700/20'
                           >
-                            <td className='text-white p-2'>
+                            <td className='text-white px-3 py-2 align-top'>
                               {violation.date || 'N/A'}
                             </td>
-                            <td className='text-white p-2'>
+                            <td className='text-white px-3 py-2 align-top'>
                               {violation.location || 'N/A'}
                             </td>
-                            <td className='text-white p-2'>
+                            <td className='text-white px-3 py-2 align-top'>
                               {violation.violation_charge || 'N/A'}
                             </td>
-                            <td className='text-white p-2'>
+                            <td className='text-white px-3 py-2 align-top'>
                               {violation.penalty || 'N/A'}
                             </td>
                           </tr>

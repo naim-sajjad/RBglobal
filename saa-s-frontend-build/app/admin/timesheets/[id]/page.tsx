@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   Card,
@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Spinner } from '@/components/ui/spinner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Textarea } from '@/components/ui/textarea';
@@ -51,6 +52,8 @@ import {
   XCircle,
   Banknote,
   Loader2,
+  PencilLine,
+  PlusCircle,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import {
@@ -60,6 +63,8 @@ import {
   TimesheetStatus,
   RateCard,
   RateCardRatesConfig,
+  TimesheetTripRateSnapshot,
+  TimesheetTripRateSnapshotLine,
 } from '@/lib/types';
 import { toast } from 'sonner';
 import { getApiErrorMessage } from '@/lib/utils';
@@ -82,8 +87,87 @@ function formatDate(d: string) {
   });
 }
 
+function formatMoney(value: number) {
+  return `$${value.toFixed(2)}`;
+}
+
+type EditableAdjustmentLine = {
+  id: string;
+  line_type: string;
+  label: string;
+  quantity: string;
+  unit: string;
+  rate: string;
+  agency_rate: string;
+  driver_amount: string;
+  agency_amount: string;
+  is_payable: boolean;
+  is_billable: boolean;
+};
+
+function createAdjustmentLine(
+  line?: TimesheetTripRateSnapshotLine,
+): EditableAdjustmentLine {
+  return {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    line_type: line?.line_type ?? 'manual',
+    label: line?.label ?? '',
+    quantity: String(line?.quantity ?? 1),
+    unit: line?.unit ?? '',
+    rate: String(line?.rate ?? 0),
+    agency_rate: String(line?.agency_rate ?? line?.rate ?? 0),
+    driver_amount: String(line?.driver_amount ?? 0),
+    agency_amount: String(line?.agency_amount ?? 0),
+    is_payable: line?.is_payable ?? true,
+    is_billable: line?.is_billable ?? true,
+  };
+}
+
+function buildAdjustmentDraft(
+  snapshot?: TimesheetTripRateSnapshot | null,
+): {
+  rate_card_id?: number;
+  driver_class_code?: string | null;
+  lines: EditableAdjustmentLine[];
+} {
+  return {
+    rate_card_id: snapshot?.rate_card_id,
+    driver_class_code: snapshot?.driver_class_code ?? null,
+    lines:
+      snapshot?.lines && snapshot.lines.length > 0
+        ? snapshot.lines.map((line) => createAdjustmentLine(line))
+        : [createAdjustmentLine()],
+  };
+}
+
+function toNumber(value: string, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function roundMoney(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+function computeLineAmounts(line: EditableAdjustmentLine) {
+  const quantity = toNumber(line.quantity, 0);
+  const rate = toNumber(line.rate, 0);
+  const agencyRate = toNumber(line.agency_rate, rate);
+  const driverAmount = roundMoney(quantity * rate);
+  const agencyAmount = roundMoney(quantity * agencyRate);
+
+  return {
+    quantity,
+    rate,
+    agencyRate,
+    driverAmount,
+    agencyAmount,
+  };
+}
+
 export default function AdminTimesheetDetailPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const id = params?.id as string;
   const [timesheet, setTimesheet] = useState<Timesheet | null>(null);
   const [employers, setEmployers] = useState<Employer[]>([]);
@@ -103,10 +187,26 @@ export default function AdminTimesheetDetailPage() {
   const [newTripNumber, setNewTripNumber] = useState('');
   const [newTripDistance, setNewTripDistance] = useState('');
   const [newTripNotes, setNewTripNotes] = useState('');
-  const [employerRateCards, setEmployerRateCards] = useState<Record<number, RateCard[]>>({});
-  const [activeRateConfig, setActiveRateConfig] = useState<RateCardRatesConfig | null>(null);
+  const [employerRateCards, setEmployerRateCards] = useState<
+    Record<number, RateCard[]>
+  >({});
+  const [activeRateConfig, setActiveRateConfig] =
+    useState<RateCardRatesConfig | null>(null);
   const [loadingCharges, setLoadingCharges] = useState(false);
-  const [additionalQuantities, setAdditionalQuantities] = useState<Record<string, string>>({});
+  const [additionalQuantities, setAdditionalQuantities] = useState<
+    Record<string, string>
+  >({});
+
+  const [adjustOpen, setAdjustOpen] = useState(false);
+  const [adjustTrip, setAdjustTrip] = useState<TimesheetTrip | null>(null);
+  const [adjustReason, setAdjustReason] = useState('');
+  const [adjustNotifyDriver, setAdjustNotifyDriver] = useState(true);
+  const [adjustEmailDriver, setAdjustEmailDriver] = useState(false);
+  const [adjustmentDraft, setAdjustmentDraft] = useState<{
+    rate_card_id?: number;
+    driver_class_code?: string | null;
+    lines: EditableAdjustmentLine[];
+  }>({ lines: [createAdjustmentLine()] });
 
   const fetchTimesheet = useCallback(async () => {
     if (!id) return;
@@ -119,12 +219,90 @@ export default function AdminTimesheetDetailPage() {
     }
   }, [id]);
 
+  const openAdjustDialog = (trip: TimesheetTrip) => {
+    setAdjustTrip(trip);
+    setAdjustReason('');
+    setAdjustNotifyDriver(true);
+    setAdjustEmailDriver(false);
+    const snap = trip.manual_rate_snapshot || trip.rate_snapshot || {};
+    setAdjustmentDraft(buildAdjustmentDraft(snap));
+    setAdjustOpen(true);
+  };
+
+  const submitAdjustment = async () => {
+    if (!timesheet || !adjustTrip) return;
+    const hasBlankLabel = adjustmentDraft.lines.some(
+      (line) => !line.label.trim(),
+    );
+    if (hasBlankLabel) {
+      toast.error('Each adjustment line needs a label');
+      return;
+    }
+    if (adjustmentDraft.lines.length === 0) {
+      toast.error('Add at least one adjustment line');
+      return;
+    }
+
+    const lines = adjustmentDraft.lines.map((line) => {
+      const amounts = computeLineAmounts(line);
+      return {
+        line_type: line.line_type.trim() || 'manual',
+        label: line.label.trim(),
+        quantity: amounts.quantity,
+        unit: line.unit.trim() || undefined,
+        rate: amounts.rate,
+        agency_rate: amounts.agencyRate,
+        driver_amount: amounts.driverAmount,
+        agency_amount: amounts.agencyAmount,
+        is_payable: line.is_payable,
+        is_billable: line.is_billable,
+      };
+    });
+
+    const parsed: TimesheetTripRateSnapshot = {
+      rate_card_id: adjustmentDraft.rate_card_id,
+      driver_class_code: adjustmentDraft.driver_class_code ?? null,
+      lines,
+      total_driver_pay: roundMoney(
+        lines.reduce((sum, line) => sum + Number(line.driver_amount || 0), 0),
+      ),
+      total_agency_billing: roundMoney(
+        lines.reduce((sum, line) => sum + Number(line.agency_amount || 0), 0),
+      ),
+    };
+
+    setSaving(true);
+    try {
+      const res = await apiClient.adjustTimesheetTrip(timesheet.id, adjustTrip.id, {
+        reason: adjustReason.trim() || undefined,
+        manual_rate_snapshot: parsed,
+        notify_driver: adjustNotifyDriver,
+        email_driver: adjustEmailDriver,
+      });
+      toast.success(res?.message || 'Trip adjusted');
+      setAdjustOpen(false);
+      await fetchTimesheet();
+    } catch (e: unknown) {
+      toast.error(getApiErrorMessage(e, 'Failed to apply adjustment'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   useEffect(() => {
     if (id) {
       setLoading(true);
       fetchTimesheet().finally(() => setLoading(false));
     }
   }, [id, fetchTimesheet]);
+
+  useEffect(() => {
+    if (!timesheet || adjustOpen || searchParams.get('adjust') !== '1') return;
+    const firstTrip = timesheet.trips?.[0];
+    if (firstTrip) {
+      openAdjustDialog(firstTrip);
+    }
+  }, [timesheet, adjustOpen, searchParams]);
 
   useEffect(() => {
     const load = async () => {
@@ -140,7 +318,9 @@ export default function AdminTimesheetDetailPage() {
 
   // Load employer rate cards and determine active card for selected date
   useEffect(() => {
-    const employerNumeric = newTripEmployerId ? Number(newTripEmployerId) : null;
+    const employerNumeric = newTripEmployerId
+      ? Number(newTripEmployerId)
+      : null;
     if (!employerNumeric || !newTripDate) {
       setActiveRateConfig(null);
       return;
@@ -152,17 +332,18 @@ export default function AdminTimesheetDetailPage() {
         let cards = employerRateCards[employerNumeric];
         if (!cards) {
           const data = await apiClient.getRateCards(employerNumeric);
-          cards = Array.isArray(data) ? data : data?.data ?? [];
-          setEmployerRateCards((prev) => ({ ...prev, [employerNumeric]: cards }));
+          cards = Array.isArray(data) ? data : (data?.data ?? []);
+          setEmployerRateCards((prev) => ({
+            ...prev,
+            [employerNumeric]: cards,
+          }));
         }
         const date = new Date(newTripDate);
         const active = cards.find((c) => {
           if (c.status !== 'active') return false;
           const from = c.effective_from ? new Date(c.effective_from) : null;
           const to = c.effective_to ? new Date(c.effective_to) : null;
-          const inRange =
-            (!from || date >= from) &&
-            (!to || date <= to);
+          const inRange = (!from || date >= from) && (!to || date <= to);
           return inRange;
         });
         setActiveRateConfig((active?.rates as RateCardRatesConfig) || null);
@@ -197,8 +378,8 @@ export default function AdminTimesheetDetailPage() {
     try {
       const additional_quantities = Object.fromEntries(
         Object.entries(additionalQuantities)
-          .map(([key, val]) => [key, parseFloat(val)])
-          .filter(([, num]) => !isNaN(num) && num > 0),
+          .map(([key, val]) => [key, Number(val)] as const)
+          .filter(([, num]) => Number.isFinite(num) && num > 0),
       ) as Record<string, number>;
 
       await apiClient.createTimesheetTrip(id, {
@@ -350,6 +531,16 @@ export default function AdminTimesheetDetailPage() {
     typeof timesheet.weekly_total === 'number'
       ? timesheet.weekly_total
       : dailyTotals.reduce((s, d) => s + d.total, 0);
+  const adjustmentPreviewLines = adjustmentDraft.lines.map((line) => ({
+    ...line,
+    ...computeLineAmounts(line),
+  }));
+  const adjustmentDriverTotal = roundMoney(
+    adjustmentPreviewLines.reduce((sum, line) => sum + line.driverAmount, 0),
+  );
+  const adjustmentAgencyTotal = roundMoney(
+    adjustmentPreviewLines.reduce((sum, line) => sum + line.agencyAmount, 0),
+  );
 
   return (
     <div className='max-w-5xl mx-auto space-y-6'>
@@ -405,6 +596,7 @@ export default function AdminTimesheetDetailPage() {
               size='sm'
               onClick={() => setRejectOpen(true)}
               disabled={!!actionLoading}
+              className='text-white'
             >
               {actionLoading === 'reject' ? (
                 <Loader2 className='h-4 w-4 animate-spin' />
@@ -440,8 +632,7 @@ export default function AdminTimesheetDetailPage() {
             {formatDate(timesheet.week_end_date)}
           </CardTitle>
           <CardDescription className='text-slate-400'>
-            Driver:{' '}
-            {timesheet.driver?.user?.name ?? `#${timesheet.driver_id}`}{' '}
+            Driver: {timesheet.driver?.user?.name ?? `#${timesheet.driver_id}`}{' '}
             — Weekly total:{' '}
             <span className='font-semibold text-white'>
               ${Number(weeklyTotal).toFixed(2)}
@@ -499,6 +690,7 @@ export default function AdminTimesheetDetailPage() {
                         updatingTripId={updatingTripId}
                         onUpdateTrip={handleUpdateTrip}
                         onDeleteTrip={handleDeleteTrip}
+                        onOpenAdjust={openAdjustDialog}
                       />
                     ))}
                   </div>
@@ -515,15 +707,19 @@ export default function AdminTimesheetDetailPage() {
       </Card>
 
       <Dialog open={addTripOpen} onOpenChange={setAddTripOpen}>
-        <DialogContent className='bg-slate-800 border-slate-700'>
-          <DialogHeader>
+        <DialogContent className='flex min-h-0 max-h-[min(90vh,900px)] flex-col gap-4 overflow-hidden bg-slate-800 border-slate-700'>
+          <DialogHeader className='shrink-0'>
             <DialogTitle className='text-white'>Add trip</DialogTitle>
             <DialogDescription className='text-slate-400'>
               Rates are calculated from the employer Rate Card. Enter trip
               details.
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleAddTrip} className='space-y-4'>
+          <form
+            onSubmit={handleAddTrip}
+            className='flex min-h-0 flex-1 flex-col gap-4 overflow-hidden'
+          >
+            <div className='min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-y-contain pr-1'>
             <div className='space-y-2'>
               <Label className='text-slate-300'>Employer</Label>
               <Select
@@ -579,27 +775,33 @@ export default function AdminTimesheetDetailPage() {
             </div>
             <div className='space-y-3'>
               <p className='text-slate-400 text-sm'>
-                Additional charges for this employer come from the active Rate Card. Enter quantities for each pay item.
+                Additional charges for this employer come from the active Rate
+                Card. Enter quantities for each pay item.
               </p>
               {loadingCharges ? (
                 <div className='flex items-center gap-2 text-slate-300 text-sm'>
                   <Spinner className='h-4 w-4' />
                   Loading additional charges...
                 </div>
-              ) : activeRateConfig && activeRateConfig.additional_charges && activeRateConfig.additional_charges.length > 0 ? (
+              ) : activeRateConfig &&
+                activeRateConfig.additional_charges &&
+                activeRateConfig.additional_charges.length > 0 ? (
                 <div className='grid grid-cols-1 sm:grid-cols-3 gap-4'>
                   {activeRateConfig.additional_charges
                     .filter((c) => c.active)
                     .map((c) => (
                       <div key={c.key ?? c.charge_type} className='space-y-2'>
                         <Label className='text-slate-300'>
-                          {c.charge_type || 'Pay item'} {c.unit ? `(${c.unit})` : ''}
+                          {c.charge_type || 'Pay item'}{' '}
+                          {c.unit ? `(${c.unit})` : ''}
                         </Label>
                         <Input
                           type='number'
                           min={0}
                           step={c.unit === 'per_hour' ? '0.01' : '1'}
-                          value={additionalQuantities[c.key ?? c.charge_type] ?? ''}
+                          value={
+                            additionalQuantities[c.key ?? c.charge_type] ?? ''
+                          }
                           onChange={(e) =>
                             setAdditionalQuantities((prev) => ({
                               ...prev,
@@ -613,7 +815,8 @@ export default function AdminTimesheetDetailPage() {
                 </div>
               ) : newTripEmployerId && newTripDate ? (
                 <p className='text-slate-500 text-sm'>
-                  No additional charges defined on the active Rate Card for this date.
+                  No additional charges defined on the active Rate Card for this
+                  date.
                 </p>
               ) : null}
             </div>
@@ -626,7 +829,8 @@ export default function AdminTimesheetDetailPage() {
                 className='bg-slate-700 border-slate-600 text-white'
               />
             </div>
-            <DialogFooter>
+            </div>
+            <DialogFooter className='shrink-0 border-t border-slate-700/80 pt-4'>
               <Button
                 type='button'
                 variant='outline'
@@ -647,15 +851,321 @@ export default function AdminTimesheetDetailPage() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={adjustOpen} onOpenChange={setAdjustOpen}>
+        <DialogContent className='flex min-h-0 max-h-[min(90vh,900px)] max-w-3xl flex-col gap-4 overflow-hidden bg-slate-800 border-slate-700'>
+          <DialogHeader className='shrink-0'>
+            <DialogTitle className='text-white flex items-center gap-2'>
+              <PencilLine className='h-5 w-5' />
+              Manual adjustment
+            </DialogTitle>
+            <DialogDescription className='text-slate-400'>
+              Override this trip’s rate snapshot to match the employer invoice. This will be used instead of Rate Card
+              recalculation until you force recalculation.
+            </DialogDescription>
+          </DialogHeader>
+          <div className='min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-y-contain pr-1'>
+            {adjustTrip && (
+              <div className='rounded-md border border-slate-700 bg-slate-900/60 p-3 text-sm'>
+                <p className='text-white font-medium'>
+                  Trip #{adjustTrip.trip_number || adjustTrip.id}
+                </p>
+                <p className='text-slate-400'>
+                  {adjustTrip.employer?.name ?? `Employer #${adjustTrip.employer_id}`}{' '}
+                  · {formatDate(adjustTrip.trip_date)}
+                </p>
+              </div>
+            )}
+            <div className='space-y-2'>
+              <Label className='text-slate-300'>Adjustment reason</Label>
+              <Input
+                value={adjustReason}
+                onChange={(e) => setAdjustReason(e.target.value)}
+                placeholder='e.g. Invoice mismatch, correction'
+                className='bg-slate-700 border-slate-600 text-white'
+              />
+            </div>
+            <div className='space-y-2'>
+              <div className='flex items-center justify-between gap-3'>
+                <Label className='text-slate-300'>Adjustment lines</Label>
+                <Button
+                  type='button'
+                  variant='outline'
+                  size='sm'
+                  className='border-slate-600 bg-slate-900 text-slate-200'
+                  onClick={() =>
+                    setAdjustmentDraft((prev) => ({
+                      ...prev,
+                      lines: [...prev.lines, createAdjustmentLine()],
+                    }))
+                  }
+                >
+                  <PlusCircle className='h-4 w-4' />
+                  Add line
+                </Button>
+              </div>
+              <div className='space-y-3'>
+                {adjustmentDraft.lines.map((line) => {
+                  const amounts = computeLineAmounts(line);
+                  return (
+                    <div
+                      key={line.id}
+                      className='rounded-lg border border-slate-700 bg-slate-900/70 p-4 space-y-4'
+                    >
+                      <div className='grid grid-cols-1 sm:grid-cols-2 gap-3'>
+                        <div className='space-y-2'>
+                          <Label className='text-slate-300'>Label</Label>
+                          <Input
+                            value={line.label}
+                            onChange={(e) =>
+                              setAdjustmentDraft((prev) => ({
+                                ...prev,
+                                lines: prev.lines.map((current) =>
+                                  current.id === line.id
+                                    ? { ...current, label: e.target.value }
+                                    : current,
+                                ),
+                              }))
+                            }
+                            placeholder='e.g. Distance pay'
+                            className='bg-slate-800 border-slate-600 text-white'
+                          />
+                        </div>
+                        <div className='space-y-2'>
+                          <Label className='text-slate-300'>Line type</Label>
+                          <Input
+                            value={line.line_type}
+                            onChange={(e) =>
+                              setAdjustmentDraft((prev) => ({
+                                ...prev,
+                                lines: prev.lines.map((current) =>
+                                  current.id === line.id
+                                    ? { ...current, line_type: e.target.value }
+                                    : current,
+                                ),
+                              }))
+                            }
+                            placeholder='manual'
+                            className='bg-slate-800 border-slate-600 text-white'
+                          />
+                        </div>
+                      </div>
+                      <div className='grid grid-cols-2 sm:grid-cols-4 gap-3'>
+                        <div className='space-y-2'>
+                          <Label className='text-slate-300'>Quantity</Label>
+                          <Input
+                            type='number'
+                            min={0}
+                            step='0.01'
+                            value={line.quantity}
+                            onChange={(e) =>
+                              setAdjustmentDraft((prev) => ({
+                                ...prev,
+                                lines: prev.lines.map((current) =>
+                                  current.id === line.id
+                                    ? { ...current, quantity: e.target.value }
+                                    : current,
+                                ),
+                              }))
+                            }
+                            className='bg-slate-800 border-slate-600 text-white'
+                          />
+                        </div>
+                        <div className='space-y-2'>
+                          <Label className='text-slate-300'>Unit</Label>
+                          <Input
+                            value={line.unit}
+                            onChange={(e) =>
+                              setAdjustmentDraft((prev) => ({
+                                ...prev,
+                                lines: prev.lines.map((current) =>
+                                  current.id === line.id
+                                    ? { ...current, unit: e.target.value }
+                                    : current,
+                                ),
+                              }))
+                            }
+                            placeholder='trip, km, hr'
+                            className='bg-slate-800 border-slate-600 text-white'
+                          />
+                        </div>
+                        <div className='space-y-2'>
+                          <Label className='text-slate-300'>Driver rate</Label>
+                          <Input
+                            type='number'
+                            step='0.01'
+                            value={line.rate}
+                            onChange={(e) =>
+                              setAdjustmentDraft((prev) => ({
+                                ...prev,
+                                lines: prev.lines.map((current) =>
+                                  current.id === line.id
+                                    ? { ...current, rate: e.target.value }
+                                    : current,
+                                ),
+                              }))
+                            }
+                            className='bg-slate-800 border-slate-600 text-white'
+                          />
+                        </div>
+                        <div className='space-y-2'>
+                          <Label className='text-slate-300'>Agency rate</Label>
+                          <Input
+                            type='number'
+                            step='0.01'
+                            value={line.agency_rate}
+                            onChange={(e) =>
+                              setAdjustmentDraft((prev) => ({
+                                ...prev,
+                                lines: prev.lines.map((current) =>
+                                  current.id === line.id
+                                    ? { ...current, agency_rate: e.target.value }
+                                    : current,
+                                ),
+                              }))
+                            }
+                            className='bg-slate-800 border-slate-600 text-white'
+                          />
+                        </div>
+                      </div>
+                      <div className='flex flex-wrap gap-5'>
+                        <label className='flex items-center gap-2 text-sm text-slate-300'>
+                          <Checkbox
+                            checked={line.is_payable}
+                            onCheckedChange={(checked) =>
+                              setAdjustmentDraft((prev) => ({
+                                ...prev,
+                                lines: prev.lines.map((current) =>
+                                  current.id === line.id
+                                    ? { ...current, is_payable: checked === true }
+                                    : current,
+                                ),
+                              }))
+                            }
+                            className='border-slate-500 data-[state=checked]:bg-violet-600 data-[state=checked]:border-violet-600'
+                          />
+                          Include in driver pay
+                        </label>
+                        <label className='flex items-center gap-2 text-sm text-slate-300'>
+                          <Checkbox
+                            checked={line.is_billable}
+                            onCheckedChange={(checked) =>
+                              setAdjustmentDraft((prev) => ({
+                                ...prev,
+                                lines: prev.lines.map((current) =>
+                                  current.id === line.id
+                                    ? { ...current, is_billable: checked === true }
+                                    : current,
+                                ),
+                              }))
+                            }
+                            className='border-slate-500 data-[state=checked]:bg-violet-600 data-[state=checked]:border-violet-600'
+                          />
+                          Include in agency billing
+                        </label>
+                      </div>
+                      <div className='flex flex-wrap items-center justify-between gap-3 border-t border-slate-700 pt-3'>
+                        <div className='text-sm text-slate-400'>
+                          Driver amount: <span className='text-white'>{formatMoney(amounts.driverAmount)}</span>{' '}
+                          · Agency amount: <span className='text-white'>{formatMoney(amounts.agencyAmount)}</span>
+                        </div>
+                        <Button
+                          type='button'
+                          variant='ghost'
+                          size='sm'
+                          className='text-destructive hover:text-destructive'
+                          onClick={() =>
+                            setAdjustmentDraft((prev) => ({
+                              ...prev,
+                              lines:
+                                prev.lines.length > 1
+                                  ? prev.lines.filter((current) => current.id !== line.id)
+                                  : [createAdjustmentLine()],
+                            }))
+                          }
+                        >
+                          <Trash2 className='h-4 w-4' />
+                          Remove
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className='rounded-md border border-violet-700/50 bg-violet-950/20 p-4'>
+                <div className='flex flex-wrap items-center justify-between gap-3 text-sm'>
+                  <div className='text-slate-300'>
+                    Driver total:{' '}
+                    <span className='font-semibold text-white'>
+                      {formatMoney(adjustmentDriverTotal)}
+                    </span>
+                  </div>
+                  <div className='text-slate-300'>
+                    Agency total:{' '}
+                    <span className='font-semibold text-white'>
+                      {formatMoney(adjustmentAgencyTotal)}
+                    </span>
+                  </div>
+                </div>
+                <p className='mt-2 text-xs text-slate-400'>
+                  Totals are calculated automatically from quantity multiplied by
+                  rate on each line.
+                </p>
+              </div>
+            </div>
+            <div className='flex flex-wrap gap-4'>
+              <label className='flex items-center gap-2 text-slate-300 text-sm'>
+                <Checkbox
+                  checked={adjustNotifyDriver}
+                  onCheckedChange={(checked) =>
+                    setAdjustNotifyDriver(checked === true)
+                  }
+                  className='border-slate-500 data-[state=checked]:bg-violet-600 data-[state=checked]:border-violet-600'
+                />
+                Notify driver (in-app)
+              </label>
+              <label className='flex items-center gap-2 text-slate-300 text-sm'>
+                <Checkbox
+                  checked={adjustEmailDriver}
+                  onCheckedChange={(checked) =>
+                    setAdjustEmailDriver(checked === true)
+                  }
+                  className='border-slate-500 data-[state=checked]:bg-violet-600 data-[state=checked]:border-violet-600'
+                />
+                Email driver (optional)
+              </label>
+            </div>
+          </div>
+          <DialogFooter className='shrink-0 border-t border-slate-700/80 pt-4'>
+            <Button
+              type='button'
+              variant='secondary'
+              className='cursor-pointer'
+              onClick={() => setAdjustOpen(false)}
+              disabled={saving}
+            >
+              Cancel
+            </Button>
+            <Button
+              type='button'
+              className='bg-violet-700 hover:bg-violet-600 text-white'
+              onClick={() => void submitAdjustment()}
+              disabled={saving || !adjustTrip}
+            >
+              {saving ? <Loader2 className='h-4 w-4 animate-spin' /> : 'Apply adjustment'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
-        <DialogContent className='bg-slate-800 border-slate-700'>
-          <DialogHeader>
+        <DialogContent className='flex min-h-0 max-h-[min(90vh,900px)] flex-col gap-4 overflow-hidden bg-slate-800 border-slate-700'>
+          <DialogHeader className='shrink-0'>
             <DialogTitle className='text-white'>Reject timesheet</DialogTitle>
             <DialogDescription className='text-slate-400'>
               Optionally provide a reason for the driver.
             </DialogDescription>
           </DialogHeader>
-          <div className='space-y-4'>
+          <div className='min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-y-contain pr-1'>
             <Label className='text-slate-300'>Reason (optional)</Label>
             <Textarea
               value={rejectReason}
@@ -664,7 +1174,7 @@ export default function AdminTimesheetDetailPage() {
               className='bg-slate-700 border-slate-600 text-white min-h-[80px]'
             />
           </div>
-          <DialogFooter>
+          <DialogFooter className='shrink-0 border-t border-slate-700/80 pt-4'>
             <Button
               type='button'
               variant='outline'
@@ -677,6 +1187,7 @@ export default function AdminTimesheetDetailPage() {
               variant='destructive'
               onClick={handleReject}
               disabled={actionLoading === 'reject'}
+              className='text-white'
             >
               {actionLoading === 'reject' ? (
                 <Loader2 className='h-4 w-4 animate-spin' />
@@ -698,6 +1209,7 @@ function AdminTripCard({
   updatingTripId,
   onUpdateTrip,
   onDeleteTrip,
+  onOpenAdjust,
 }: {
   trip: TimesheetTrip;
   canEdit: boolean;
@@ -711,6 +1223,7 @@ function AdminTripCard({
     }>,
   ) => void;
   onDeleteTrip: (tripId: number) => void;
+  onOpenAdjust: (trip: TimesheetTrip) => void;
 }) {
   const [localDistance, setLocalDistance] = useState(
     String(trip.distance ?? 0),
@@ -746,6 +1259,9 @@ function AdminTripCard({
             <span className='text-slate-400'>
               — {trip.employer?.name ?? `Employer #${trip.employer_id}`}
             </span>
+            {trip.is_adjusted && (
+              <Badge className='bg-violet-700 text-xs'>adjusted</Badge>
+            )}
             {trip.minimum_applied && (
               <Badge variant='secondary' className='text-xs'>
                 Min pay applied
@@ -753,14 +1269,26 @@ function AdminTripCard({
             )}
           </div>
           {canEdit && (
-            <Button
-              variant='ghost'
-              size='sm'
-              className='text-destructive hover:text-destructive'
-              onClick={() => onDeleteTrip(trip.id)}
-            >
-              <Trash2 className='h-4 w-4' />
-            </Button>
+            <div className='flex items-center gap-1'>
+              <Button
+                variant='ghost'
+                size='sm'
+                className='text-slate-300 hover:text-white'
+                title='Manual adjust (invoice override)'
+                onClick={() => onOpenAdjust(trip)}
+              >
+                <PencilLine className='h-4 w-4' />
+              </Button>
+              <Button
+                variant='ghost'
+                size='sm'
+                className='text-destructive hover:text-destructive'
+                onClick={() => onDeleteTrip(trip.id)}
+                title='Delete trip'
+              >
+                <Trash2 className='h-4 w-4' />
+              </Button>
+            </div>
           )}
         </div>
       </CardHeader>

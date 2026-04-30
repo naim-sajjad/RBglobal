@@ -19,3 +19,29 @@ export function getApiErrorMessage(err: unknown, fallback: string): string {
   }
   return message || fallback
 }
+
+/**
+ * Formats Laravel/API date or datetime strings for display.
+ * Uses the calendar YYYY-MM-DD from the string when present so midnight UTC does not shift the day locally.
+ */
+export function formatApiDate(value: string | null | undefined): string {
+  if (value == null || value === '') return '—'
+  const ymd = value.slice(0, 10)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(ymd)) {
+    const y = Number(ymd.slice(0, 4))
+    const mo = Number(ymd.slice(5, 7))
+    const d = Number(ymd.slice(8, 10))
+    return new Date(y, mo - 1, d).toLocaleDateString('en-CA', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    })
+  }
+  const dt = new Date(value)
+  if (Number.isNaN(dt.getTime())) return String(value)
+  return dt.toLocaleDateString('en-CA', { year: 'numeric', month: 'short', day: 'numeric' })
+}
+
+export function formatApiDateRange(start: string, end: string): string {
+  return `${formatApiDate(start)} → ${formatApiDate(end)}`
+}
