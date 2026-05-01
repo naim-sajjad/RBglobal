@@ -9,7 +9,7 @@ return [
     |
     | Here you may specify the default filesystem disk that should be used
     | by the framework. The "local" disk, as well as a variety of cloud
-    | based disks are available to your application for file storage.
+    | based disks are available to your application for reference.
     |
     */
 
@@ -21,10 +21,7 @@ return [
     |--------------------------------------------------------------------------
     |
     | Below you may configure as many filesystem disks as necessary, and you
-    | may even configure multiple disks for the same driver. Examples for
-    | most supported storage drivers are configured here for reference.
-    |
-    | Supported drivers: "local", "ftp", "sftp", "s3"
+    | may even configure them for logging or other utilities. Supported drivers:
     |
     */
 
@@ -38,9 +35,16 @@ return [
             'report' => false,
         ],
 
+        /*
+         * Public files are served via the public/storage symlink → storage/app/public.
+         *
+         * root uses base_path (not storage_path): Stancl tenancy suffixes storage_path()
+         * when tenant context is booted, while the symlink always targets project
+         * storage/app/public — base_path avoids writing outside that tree.
+         */
         'public' => [
             'driver' => 'local',
-            'root' => storage_path('app/public'),
+            'root' => base_path('storage/app/public'),
             'url' => rtrim(env('APP_URL', 'http://localhost'), '/').'/storage',
             'visibility' => 'public',
             'throw' => false,
@@ -67,9 +71,7 @@ return [
     | Symbolic Links
     |--------------------------------------------------------------------------
     |
-    | Here you may configure the symbolic links that will be created when the
-    | `storage:link` Artisan command is executed. The array keys should be
-    | the locations of the links and the values should be their targets.
+    | Run `php artisan storage:link` so public/storage points here.
     |
     */
 

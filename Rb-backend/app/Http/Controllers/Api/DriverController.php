@@ -6,16 +6,33 @@ use App\Http\Controllers\Controller;
 use App\Models\Driver;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class DriverController extends Controller
 {
     /**
+     * Filter out attributes that don't exist as DB columns.
+     * This prevents hard failures when a migration hasn't been applied yet.
+     */
+    private function filterToDriverTableColumns(array $attributes): array
+    {
+        static $driverColumns = null;
+
+        if ($driverColumns === null) {
+            $driverColumns = Schema::getColumnListing('drivers');
+        }
+
+        return array_intersect_key($attributes, array_flip($driverColumns));
+    }
+
+    /**
      * Get all drivers (admin only or tenant-scoped)
      */
-    public function index()
+    public function index(Request $request)
     {
         $currentUser = auth()->user();
         $query = Driver::with(['user.roles', 'user.permissions', 'tenant', 'driverClass']);
@@ -34,6 +51,14 @@ class DriverController extends Controller
                 return response()->json([]);
             }
         }
+
+        $sortBy = $request->query('sort_by', 'created_at');
+        $sortDir = strtolower((string) $request->query('sort_dir', 'desc')) === 'asc' ? 'asc' : 'desc';
+
+        $allowedSortBy = [
+            'created_at' => 'created_at',
+        ];
+        $query->orderBy($allowedSortBy[$sortBy] ?? 'created_at', $sortDir);
 
         $drivers = $query->get();
         return response()->json($drivers);
@@ -93,7 +118,7 @@ class DriverController extends Controller
             abort(403, 'You do not have permission to create drivers');
         }
 
-        $validated = $this->validateDriverData($request);
+        $validated = $this->validateDriverData($request, false, false, null);
 
         // Determine tenant
         $tenantId = null;
@@ -125,11 +150,7 @@ class DriverController extends Controller
             }
         }
 
-        // Handle document uploads
-        $documentPaths = $this->handleDocumentUploads($request);
-
-        // Create driver profile
-        $driver = Driver::create([
+        $driverAttributes = $this->filterToDriverTableColumns([
             'user_id' => $user->id,
             'tenant_id' => $tenantId,
             'license_number' => $validated['license_number'] ?? null,
@@ -139,14 +160,6 @@ class DriverController extends Controller
             'license_issue_date' => $validated['license_issue_date'] ?? null,
             'license_expiry_date' => $validated['license_expiry_date'] ?? null,
             'vehicle_types' => $validated['vehicle_types'] ?? null,
-            'medical_certificate_path' => $documentPaths['medical_certificate'] ?? null,
-            'pcc_document_path' => $documentPaths['pcc_document'] ?? null,
-            'license_document_path' => $documentPaths['license_document'] ?? null,
-            'license_front_image_path' => $documentPaths['license_front_image'] ?? null,
-            'license_back_image_path' => $documentPaths['license_back_image'] ?? null,
-            'abstract_document_path' => $documentPaths['abstract_document'] ?? null,
-            'cvor_document_path' => $documentPaths['cvor_document'] ?? null,
-            'safety_certificate_path' => $documentPaths['safety_certificate'] ?? null,
             'background_check_status' => $validated['background_check_status'] ?? 'pending',
             'compliance_notes' => $validated['compliance_notes'] ?? null,
             'status' => $validated['status'] ?? 'pending_approval', // Admin can set initial status
@@ -156,7 +169,15 @@ class DriverController extends Controller
             'payee_address' => $validated['payee_address'] ?? null,
         ]);
 
-        return response()->json($driver->load(['user.roles', 'user.permissions', 'tenant', 'driverClass']), 201);
+        return DB::transaction(function () use ($request, $driverAttributes) {
+            $driver = Driver::create($driverAttributes);
+            $this->persistDriverDocumentPaths($driver, $this->handleDocumentUploads($request, $driver));
+
+            return response()->json(
+                $driver->fresh()->load(['user.roles', 'user.permissions', 'tenant', 'driverClass']),
+                201,
+            );
+        });
     }
 
     /**
@@ -164,7 +185,7 @@ class DriverController extends Controller
      */
     public function selfRegister(Request $request)
     {
-        $validated = $this->validateDriverData($request, true);
+        $validated = $this->validateDriverData($request, true, false, null);
 
         // Determine tenant from request or context
         $tenantId = null;
@@ -190,11 +211,7 @@ class DriverController extends Controller
             $user->tenants()->sync([$tenantId]);
         }
 
-        // Handle document uploads
-        $documentPaths = $this->handleDocumentUploads($request);
-
-        // Create driver profile with pending_approval status
-        $driver = Driver::create([
+        $driverAttributes = $this->filterToDriverTableColumns([
             'user_id' => $user->id,
             'tenant_id' => $tenantId,
             'license_number' => $validated['license_number'] ?? null,
@@ -204,14 +221,6 @@ class DriverController extends Controller
             'license_issue_date' => $validated['license_issue_date'] ?? null,
             'license_expiry_date' => $validated['license_expiry_date'] ?? null,
             'vehicle_types' => $validated['vehicle_types'] ?? null,
-            'medical_certificate_path' => $documentPaths['medical_certificate'] ?? null,
-            'pcc_document_path' => $documentPaths['pcc_document'] ?? null,
-            'license_document_path' => $documentPaths['license_document'] ?? null,
-            'license_front_image_path' => $documentPaths['license_front_image'] ?? null,
-            'license_back_image_path' => $documentPaths['license_back_image'] ?? null,
-            'abstract_document_path' => $documentPaths['abstract_document'] ?? null,
-            'cvor_document_path' => $documentPaths['cvor_document'] ?? null,
-            'safety_certificate_path' => $documentPaths['safety_certificate'] ?? null,
             'background_check_status' => 'pending',
             'compliance_notes' => $validated['compliance_notes'] ?? null,
             'status' => 'pending_approval', // Always pending for self-registration
@@ -221,15 +230,20 @@ class DriverController extends Controller
             'payee_address' => $validated['payee_address'] ?? null,
         ]);
 
-        // Create auth token for immediate login
-        $token = $user->createToken('api-token')->plainTextToken;
+        return DB::transaction(function () use ($request, $driverAttributes, $user) {
+            $driver = Driver::create($driverAttributes);
+            $this->persistDriverDocumentPaths($driver, $this->handleDocumentUploads($request, $driver));
 
-        return response()->json([
-            'driver' => $driver->load(['user.roles', 'user.permissions', 'tenant', 'driverClass']),
-            'user' => $user->load('roles', 'permissions', 'tenants'),
-            'token' => $token,
-            'message' => 'Driver registration successful. Your account is pending approval.',
-        ], 201);
+            // Create auth token for immediate login
+            $token = $user->createToken('api-token')->plainTextToken;
+
+            return response()->json([
+                'driver' => $driver->fresh()->load(['user.roles', 'user.permissions', 'tenant', 'driverClass']),
+                'user' => $user->load('roles', 'permissions', 'tenants'),
+                'token' => $token,
+                'message' => 'Driver registration successful. Your account is pending approval.',
+            ], 201);
+        });
     }
 
     /**
@@ -251,7 +265,7 @@ class DriverController extends Controller
             $request->merge(['driver_class_id' => null]);
         }
 
-        $validated = $this->validateDriverData($request, false, true);
+        $validated = $this->validateDriverData($request, false, true, $driver);
 
         // Handle document uploads
         $documentPaths = $this->handleDocumentUploads($request, $driver);
@@ -263,14 +277,48 @@ class DriverController extends Controller
             }
         }
 
+        $nameForUser = $validated['name'] ?? null;
+        $emailForUser = $validated['email'] ?? null;
+        $passwordPlain = isset($validated['password']) ? $validated['password'] : null;
+
+        $stripKeys = [
+            'name',
+            'email',
+            'password',
+            'pcc_document',
+            'license_document',
+            'license_front_image',
+            'license_back_image',
+            'abstract_document',
+            'cvor_document',
+            'safety_certificate',
+        ];
+        foreach ($stripKeys as $stripKey) {
+            unset($validated[$stripKey]);
+        }
+
         // Drivers can only update their own profile, not status
         if ($driver->user_id === $currentUser->id && !$currentUser->is_global_admin) {
             unset($validated['status']); // Drivers can't change their own status
         }
 
-        $driver->update($validated);
+        $driver->update($this->filterToDriverTableColumns($validated));
 
-        return response()->json($driver->load(['user.roles', 'user.permissions', 'tenant', 'driverClass']));
+        $userUpdates = [];
+        if ($nameForUser !== null && $nameForUser !== '') {
+            $userUpdates['name'] = $nameForUser;
+        }
+        if ($emailForUser !== null && $emailForUser !== '') {
+            $userUpdates['email'] = $emailForUser;
+        }
+        if (is_string($passwordPlain) && strlen($passwordPlain) >= 8) {
+            $userUpdates['password'] = Hash::make($passwordPlain);
+        }
+        if ($userUpdates !== []) {
+            $driver->user()->update($userUpdates);
+        }
+
+        return response()->json($driver->fresh()->load(['user.roles', 'user.permissions', 'tenant', 'driverClass']));
     }
 
     /**
@@ -305,8 +353,8 @@ class DriverController extends Controller
 
         // Delete all documents if they exist
         $documentFields = [
-            'medical_certificate_path',
             'pcc_document_path',
+            'license_document_path',
             'license_front_image_path',
             'license_back_image_path',
             'abstract_document_path',
@@ -315,8 +363,9 @@ class DriverController extends Controller
         ];
 
         foreach ($documentFields as $field) {
-            if ($driver->$field) {
-                Storage::disk('public')->delete($driver->$field);
+            $rel = Driver::normalizePublicRelativePath($driver->$field ?? null);
+            if ($rel !== null) {
+                Storage::disk('public')->delete($rel);
             }
         }
 
@@ -328,14 +377,20 @@ class DriverController extends Controller
     /**
      * Validate driver data
      */
-    private function validateDriverData(Request $request, bool $isSelfRegister = false, bool $isUpdate = false): array
+    private function validateDriverData(Request $request, bool $isSelfRegister = false, bool $isUpdate = false, ?Driver $driver = null): array
     {
+        $emailRules = ['required', 'string', 'email', 'max:255'];
+
+        if ($isUpdate && $driver !== null) {
+            $emailRules = ['sometimes', 'required', 'string', 'email', 'max:255', Rule::unique('users', 'email')->ignore($driver->user_id)];
+        } elseif (!$isUpdate) {
+            $emailRules[] = Rule::unique('users', 'email');
+        }
+
         $rules = [
             // User info (required for new users)
             'name' => $isUpdate ? 'sometimes|required|string|max:255' : 'required|string|max:255',
-            'email' => $isUpdate
-                ? 'sometimes|required|string|email|max:255|unique:users,email'
-                : 'required|string|email|max:255|unique:users,email',
+            'email' => $emailRules,
             'password' => $isUpdate
                 ? 'sometimes|string|min:8'
                 : ($isSelfRegister ? 'required|string|min:8' : 'nullable|string|min:8'),
@@ -348,18 +403,11 @@ class DriverController extends Controller
             'license_issue_date' => ($isUpdate ? 'sometimes|required' : 'required') . '|date|before_or_equal:today',
             'license_expiry_date' => ($isUpdate ? 'sometimes|required' : 'required') . '|date|after_or_equal:today',
 
-            // Driving Experience
-            'years_of_experience' => 'nullable|integer|min:0',
-            'driving_history' => 'nullable|string',
-
             // Vehicle Information
             'vehicle_types' => 'nullable|array',
             'vehicle_types.*' => ['nullable', Rule::in(['Truck', 'Van', 'Trailer', 'Reefer', 'Flatbed'])],
-            'vehicle_ownership' => ['nullable', Rule::in(['company-owned', 'self-owned'])],
-            'vehicle_capacity' => 'nullable|string|max:255',
 
             // Compliance Requirements & Documents
-            'medical_certificate' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120', // legacy
             'pcc_document' => ($isUpdate ? 'nullable' : 'required') . '|file|mimes:pdf,jpg,jpeg,png|max:5120',
             'license_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
             'license_front_image' => ($isUpdate ? 'nullable' : 'required') . '|file|mimes:jpg,jpeg,png|max:5120',
@@ -391,28 +439,58 @@ class DriverController extends Controller
     {
         $documentPaths = [];
         $documentFields = [
-            'medical_certificate' => 'drivers/medical',
-            'pcc_document' => 'drivers/pcc',
-            'license_document' => 'drivers/license',
-            'license_front_image' => 'drivers/license',
-            'license_back_image' => 'drivers/license',
-            'abstract_document' => 'drivers/abstract',
-            'cvor_document' => 'drivers/cvor',
-            'safety_certificate' => 'drivers/safety',
+            'pcc_document' => 'pcc',
+            'license_document' => 'license',
+            'license_front_image' => 'license',
+            'license_back_image' => 'license',
+            'abstract_document' => 'abstract',
+            'cvor_document' => 'cvor',
+            'safety_certificate' => 'safety',
         ];
 
-        foreach ($documentFields as $field => $storagePath) {
+        $disk = 'public';
+
+        $basePrefix = ($driver !== null && $driver->exists)
+            ? ('drivers/'.$driver->id)
+            : 'drivers';
+
+        foreach ($documentFields as $field => $subfolder) {
             if ($request->hasFile($field)) {
-                // Delete old document if exists (for updates)
                 if ($driver && $driver->{$field . '_path'}) {
-                    Storage::disk('public')->delete($driver->{$field . '_path'});
+                    $oldRelative = Driver::normalizePublicRelativePath($driver->{$field . '_path'});
+                    if ($oldRelative !== null) {
+                        Storage::disk($disk)->delete($oldRelative);
+                    }
                 }
 
-                $documentPaths[$field] = $request->file($field)->store($storagePath, 'public');
+                $documentPaths[$field] = $request->file($field)->store($basePrefix.'/'.$subfolder, $disk);
             }
         }
 
         return $documentPaths;
+    }
+
+    /**
+     * @param  array<string, non-empty-string>  $pathsByFieldKey keys like "pcc_document" (no _path suffix)
+     */
+    private function persistDriverDocumentPaths(Driver $driver, array $pathsByFieldKey): void
+    {
+        if ($pathsByFieldKey === []) {
+            return;
+        }
+
+        $patch = [];
+        foreach ($pathsByFieldKey as $baseKey => $path) {
+            if (is_string($path) && $path !== '') {
+                $patch[$baseKey.'_path'] = $path;
+            }
+        }
+
+        if ($patch === []) {
+            return;
+        }
+
+        $driver->update($this->filterToDriverTableColumns($patch));
     }
 }
 

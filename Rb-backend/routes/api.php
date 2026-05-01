@@ -72,12 +72,13 @@ Route::prefix('v1/tenant')->middleware([
     Route::apiResource('roles', RoleController::class)->middleware('permission:roles.manage');
     Route::apiResource('permissions', PermissionController::class)->middleware('permission:permissions.manage');
 
-    // Driver Management
+    // Driver Management (show/index JSON appends *_{document,image}_url — full storage URLs)
     Route::get('/drivers', [DriverController::class, 'index'])->middleware('permission:drivers.view');
     Route::post('/drivers', [DriverController::class, 'store'])->middleware('permission:drivers.create');
     Route::get('/drivers/my-profile', [DriverController::class, 'myProfile']); // Driver's own profile
     Route::get('/drivers/{driver}', [DriverController::class, 'show'])->middleware('permission:drivers.view');
-    Route::put('/drivers/{driver}', [DriverController::class, 'update'])->middleware('permission:drivers.update');
+    // POST + PUT: multipart uploads are unreliable on PUT with PHP; SPA uses POST + FormData for updates with files
+    Route::match(['put', 'post'], '/drivers/{driver}', [DriverController::class, 'update'])->middleware('permission:drivers.update');
     Route::delete('/drivers/{driver}', [DriverController::class, 'destroy'])->middleware('permission:drivers.delete');
     Route::post('/drivers/{driver}/approve', [DriverController::class, 'approve'])->middleware('permission:drivers.approve');
 

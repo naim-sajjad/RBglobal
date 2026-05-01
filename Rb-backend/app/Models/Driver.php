@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Storage;
 
 class Driver extends Model
 {
@@ -35,7 +36,6 @@ class Driver extends Model
         'shift_timing',
         'pay_type',
         // Compliance Requirements & Documents
-        'medical_certificate_path',
         'pcc_document_path',
         'license_document_path',
         'license_front_image_path',
@@ -61,6 +61,92 @@ class Driver extends Model
         'drug_alcohol_test' => 'boolean',
         'years_of_experience' => 'integer',
     ];
+
+    /** Public browser URLs for document paths (NEXT_PUBLIC_STORAGE_BASE_URL alternative). */
+    protected $appends = [
+        'pcc_document_url',
+        'license_document_url',
+        'license_front_image_url',
+        'license_back_image_url',
+        'abstract_document_url',
+        'cvor_document_url',
+        'safety_certificate_url',
+    ];
+
+    /**
+     * Normalize DB value to a path relative to storage/app/public (the "public" disk root).
+     * Strips accidental full URLs or /storage/app/public/ segments from older data.
+     */
+    public static function normalizePublicRelativePath(?string $path): ?string
+    {
+        if ($path === null || trim((string) $path) === '') {
+            return null;
+        }
+
+        $path = str_replace('\\', '/', trim($path));
+
+        if (preg_match('#^https?://#i', $path)) {
+            $parsed = parse_url($path, PHP_URL_PATH);
+            $path = is_string($parsed) ? $parsed : '';
+        }
+
+        $path = ltrim($path, '/');
+
+        if (str_starts_with($path, 'storage/app/public/')) {
+            $path = substr($path, strlen('storage/app/public/'));
+        } elseif (str_starts_with($path, 'storage/')) {
+            $path = substr($path, strlen('storage/'));
+        }
+
+        $path = ltrim($path, '/');
+
+        return $path === '' ? null : $path;
+    }
+
+    protected function publicDiskUrl(?string $path): ?string
+    {
+        $relative = static::normalizePublicRelativePath($path);
+        if ($relative === null) {
+            return null;
+        }
+
+        return Storage::disk('public')->url($relative);
+    }
+
+    public function getPccDocumentUrlAttribute(): ?string
+    {
+        return $this->publicDiskUrl($this->pcc_document_path);
+    }
+
+    public function getLicenseDocumentUrlAttribute(): ?string
+    {
+        return $this->publicDiskUrl($this->license_document_path);
+    }
+
+    public function getLicenseFrontImageUrlAttribute(): ?string
+    {
+        return $this->publicDiskUrl($this->license_front_image_path);
+    }
+
+    public function getLicenseBackImageUrlAttribute(): ?string
+    {
+        return $this->publicDiskUrl($this->license_back_image_path);
+    }
+
+    public function getAbstractDocumentUrlAttribute(): ?string
+    {
+        return $this->publicDiskUrl($this->abstract_document_path);
+    }
+
+    public function getCvorDocumentUrlAttribute(): ?string
+    {
+        return $this->publicDiskUrl($this->cvor_document_path);
+    }
+
+    public function getSafetyCertificateUrlAttribute(): ?string
+    {
+        return $this->publicDiskUrl($this->safety_certificate_path);
+    }
 
     /**
      * Get the user that owns the driver profile
@@ -115,4 +201,3 @@ class Driver extends Model
         return $this->status === 'pending_approval';
     }
 }
-

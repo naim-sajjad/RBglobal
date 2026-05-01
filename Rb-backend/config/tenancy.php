@@ -107,7 +107,8 @@ return [
         'suffix_base' => 'tenant',
         'disks' => [
             'local',
-            'public',
+            // Exclude "public": driver assets must resolve to the central storage/app/public
+            // tree referenced by public/storage symlink (see config/filesystems.php).
             // 's3',
         ],
 
@@ -119,7 +120,6 @@ return [
         'root_override' => [
             // Disks whose roots should be overridden after storage_path() is suffixed.
             'local' => '%storage_path%/app/',
-            'public' => '%storage_path%/app/public/',
         ],
 
         /**
