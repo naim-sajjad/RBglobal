@@ -141,9 +141,6 @@ export default function DriverProfilePage() {
     const issues: string[] = [];
 
     // Check required documents
-    if (!driver.medical_certificate_path) {
-      issues.push('Medical Certificate missing');
-    }
     if (!driver.license_document_path) {
       issues.push('License Document missing');
     }
@@ -1039,22 +1036,6 @@ export default function DriverProfilePage() {
             </CardHeader>
             <CardContent className='space-y-4'>
               <div className='space-y-3'>
-                <div className='flex items-center justify-between'>
-                  <span className='text-slate-300 text-sm'>
-                    Medical Certificate
-                  </span>
-                  {driver.medical_certificate_path ? (
-                    <Badge variant='secondary' className='bg-green-600'>
-                      <CheckCircle2 className='h-3 w-3 mr-1' />
-                      Uploaded
-                    </Badge>
-                  ) : (
-                    <Badge variant='secondary' className='bg-red-600'>
-                      <XCircle className='h-3 w-3 mr-1' />
-                      Missing
-                    </Badge>
-                  )}
-                </div>
                 <div className='flex items-center justify-between'>
                   <span className='text-slate-300 text-sm'>
                     License Document

@@ -3,6 +3,17 @@ import { LoginResponse, RegisterResponse } from './types';
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost/api/v1';
 
+/** Driver create/update/register: field names that must be appended as files, not strings */
+const DRIVER_MULTIPART_FILE_KEYS = new Set([
+  'pcc_document',
+  'license_front_image',
+  'license_back_image',
+  'license_document',
+  'abstract_document',
+  'cvor_document',
+  'safety_certificate',
+]);
+
 class ApiClient {
   private client: AxiosInstance;
   private token: string | null = null;
@@ -24,6 +35,9 @@ class ApiClient {
 
     // Add request interceptor
     this.client.interceptors.request.use((config) => {
+      if (config.data instanceof FormData) {
+        delete config.headers['Content-Type'];
+      }
       if (this.token) {
         config.headers.Authorization = `Bearer ${this.token}`;
       }
@@ -186,8 +200,8 @@ class ApiClient {
   }
 
   // Driver Management APIs
-  async getDrivers() {
-    const response = await this.client.get('/tenant/drivers');
+  async getDrivers(params?: { sort_by?: string; sort_dir?: 'asc' | 'desc' }) {
+    const response = await this.client.get('/tenant/drivers', { params });
     return response.data;
   }
 
@@ -203,20 +217,10 @@ class ApiClient {
 
   async createDriver(driverData: any) {
     const formData = new FormData();
-    
-    // Document fields that should be uploaded as files
-    const documentFields = [
-      'pcc_document',
-      'license_front_image',
-      'license_back_image',
-      'abstract_document',
-      'cvor_document',
-      'safety_certificate',
-    ];
-    
-    // Append all fields to FormData
+
+    // Append all fields to FormData (let axios set multipart boundary)
     Object.keys(driverData).forEach((key) => {
-      if (documentFields.includes(key) && driverData[key] instanceof File) {
+      if (DRIVER_MULTIPART_FILE_KEYS.has(key) && driverData[key] instanceof File) {
         formData.append(key, driverData[key]);
       } else if (key === 'vehicle_types' && Array.isArray(driverData[key])) {
         driverData[key].forEach((type: string) => {
@@ -227,30 +231,16 @@ class ApiClient {
       }
     });
 
-    const response = await this.client.post('/tenant/drivers', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+    const response = await this.client.post('/tenant/drivers', formData);
     return response.data;
   }
 
   async updateDriver(id: string | number, driverData: any) {
     const formData = new FormData();
-    
-    // Document fields that should be uploaded as files
-    const documentFields = [
-      'pcc_document',
-      'license_front_image',
-      'license_back_image',
-      'abstract_document',
-      'cvor_document',
-      'safety_certificate',
-    ];
-    
-    // Append all fields to FormData (send empty string for null driver_class_id so backend can clear it)
+
+    // POST: PHP reliably parses multipart file uploads; PUT often leaves $_FILES empty
     Object.keys(driverData).forEach((key) => {
-      if (documentFields.includes(key) && driverData[key] instanceof File) {
+      if (DRIVER_MULTIPART_FILE_KEYS.has(key) && driverData[key] instanceof File) {
         formData.append(key, driverData[key]);
       } else if (key === 'vehicle_types' && Array.isArray(driverData[key])) {
         driverData[key].forEach((type: string) => {
@@ -263,11 +253,7 @@ class ApiClient {
       }
     });
 
-    const response = await this.client.put(`/tenant/drivers/${id}`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+    const response = await this.client.post(`/tenant/drivers/${id}`, formData);
     return response.data;
   }
 
@@ -284,20 +270,9 @@ class ApiClient {
   // Public driver self-registration
   async registerDriver(driverData: any) {
     const formData = new FormData();
-    
-    // Document fields that should be uploaded as files
-    const documentFields = [
-      'pcc_document',
-      'license_front_image',
-      'license_back_image',
-      'abstract_document',
-      'cvor_document',
-      'safety_certificate',
-    ];
-    
-    // Append all fields to FormData
+
     Object.keys(driverData).forEach((key) => {
-      if (documentFields.includes(key) && driverData[key] instanceof File) {
+      if (DRIVER_MULTIPART_FILE_KEYS.has(key) && driverData[key] instanceof File) {
         formData.append(key, driverData[key]);
       } else if (key === 'vehicle_types' && Array.isArray(driverData[key])) {
         driverData[key].forEach((type: string) => {
@@ -308,11 +283,7 @@ class ApiClient {
       }
     });
 
-    const response = await this.client.post('/drivers/register', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+    const response = await this.client.post('/drivers/register', formData);
     return response.data;
   }
 

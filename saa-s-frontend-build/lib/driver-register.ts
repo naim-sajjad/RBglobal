@@ -97,7 +97,6 @@ export interface DriverRegisterFormState {
   }>;
   /** PCC / criminal background check document (PDF or image). */
   pcc_document: File | null;
-  medical_certificate: File | null;
   license_document: File | null;
   abstract_document: File | null;
   cvor_document: File | null;
@@ -189,7 +188,6 @@ export function getDriverRegisterInitialFormState(): DriverRegisterFormState {
       reasons_for_leaving: string;
     }>,
     pcc_document: null,
-    medical_certificate: null,
     license_document: null,
     abstract_document: null,
     cvor_document: null,

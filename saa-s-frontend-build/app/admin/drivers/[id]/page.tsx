@@ -25,18 +25,18 @@ import {
   FileText,
   User,
   Truck,
-  MapPin,
-  CreditCard,
   Shield,
-  Calendar,
   Download,
   Ban,
   CheckCircle,
   AlertTriangle,
+  Home,
+  IdCard,
+  Briefcase,
+  GraduationCap,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { DriverWithDetails } from '@/lib/types';
-import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
 import {
   Select,
@@ -49,16 +49,20 @@ import {
 export default function DriverDetailPage() {
   const router = useRouter();
   const params = useParams();
-  const { user: currentUser } = useAuth();
   const driverId = params?.id as string;
 
   const [driver, setDriver] = useState<DriverWithDetails | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isUpdatingReferenceCheck, setIsUpdatingReferenceCheck] =
+    useState(false);
   const [showSensitiveData, setShowSensitiveData] = useState<
     Record<string, boolean>
   >({});
+  /** Parsed questionnaire / application payload from `compliance_notes` JSON */
+  const [parsedComplianceData, setParsedComplianceData] =
+    useState<Record<string, any> | null>(null);
 
   useEffect(() => {
     if (driverId) {
@@ -72,6 +76,14 @@ export default function DriverDetailPage() {
     try {
       const response = await apiClient.getDriver(driverId);
       setDriver(response);
+      setParsedComplianceData(null);
+      if (response.compliance_notes) {
+        try {
+          setParsedComplianceData(JSON.parse(response.compliance_notes));
+        } catch {
+          setParsedComplianceData(null);
+        }
+      }
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to load driver details');
       toast.error('Failed to load driver details');
@@ -110,6 +122,31 @@ export default function DriverDetailPage() {
       );
     } finally {
       setIsUpdating(false);
+    }
+  };
+
+  const handleReferenceCheckStatusChange = async (
+    next: 'pending' | 'completed',
+  ) => {
+    if (!driver) return;
+    setIsUpdatingReferenceCheck(true);
+    try {
+      await apiClient.updateDriver(driver.id, {
+        reference_check_status: next,
+      });
+      toast.success(
+        next === 'completed'
+          ? 'Reference check marked complete'
+          : 'Reference check marked pending',
+      );
+      await fetchDriver();
+    } catch (err: any) {
+      toast.error(
+        err.response?.data?.message ||
+          'Failed to update reference check status',
+      );
+    } finally {
+      setIsUpdatingReferenceCheck(false);
     }
   };
 
@@ -173,11 +210,14 @@ export default function DriverDetailPage() {
     const issues: string[] = [];
 
     // Check required documents
-    if (!driver.medical_certificate_path) {
-      issues.push('Medical Certificate missing');
+    if (!driver.pcc_document_path) {
+      issues.push('PCC / Criminal Background Check missing');
     }
-    if (!driver.license_document_path) {
-      issues.push('License Document missing');
+    if (!driver.license_front_image_path) {
+      issues.push('License front image missing');
+    }
+    if (!driver.license_back_image_path) {
+      issues.push('License back image missing');
     }
     if (!driver.abstract_document_path) {
       issues.push('Abstract Document missing');
@@ -205,11 +245,6 @@ export default function DriverDetailPage() {
     // Check background check
     if (driver.background_check_status !== 'completed') {
       issues.push('Background check not completed');
-    }
-
-    // Check drug & alcohol test
-    if (!driver.drug_alcohol_test) {
-      issues.push('Drug & Alcohol test not completed');
     }
 
     return {
@@ -404,6 +439,18 @@ export default function DriverDetailPage() {
                   </p>
                 </div>
                 <div>
+                  <p className='text-slate-400 text-sm'>Gender</p>
+                  <p className='text-white font-medium capitalize'>
+                    {parsedComplianceData?.personal?.gender || 'N/A'}
+                  </p>
+                </div>
+                <div>
+                  <p className='text-slate-400 text-sm'>Phone Number</p>
+                  <p className='text-white font-medium'>
+                    {parsedComplianceData?.address?.cell_phone || 'N/A'}
+                  </p>
+                </div>
+                <div>
                   <p className='text-slate-400 text-sm'>Created At</p>
                   <p className='text-white font-medium'>
                     {new Date(driver.created_at).toLocaleDateString()}
@@ -412,6 +459,38 @@ export default function DriverDetailPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Driver Class (pay tier) — record on file */}
+          {driver.driver_class && (
+            <Card className='bg-slate-800 border-slate-700'>
+              <CardHeader>
+                <CardTitle className='text-white flex items-center gap-2'>
+                  <GraduationCap className='h-5 w-5' />
+                  Driver Class
+                </CardTitle>
+                <CardDescription className='text-slate-400'>
+                  Pay tier assigned to this driver on record.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className='text-white font-medium'>
+                  {driver.driver_class.name || driver.driver_class.code}
+                  <span className='text-slate-400'>
+                    {' '}
+                    ({driver.driver_class.code})
+                  </span>
+                </p>
+                {driver.driver_class_effective_date ? (
+                  <p className='text-slate-400 text-sm mt-1'>
+                    Effective:{' '}
+                    {new Date(
+                      driver.driver_class_effective_date,
+                    ).toLocaleDateString()}
+                  </p>
+                ) : null}
+              </CardContent>
+            </Card>
+          )}
 
           {/* License Information */}
           <Card className='bg-slate-800 border-slate-700'>
@@ -460,6 +539,16 @@ export default function DriverDetailPage() {
                   </p>
                 </div>
                 <div>
+                  <p className='text-slate-400 text-sm'>Issue Date</p>
+                  <p className='text-white font-medium'>
+                    {driver.license_issue_date
+                      ? new Date(
+                          driver.license_issue_date,
+                        ).toLocaleDateString()
+                      : 'N/A'}
+                  </p>
+                </div>
+                <div>
                   <p className='text-slate-400 text-sm'>Expiry Date</p>
                   <p className='text-white font-medium'>
                     {driver.license_expiry_date
@@ -479,123 +568,615 @@ export default function DriverDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Driving Experience */}
+          {/* Vehicle Types */}
           <Card className='bg-slate-800 border-slate-700'>
             <CardHeader>
               <CardTitle className='text-white flex items-center gap-2'>
                 <Truck className='h-5 w-5' />
-                Driving Experience & Vehicle
+                Vehicle Types
               </CardTitle>
             </CardHeader>
-            <CardContent className='space-y-4'>
-              <div className='grid grid-cols-2 gap-4'>
-                <div>
-                  <p className='text-slate-400 text-sm'>Years of Experience</p>
-                  <p className='text-white font-medium'>
-                    {driver.years_of_experience || 0} years
-                  </p>
-                </div>
-                <div>
-                  <p className='text-slate-400 text-sm'>Vehicle Ownership</p>
-                  <p className='text-white font-medium capitalize'>
-                    {driver.vehicle_ownership?.replace('-', ' ') || 'N/A'}
-                  </p>
-                </div>
-                <div>
-                  <p className='text-slate-400 text-sm'>Vehicle Types</p>
-                  <div className='flex flex-wrap gap-2 mt-1'>
-                    {driver.vehicle_types && driver.vehicle_types.length > 0 ? (
-                      driver.vehicle_types.map((type, index) => (
-                        <Badge
-                          key={index}
-                          variant='secondary'
-                          className='bg-blue-600'
-                        >
-                          {type}
-                        </Badge>
-                      ))
-                    ) : (
-                      <span className='text-slate-400'>N/A</span>
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <p className='text-slate-400 text-sm'>Vehicle Capacity</p>
-                  <p className='text-white font-medium'>
-                    {driver.vehicle_capacity || 'N/A'}
-                  </p>
-                </div>
+            <CardContent>
+              <div className='flex flex-wrap gap-2'>
+                {driver.vehicle_types && driver.vehicle_types.length > 0 ? (
+                  driver.vehicle_types.map((type, index) => (
+                    <Badge
+                      key={index}
+                      variant='secondary'
+                      className='bg-blue-600'
+                    >
+                      {type}
+                    </Badge>
+                  ))
+                ) : (
+                  <span className='text-slate-400'>N/A</span>
+                )}
               </div>
-              {driver.driving_history && (
-                <div>
-                  <p className='text-slate-400 text-sm mb-2'>Driving History</p>
-                  <p className='text-white text-sm bg-slate-700/50 p-3 rounded-lg'>
-                    {driver.driving_history}
-                  </p>
-                </div>
-              )}
             </CardContent>
           </Card>
 
-          {/* Route & Shift Details */}
-          <Card className='bg-slate-800 border-slate-700'>
-            <CardHeader>
-              <CardTitle className='text-white flex items-center gap-2'>
-                <MapPin className='h-5 w-5' />
-                Route & Shift Details
-              </CardTitle>
-            </CardHeader>
-            <CardContent className='space-y-4'>
-              <div className='grid grid-cols-2 gap-4'>
-                <div>
-                  <p className='text-slate-400 text-sm'>Route Type</p>
-                  <p className='text-white font-medium capitalize'>
-                    {driver.route_type?.replace('-', ' ') || 'N/A'}
-                  </p>
+          {driver.compliance_notes && !parsedComplianceData && (
+            <Alert>
+              <AlertCircle className='h-4 w-4' />
+              <AlertDescription>
+                Application questionnaire data is on file but could not be
+                parsed for display. It may be invalid JSON or in an older
+                format.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Application / questionnaire (from compliance_notes JSON) */}
+          {parsedComplianceData?.personal && (
+            <Card className='bg-slate-800 border-slate-700'>
+              <CardHeader>
+                <CardTitle className='text-white flex items-center gap-2'>
+                  <User className='h-5 w-5' />
+                  Additional Personal Information
+                </CardTitle>
+              </CardHeader>
+              <CardContent className='space-y-4'>
+                <div className='grid grid-cols-2 gap-4'>
+                  <div>
+                    <p className='text-slate-400 text-sm'>Date of Birth</p>
+                    <p className='text-white font-medium'>
+                      {parsedComplianceData.personal.date_of_birth || 'N/A'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className='text-slate-400 text-sm'>Education</p>
+                    <p className='text-white font-medium'>
+                      {parsedComplianceData.personal.education || 'N/A'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className='text-slate-400 text-sm'>
+                      Work Eligibility in Canada
+                    </p>
+                    <p className='text-white font-medium capitalize'>
+                      {parsedComplianceData.personal.work_eligibility_canada ||
+                        'N/A'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className='text-slate-400 text-sm'>
+                      Medical Limitations
+                    </p>
+                    <p className='text-white font-medium capitalize'>
+                      {parsedComplianceData.personal.medical_limitations ||
+                        'N/A'}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className='text-slate-400 text-sm'>Shift Timing</p>
-                  <p className='text-white font-medium capitalize'>
-                    {driver.shift_timing || 'N/A'}
-                  </p>
-                </div>
-                <div>
-                  <p className='text-slate-400 text-sm'>Pay Type</p>
-                  <p className='text-white font-medium capitalize'>
-                    {driver.pay_type?.replace('-', ' ') || 'N/A'}
-                  </p>
-                </div>
-                {(driver.driver_class_id != null || driver.driver_class) && (
-                  <>
+                {parsedComplianceData.personal.medical_limitations === 'yes' &&
+                  parsedComplianceData.personal
+                    .medical_limitations_explanation && (
                     <div>
-                      <p className='text-slate-400 text-sm'>Driver Class</p>
+                      <p className='text-slate-400 text-sm mb-2'>
+                        Medical Limitations Explanation
+                      </p>
+                      <p className='text-white text-sm bg-slate-700/50 p-3 rounded-lg'>
+                        {
+                          parsedComplianceData.personal
+                            .medical_limitations_explanation
+                        }
+                      </p>
+                    </div>
+                  )}
+              </CardContent>
+            </Card>
+          )}
+
+          {parsedComplianceData?.address && (
+            <Card className='bg-slate-800 border-slate-700'>
+              <CardHeader>
+                <CardTitle className='text-white flex items-center gap-2'>
+                  <Home className='h-5 w-5' />
+                  Address Information
+                </CardTitle>
+              </CardHeader>
+              <CardContent className='space-y-4'>
+                <div>
+                  <h4 className='text-white font-medium mb-3'>
+                    Current Address
+                  </h4>
+                  <div className='grid grid-cols-2 gap-4'>
+                    <div>
+                      <p className='text-slate-400 text-sm'>Street Address</p>
                       <p className='text-white font-medium'>
-                        {driver.driver_class
-                          ? `${driver.driver_class.code}${driver.driver_class.name ? ` (${driver.driver_class.name})` : ''}`
-                          : '—'}
+                        {parsedComplianceData.address.current_address || 'N/A'}
                       </p>
                     </div>
                     <div>
-                      <p className='text-slate-400 text-sm'>Class Effective Date</p>
+                      <p className='text-slate-400 text-sm'>City</p>
                       <p className='text-white font-medium'>
-                        {driver.driver_class_effective_date
-                          ? new Date(driver.driver_class_effective_date).toLocaleDateString()
-                          : '—'}
+                        {parsedComplianceData.address.city || 'N/A'}
                       </p>
                     </div>
-                  </>
+                    <div>
+                      <p className='text-slate-400 text-sm'>Province</p>
+                      <p className='text-white font-medium'>
+                        {parsedComplianceData.address.province || 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className='text-slate-400 text-sm'>Postal Code</p>
+                      <p className='text-white font-medium'>
+                        {parsedComplianceData.address.postal_code || 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className='text-slate-400 text-sm'>Cell Phone</p>
+                      <p className='text-white font-medium'>
+                        {parsedComplianceData.address.cell_phone || 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className='text-slate-400 text-sm'>
+                        Living Since / Time Period
+                      </p>
+                      <p className='text-white font-medium'>
+                        {parsedComplianceData.address
+                          .current_address_living_since || 'N/A'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {(parsedComplianceData.address.previous_addresses?.length ??
+                  0) > 0 && (
+                  <div className='pt-4 border-t border-slate-700'>
+                    <h4 className='text-white font-medium mb-3'>
+                      Previous Addresses (Last 3 Years)
+                    </h4>
+                    <div className='space-y-4'>
+                      {parsedComplianceData.address.previous_addresses.map(
+                        (addr: any, index: number) => (
+                          <div
+                            key={index}
+                            className='text-white bg-slate-700/50 p-3 rounded-lg'
+                          >
+                            <p className='text-white font-medium mb-2'>
+                              Address {index + 1}
+                            </p>
+                            <p className='text-slate-300 text-sm'>
+                              {addr.address || 'N/A'}
+                            </p>
+                            <p className='text-slate-400 text-xs mt-1'>
+                              {addr.from_date && addr.to_date
+                                ? `Dates: ${addr.from_date} – ${addr.to_date}`
+                                : addr.duration
+                                  ? `Duration: ${addr.duration}`
+                                  : 'Dates: N/A'}
+                            </p>
+                          </div>
+                        ),
+                      )}
+                    </div>
+                  </div>
                 )}
-              </div>
-              {driver.route_details && (
-                <div>
-                  <p className='text-slate-400 text-sm mb-2'>Route Details</p>
-                  <p className='text-white text-sm bg-slate-700/50 p-3 rounded-lg'>
-                    {driver.route_details}
-                  </p>
+              </CardContent>
+            </Card>
+          )}
+
+          {parsedComplianceData?.license && (
+            <Card className='bg-slate-800 border-slate-700'>
+              <CardHeader>
+                <CardTitle className='text-white flex items-center gap-2'>
+                  <IdCard className='h-5 w-5' />
+                  Additional License Details (application)
+                </CardTitle>
+              </CardHeader>
+              <CardContent className='space-y-4'>
+                <div className='grid grid-cols-2 gap-4'>
+                  <div>
+                    <p className='text-slate-400 text-sm'>License Province</p>
+                    <p className='text-white font-medium'>
+                      {parsedComplianceData.license.license_province || 'N/A'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className='text-slate-400 text-sm'>License Class</p>
+                    <p className='text-white font-medium'>
+                      {parsedComplianceData.license.license_class || 'N/A'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className='text-slate-400 text-sm'>Endorsements</p>
+                    <p className='text-white font-medium'>
+                      {parsedComplianceData.license.license_endorsements ||
+                        'N/A'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className='text-slate-400 text-sm'>Conditions</p>
+                    <p className='text-white font-medium'>
+                      {parsedComplianceData.license.license_conditions ||
+                        'N/A'}
+                    </p>
+                  </div>
                 </div>
-              )}
-            </CardContent>
-          </Card>
+                {parsedComplianceData.questions && (
+                  <div className='pt-4 border-t border-slate-700'>
+                    <h4 className='text-white font-medium mb-3'>
+                      Additional Questions
+                    </h4>
+                    <div className='grid grid-cols-2 gap-4'>
+                      <div>
+                        <p className='text-slate-400 text-sm'>License Denied</p>
+                        <p className='text-white font-medium capitalize'>
+                          {parsedComplianceData.questions.license_denied ||
+                            'N/A'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className='text-slate-400 text-sm'>
+                          Privileges Revoked
+                        </p>
+                        <p className='text-white font-medium capitalize'>
+                          {parsedComplianceData.questions.privileges_revoked ||
+                            'N/A'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className='text-slate-400 text-sm'>
+                          Dangerous Goods Certificate
+                        </p>
+                        <p className='text-white font-medium capitalize'>
+                          {parsedComplianceData.questions
+                            .dangerous_goods_certificate || 'N/A'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {(parsedComplianceData?.driving_experience?.equipment_used?.length ??
+            0) > 0 && (
+            <Card className='bg-slate-800 border-slate-700'>
+              <CardHeader>
+                <CardTitle className='text-white flex items-center gap-2'>
+                  <Truck className='h-5 w-5' />
+                  Equipment Used (Last 5 Years)
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className='overflow-x-auto rounded-lg border border-slate-700'>
+                  <table className='w-full text-sm'>
+                    <thead>
+                      <tr className='border-b border-slate-700 bg-slate-900/40'>
+                        <th className='text-left text-slate-300 px-3 py-2 text-xs font-semibold uppercase tracking-wide'>
+                          Make
+                        </th>
+                        <th className='text-left text-slate-300 px-3 py-2 text-xs font-semibold uppercase tracking-wide'>
+                          Tractor Type
+                        </th>
+                        <th className='text-left text-slate-300 px-3 py-2 text-xs font-semibold uppercase tracking-wide'>
+                          Transmissions
+                        </th>
+                        <th className='text-left text-slate-300 px-3 py-2 text-xs font-semibold uppercase tracking-wide'>
+                          Trailer Type
+                        </th>
+                        <th className='text-left text-slate-300 px-3 py-2 text-xs font-semibold uppercase tracking-wide'>
+                          Areas Operated
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {parsedComplianceData?.driving_experience?.equipment_used?.map(
+                        (equip: any, index: number) => (
+                          <tr
+                            key={index}
+                            className='border-b border-slate-700/50 last:border-0 hover:bg-slate-700/20'
+                          >
+                            <td className='text-white px-3 py-2 align-top'>
+                              {equip.make || 'N/A'}
+                            </td>
+                            <td className='text-white px-3 py-2 align-top'>
+                              {equip.tractor_type || 'N/A'}
+                            </td>
+                            <td className='text-white px-3 py-2 align-top'>
+                              {equip.transmissions || 'N/A'}
+                            </td>
+                            <td className='text-white px-3 py-2 align-top'>
+                              {equip.trailer_type || 'N/A'}
+                            </td>
+                            <td className='text-white px-3 py-2 align-top'>
+                              {equip.areas_operated || 'N/A'}
+                            </td>
+                          </tr>
+                        ),
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {parsedComplianceData?.driving_experience?.accident_history && (
+            <Card className='bg-slate-800 border-slate-700'>
+              <CardHeader>
+                <CardTitle className='text-white flex items-center gap-2'>
+                  <AlertTriangle className='h-5 w-5' />
+                  Accident History
+                </CardTitle>
+              </CardHeader>
+              <CardContent className='space-y-4'>
+                <div className='grid grid-cols-2 gap-4'>
+                  <div>
+                    <p className='text-slate-400 text-sm'>Ever Had Accidents</p>
+                    <p className='text-white font-medium capitalize'>
+                      {parsedComplianceData.driving_experience.accident_history
+                        .ever_had_accidents || 'N/A'}
+                    </p>
+                  </div>
+                  {parsedComplianceData.driving_experience.accident_history
+                    .ever_had_accidents === 'yes' && (
+                    <>
+                      <div>
+                        <p className='text-slate-400 text-sm'>
+                          Number of Incidents
+                        </p>
+                        <p className='text-white font-medium'>
+                          {parsedComplianceData.driving_experience
+                            .accident_history.number_of_incidents || 'N/A'}
+                        </p>
+                      </div>
+                      {parsedComplianceData.driving_experience.accident_history
+                        .accident_explanation && (
+                        <div className='col-span-2'>
+                          <p className='text-slate-400 text-sm mb-2'>
+                            Explanation
+                          </p>
+                          <p className='text-white text-sm bg-slate-700/50 p-3 rounded-lg'>
+                            {
+                              parsedComplianceData.driving_experience
+                                .accident_history.accident_explanation
+                            }
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {(parsedComplianceData?.driving_experience?.traffic_violations
+            ?.length ?? 0) > 0 && (
+            <Card className='bg-slate-800 border-slate-700'>
+              <CardHeader>
+                <CardTitle className='text-white flex items-center gap-2'>
+                  <AlertCircle className='h-5 w-5' />
+                  Traffic Violations (Last 3 Years)
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className='overflow-x-auto rounded-lg border border-slate-700'>
+                  <table className='w-full text-sm'>
+                    <thead>
+                      <tr className='border-b border-slate-700 bg-slate-900/40'>
+                        <th className='text-left text-slate-300 px-3 py-2 text-xs font-semibold uppercase tracking-wide'>
+                          Date
+                        </th>
+                        <th className='text-left text-slate-300 px-3 py-2 text-xs font-semibold uppercase tracking-wide'>
+                          Location
+                        </th>
+                        <th className='text-left text-slate-300 px-3 py-2 text-xs font-semibold uppercase tracking-wide'>
+                          Violation/Charge
+                        </th>
+                        <th className='text-left text-slate-300 px-3 py-2 text-xs font-semibold uppercase tracking-wide'>
+                          Penalty
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {parsedComplianceData?.driving_experience?.traffic_violations?.map(
+                        (violation: any, index: number) => (
+                          <tr
+                            key={index}
+                            className='border-b border-slate-700/50 last:border-0 hover:bg-slate-700/20'
+                          >
+                            <td className='text-white px-3 py-2 align-top'>
+                              {violation.date || 'N/A'}
+                            </td>
+                            <td className='text-white px-3 py-2 align-top'>
+                              {violation.location || 'N/A'}
+                            </td>
+                            <td className='text-white px-3 py-2 align-top'>
+                              {violation.violation_charge || 'N/A'}
+                            </td>
+                            <td className='text-white px-3 py-2 align-top'>
+                              {violation.penalty || 'N/A'}
+                            </td>
+                          </tr>
+                        ),
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {parsedComplianceData?.employment_history && (
+            <Card className='bg-slate-800 border-slate-700'>
+              <CardHeader>
+                <CardTitle className='text-white flex items-center gap-2'>
+                  <Briefcase className='h-5 w-5' />
+                  Employment History
+                </CardTitle>
+              </CardHeader>
+              <CardContent className='space-y-6'>
+                {parsedComplianceData.employment_history.current_employer && (
+                  <div>
+                    <h4 className='text-white font-medium mb-4'>
+                      Current/Most Recent Employer
+                    </h4>
+                    <div className='grid grid-cols-2 gap-4'>
+                      <div>
+                        <p className='text-slate-400 text-sm'>Company</p>
+                        <p className='text-white font-medium'>
+                          {parsedComplianceData.employment_history
+                            .current_employer.company || 'N/A'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className='text-slate-400 text-sm'>Supervisor</p>
+                        <p className='text-white font-medium'>
+                          {parsedComplianceData.employment_history
+                            .current_employer.supervisor || 'N/A'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className='text-slate-400 text-sm'>Address</p>
+                        <p className='text-white font-medium'>
+                          {parsedComplianceData.employment_history
+                            .current_employer.address || 'N/A'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className='text-slate-400 text-sm'>Phone</p>
+                        <p className='text-white font-medium'>
+                          {parsedComplianceData.employment_history
+                            .current_employer.phone || 'N/A'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className='text-slate-400 text-sm'>Position</p>
+                        <p className='text-white font-medium'>
+                          {parsedComplianceData.employment_history
+                            .current_employer.position || 'N/A'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className='text-slate-400 text-sm'>Start Date</p>
+                        <p className='text-white font-medium'>
+                          {parsedComplianceData.employment_history
+                            .current_employer.start_date || 'N/A'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className='text-slate-400 text-sm'>End Date</p>
+                        <p className='text-white font-medium'>
+                          {parsedComplianceData.employment_history
+                            .current_employer.end_date || 'N/A'}
+                        </p>
+                      </div>
+                      {parsedComplianceData.employment_history.current_employer
+                        .reasons_for_leaving && (
+                        <div className='col-span-2'>
+                          <p className='text-slate-400 text-sm mb-2'>
+                            Reasons for Leaving
+                          </p>
+                          <p className='text-white text-sm bg-slate-700/50 p-3 rounded-lg'>
+                            {
+                              parsedComplianceData.employment_history
+                                .current_employer.reasons_for_leaving
+                            }
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {(parsedComplianceData.employment_history.previous_employers
+                  ?.length ?? 0) > 0 && (
+                  <div className='pt-4 border-t border-slate-700'>
+                    <h4 className='text-white font-medium mb-4'>
+                      Previous Employers (Last 10 Years)
+                    </h4>
+                    <div className='space-y-6'>
+                      {parsedComplianceData.employment_history.previous_employers.map(
+                        (emp: any, index: number) => (
+                          <div
+                            key={index}
+                            className='text-white bg-slate-700/50 p-4 rounded-lg'
+                          >
+                            <h5 className='text-white font-medium mb-3'>
+                              Previous Employer {index + 1}
+                            </h5>
+                            <div className='grid grid-cols-2 gap-4'>
+                              <div>
+                                <p className='text-slate-400 text-sm'>
+                                  Company
+                                </p>
+                                <p className='text-white font-medium'>
+                                  {emp.company || 'N/A'}
+                                </p>
+                              </div>
+                              <div>
+                                <p className='text-slate-400 text-sm'>
+                                  Supervisor
+                                </p>
+                                <p className='text-white font-medium'>
+                                  {emp.supervisor || 'N/A'}
+                                </p>
+                              </div>
+                              <div>
+                                <p className='text-slate-400 text-sm'>
+                                  Address
+                                </p>
+                                <p className='text-white font-medium'>
+                                  {emp.address || 'N/A'}
+                                </p>
+                              </div>
+                              <div>
+                                <p className='text-slate-400 text-sm'>Phone</p>
+                                <p className='text-white font-medium'>
+                                  {emp.phone || 'N/A'}
+                                </p>
+                              </div>
+                              <div>
+                                <p className='text-slate-400 text-sm'>
+                                  Position
+                                </p>
+                                <p className='text-white font-medium'>
+                                  {emp.position || 'N/A'}
+                                </p>
+                              </div>
+                              <div>
+                                <p className='text-slate-400 text-sm'>
+                                  Start Date
+                                </p>
+                                <p className='text-white font-medium'>
+                                  {emp.start_date || 'N/A'}
+                                </p>
+                              </div>
+                              <div>
+                                <p className='text-slate-400 text-sm'>
+                                  End Date
+                                </p>
+                                <p className='text-white font-medium'>
+                                  {emp.end_date || 'N/A'}
+                                </p>
+                              </div>
+                              {emp.reasons_for_leaving && (
+                                <div className='col-span-2'>
+                                  <p className='text-slate-400 text-sm mb-2'>
+                                    Reasons for Leaving
+                                  </p>
+                                  <p className='text-white text-sm bg-slate-900/50 p-2 rounded'>
+                                    {emp.reasons_for_leaving}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ),
+                      )}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Right Column - Compliance & Actions */}
@@ -612,9 +1193,9 @@ export default function DriverDetailPage() {
               <div className='space-y-3'>
                 <div className='flex items-center justify-between'>
                   <span className='text-slate-300 text-sm'>
-                    Medical Certificate
+                    PCC / Criminal Background Check
                   </span>
-                  {driver.medical_certificate_path ? (
+                  {driver.pcc_document_path ? (
                     <Badge variant='secondary' className='bg-green-600'>
                       <CheckCircle2 className='h-3 w-3 mr-1' />
                       Uploaded
@@ -628,9 +1209,25 @@ export default function DriverDetailPage() {
                 </div>
                 <div className='flex items-center justify-between'>
                   <span className='text-slate-300 text-sm'>
-                    License Document
+                    License Front Image
                   </span>
-                  {driver.license_document_path ? (
+                  {driver.license_front_image_path ? (
+                    <Badge variant='secondary' className='bg-green-600'>
+                      <CheckCircle2 className='h-3 w-3 mr-1' />
+                      Uploaded
+                    </Badge>
+                  ) : (
+                    <Badge variant='secondary' className='bg-red-600'>
+                      <XCircle className='h-3 w-3 mr-1' />
+                      Missing
+                    </Badge>
+                  )}
+                </div>
+                <div className='flex items-center justify-between'>
+                  <span className='text-slate-300 text-sm'>
+                    License Back Image
+                  </span>
+                  {driver.license_back_image_path ? (
                     <Badge variant='secondary' className='bg-green-600'>
                       <CheckCircle2 className='h-3 w-3 mr-1' />
                       Uploaded
@@ -710,21 +1307,56 @@ export default function DriverDetailPage() {
                       : 'Pending'}
                   </Badge>
                 </div>
-                <div className='flex items-center justify-between'>
+                <div className='flex items-center justify-between gap-3'>
                   <span className='text-slate-300 text-sm'>
-                    Drug & Alcohol Test
+                    Reference check
                   </span>
-                  {driver.drug_alcohol_test ? (
-                    <Badge variant='secondary' className='bg-green-600'>
-                      <CheckCircle2 className='h-3 w-3 mr-1' />
-                      Completed
+                  <div className='flex items-center gap-2 shrink-0'>
+                    <Badge
+                      variant='secondary'
+                      className={
+                        driver.reference_check_status === 'completed'
+                          ? 'bg-green-600'
+                          : 'bg-yellow-600'
+                      }
+                    >
+                      {driver.reference_check_status === 'completed' ? (
+                        <CheckCircle2 className='h-3 w-3 mr-1' />
+                      ) : (
+                        <AlertCircle className='h-3 w-3 mr-1' />
+                      )}
+                      {driver.reference_check_status === 'completed'
+                        ? 'Approved'
+                        : 'Not approved'}
                     </Badge>
-                  ) : (
-                    <Badge variant='secondary' className='bg-red-600'>
-                      <XCircle className='h-3 w-3 mr-1' />
-                      Not Completed
-                    </Badge>
-                  )}
+                    {isUpdatingReferenceCheck ? (
+                      <Spinner
+                        className='h-5 w-5 shrink-0 text-blue-400'
+                        aria-label='Updating reference check'
+                      />
+                    ) : null}
+                    <Select
+                      disabled={isUpdatingReferenceCheck}
+                      value={
+                        driver.reference_check_status === 'completed'
+                          ? 'completed'
+                          : 'pending'
+                      }
+                      onValueChange={(v) =>
+                        handleReferenceCheckStatusChange(
+                          v as 'pending' | 'completed',
+                        )
+                      }
+                    >
+                      <SelectTrigger className='h-8 w-[130px] bg-slate-700 border-slate-600 text-white text-xs'>
+                        <SelectValue placeholder='Set status' />
+                      </SelectTrigger>
+                      <SelectContent className='text-white bg-slate-700 border-slate-600'>
+                        <SelectItem value='pending'>Pending</SelectItem>
+                        <SelectItem value='completed'>Completed</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </div>
 
@@ -764,22 +1396,6 @@ export default function DriverDetailPage() {
               </div>
             </CardContent>
           </Card>
-
-          {/* Compliance Notes */}
-          {driver.compliance_notes && (
-            <Card className='bg-slate-800 border-slate-700'>
-              <CardHeader>
-                <CardTitle className='text-white text-sm'>
-                  Compliance Notes
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className='text-slate-300 text-sm bg-slate-700/50 p-3 rounded-lg'>
-                  {driver.compliance_notes}
-                </p>
-              </CardContent>
-            </Card>
-          )}
 
           {/* Quick Actions */}
           <Card className='bg-slate-800 border-slate-700'>

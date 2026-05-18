@@ -69,7 +69,6 @@ export type EmploymentSectionState = Pick<
 
 export type DocumentsSectionState = Pick<
   DriverRegisterFormState,
-  | 'medical_certificate'
   | 'pcc_document'
   | 'abstract_document'
   | 'cvor_document'
@@ -157,7 +156,6 @@ export function getInitialDriverRegisterSectionSlices(
     },
     documents: {
       pcc_document: full.pcc_document,
-      medical_certificate: full.medical_certificate,
       abstract_document: full.abstract_document,
       cvor_document: full.cvor_document,
       safety_certificate: full.safety_certificate,

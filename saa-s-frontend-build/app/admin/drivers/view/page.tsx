@@ -24,7 +24,7 @@ import {
   FileText,
   User,
   Truck,
-  MapPin,
+  ExternalLink,
   CreditCard,
   Shield,
   Calendar,
@@ -49,7 +49,207 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+
 import RbLogo from '@/assets/images/RBlogo.jpg';
+
+function getPublicStorageUrl(
+  relativePath: string | undefined | null,
+): string {
+  if (!relativePath) return '';
+  const trimmed = relativePath.replace(/^\/+/, '');
+  const explicit = process.env.NEXT_PUBLIC_STORAGE_BASE_URL?.trim();
+  if (explicit) {
+    return `${explicit.replace(/\/$/, '')}/${trimmed}`;
+  }
+  const apiBase =
+    process.env.NEXT_PUBLIC_API_URL || 'http://localhost/api/v1';
+  const origin = apiBase.replace(/\/api\/v1\/?$/i, '').replace(/\/$/, '');
+  return `${origin}/storage/${trimmed}`;
+}
+
+function documentKind(path: string): 'image' | 'pdf' | 'other' {
+  const m = path.match(/\.([^.]+)$/i);
+  const ext = (m?.[1] || '').toLowerCase();
+  if (['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext)) return 'image';
+  if (ext === 'pdf') return 'pdf';
+  return 'other';
+}
+
+/** Resolve `drivers/...` path for same-origin proxy (works when direct storage URL is cross-origin). */
+function storageRelativePathForFetch(
+  relativePath: string | undefined | null,
+  resolvedUrl: string | undefined | null,
+): string | null {
+  const trimmed = relativePath?.replace(/^\/+/, '').trim();
+  if (trimmed) {
+    return trimmed;
+  }
+  const u = resolvedUrl?.trim();
+  if (!u) {
+    return null;
+  }
+  try {
+    const parsed = new URL(u);
+    const idx = parsed.pathname.indexOf('/storage/');
+    if (idx >= 0) {
+      return parsed.pathname
+        .slice(idx + '/storage/'.length)
+        .replace(/^\/+/, '');
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+/** Load a public storage image for jsPDF (fetch + data URL + format). */
+async function fetchStorageImageForPdf(
+  relativePath: string | undefined | null,
+  resolvedUrl?: string | null,
+): Promise<{ dataUrl: string; format: 'JPEG' | 'PNG' } | null> {
+  const url =
+    (resolvedUrl && resolvedUrl.trim()) ||
+    getPublicStorageUrl(relativePath || undefined);
+  if (!url) return null;
+
+  const kindSource =
+    (relativePath && relativePath.trim()) ||
+    (() => {
+      try {
+        return decodeURIComponent(
+          (resolvedUrl || url).split('?')[0].split('#')[0],
+        )
+          .split('/')
+          .filter(Boolean)
+          .pop();
+      } catch {
+        return '';
+      }
+    })();
+  if (!kindSource || documentKind(kindSource) !== 'image') return null;
+
+  const storageRel = storageRelativePathForFetch(relativePath, resolvedUrl ?? null);
+  const tryUrls: string[] = [];
+  if (storageRel && typeof window !== 'undefined') {
+    tryUrls.push(
+      `/api/storage-file?path=${encodeURIComponent(storageRel)}`,
+    );
+  }
+  tryUrls.push(url);
+
+  const ext = kindSource.match(/\.([^.]+)$/i)?.[1]?.toLowerCase() || '';
+
+  for (const fetchUrl of tryUrls) {
+    try {
+      const res = await fetch(fetchUrl, { mode: 'cors', credentials: 'omit' });
+      if (!res.ok) {
+        continue;
+      }
+      const blob = await res.blob();
+      const mime = (blob.type || '').split(';')[0].toLowerCase();
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const fr = new FileReader();
+        fr.onload = () => resolve(fr.result as string);
+        fr.onerror = () => reject(new Error('read failed'));
+        fr.readAsDataURL(blob);
+      });
+      let format: 'JPEG' | 'PNG' = 'JPEG';
+      if (mime === 'image/png' || ext === 'png') format = 'PNG';
+      else if (
+        mime === 'image/jpeg' ||
+        mime === 'image/jpg' ||
+        ['jpg', 'jpeg'].includes(ext)
+      )
+        format = 'JPEG';
+      else if (ext === 'png') format = 'PNG';
+      return { dataUrl, format };
+    } catch {
+      /* try next */
+    }
+  }
+  return null;
+}
+
+function measureDataUrlImage(
+  dataUrl: string,
+): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () =>
+      resolve({
+        width: img.naturalWidth || img.width,
+        height: img.naturalHeight || img.height,
+      });
+    img.onerror = () => reject(new Error('image load'));
+    img.src = dataUrl;
+  });
+}
+
+function DocumentPreviewTile({
+  title,
+  path,
+  absoluteUrl,
+}: {
+  title: string;
+  path?: string | null;
+  /** From API Driver model *_url when present — avoids guessing /storage base */
+  absoluteUrl?: string | null;
+}) {
+  const url =
+    (absoluteUrl && absoluteUrl.trim()) || getPublicStorageUrl(path || undefined);
+  const kindProbe =
+    (path && path.trim()) ||
+    (url
+      ? decodeURIComponent(url.split('?')[0].split('#')[0]).split('/').pop() ||
+        ''
+      : '');
+  const kind = kindProbe ? documentKind(kindProbe) : 'other';
+  const hasFile = Boolean((path && path.trim()) || (absoluteUrl && absoluteUrl.trim()));
+
+  return (
+    <div className='overflow-hidden rounded-lg border border-slate-700 bg-slate-900/40'>
+      <div className='flex items-center justify-between gap-2 border-b border-slate-700 px-3 py-2'>
+        <p className='truncate text-sm font-medium text-white'>{title}</p>
+        {hasFile && url ? (
+          <a
+            href={url}
+            target='_blank'
+            rel='noopener noreferrer'
+            className='flex shrink-0 items-center gap-1 text-xs text-blue-400 hover:text-blue-300 hover:underline'
+          >
+            <ExternalLink className='h-3 w-3' />
+            Open
+          </a>
+        ) : null}
+      </div>
+      <div className='flex min-h-[140px] items-center justify-center bg-slate-950/40 p-2'>
+        {!hasFile || !url ? (
+          <p className='text-xs text-slate-500'>No file uploaded</p>
+        ) : kind === 'image' ? (
+          // eslint-disable-next-line @next/next/no-img-element -- public storage URL from API
+          <img
+            src={url}
+            alt={title}
+            className='max-h-52 w-full rounded object-contain'
+          />
+        ) : kind === 'pdf' ? (
+          <iframe
+            src={url}
+            title={title}
+            className='h-52 w-full rounded border border-slate-700 bg-white'
+          />
+        ) : (
+          <div className='flex flex-col items-center gap-2 py-6 text-center text-slate-400'>
+            <FileText className='h-10 w-10' />
+            <span className='text-xs'>
+              Preview not available — use Open to view
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function DriverDetailPage() {
   const router = useRouter();
@@ -62,11 +262,14 @@ export default function DriverDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isUpdatingReferenceCheck, setIsUpdatingReferenceCheck] =
+    useState(false);
   const [updatingDriverClass, setUpdatingDriverClass] = useState(false);
   const [showSensitiveData, setShowSensitiveData] = useState<
     Record<string, boolean>
   >({});
   const [parsedComplianceData, setParsedComplianceData] = useState<any>(null);
+  const [exportingPdf, setExportingPdf] = useState(false);
 
   useEffect(() => {
     if (driverId) {
@@ -146,6 +349,31 @@ export default function DriverDetailPage() {
       );
     } finally {
       setIsUpdating(false);
+    }
+  };
+
+  const handleReferenceCheckStatusChange = async (
+    next: 'pending' | 'completed',
+  ) => {
+    if (!driver) return;
+    setIsUpdatingReferenceCheck(true);
+    try {
+      await apiClient.updateDriver(driver.id, {
+        reference_check_status: next,
+      });
+      toast.success(
+        next === 'completed'
+          ? 'Reference check marked complete'
+          : 'Reference check marked pending',
+      );
+      await fetchDriver();
+    } catch (err: any) {
+      toast.error(
+        err.response?.data?.message ||
+          'Failed to update reference check status',
+      );
+    } finally {
+      setIsUpdatingReferenceCheck(false);
     }
   };
 
@@ -234,11 +462,14 @@ export default function DriverDetailPage() {
     const issues: string[] = [];
 
     // Check required documents
-    if (!driver.medical_certificate_path) {
-      issues.push('Medical Certificate missing');
+    if (!driver.pcc_document_path) {
+      issues.push('PCC / Criminal Background Check missing');
     }
-    if (!driver.license_document_path) {
-      issues.push('License Document missing');
+    if (!driver.license_front_image_path) {
+      issues.push('License front image missing');
+    }
+    if (!driver.license_back_image_path) {
+      issues.push('License back image missing');
     }
     if (!driver.abstract_document_path) {
       issues.push('Abstract Document missing');
@@ -268,11 +499,6 @@ export default function DriverDetailPage() {
       issues.push('Background check not completed');
     }
 
-    // Check drug & alcohol test
-    if (!driver.drug_alcohol_test) {
-      issues.push('Drug & Alcohol test not completed');
-    }
-
     return {
       isCompliant: issues.length === 0,
       issues,
@@ -292,8 +518,9 @@ export default function DriverDetailPage() {
   };
 
   const exportToPDF = async () => {
-    if (!driver) return;
+    if (!driver || exportingPdf) return;
 
+    setExportingPdf(true);
     try {
       // Fetch reference checks for this driver (so they are included in PDF)
       let referenceChecks: any[] = [];
@@ -788,6 +1015,105 @@ export default function DriverDetailPage() {
       addCheckbox('YES', hasDangerousGoods, margin + 70, yPos);
       addCheckbox('No', !hasDangerousGoods, margin + 90, yPos);
       yPos += lineHeight + 5;
+
+      // License card photographs (front / back)
+      if (
+        driver.license_front_image_path ||
+        driver.license_back_image_path
+      ) {
+        const [licenseFrontPdf, licenseBackPdf] = await Promise.all([
+          fetchStorageImageForPdf(
+            driver.license_front_image_path,
+            driver.license_front_image_url,
+          ),
+          fetchStorageImageForPdf(
+            driver.license_back_image_path,
+            driver.license_back_image_url,
+          ),
+        ]);
+
+        const sectionMinH = 100;
+        checkNewPage(sectionMinH);
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(0, 0, 0);
+        doc.text('License card photographs', margin, yPos);
+        yPos += lineHeight + 5;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+
+        const gap = 8;
+        const colW = (maxWidth - gap) / 2;
+        const maxImgH = 72;
+        const labelY = yPos;
+        const imgY = yPos + 5;
+
+        const drawLicensePhoto = async (
+          label: string,
+          x: number,
+          relativePath: string | undefined | null,
+          loaded: { dataUrl: string; format: 'JPEG' | 'PNG' } | null,
+        ): Promise<number> => {
+          doc.text(label, x, labelY);
+          if (!relativePath) {
+            doc.setFontSize(8);
+            doc.setTextColor(100, 100, 100);
+            doc.text('Not on file', x, imgY + 18);
+            doc.setTextColor(0, 0, 0);
+            doc.setFontSize(9);
+            return maxImgH + 8;
+          }
+          if (!loaded) {
+            doc.setFontSize(8);
+            doc.setTextColor(100, 100, 100);
+            doc.text('Could not load image', x, imgY + 18);
+            doc.setTextColor(0, 0, 0);
+            doc.setFontSize(9);
+            return maxImgH + 8;
+          }
+          try {
+            const { width: nw, height: nh } = await measureDataUrlImage(
+              loaded.dataUrl,
+            );
+            const scale = Math.min(colW / nw, maxImgH / nh);
+            const w = nw * scale;
+            const h = nh * scale;
+            doc.addImage(
+              loaded.dataUrl,
+              loaded.format,
+              x,
+              imgY,
+              w,
+              h,
+              undefined,
+              'FAST',
+            );
+            return h + 8;
+          } catch {
+            doc.setFontSize(8);
+            doc.setTextColor(180, 0, 0);
+            doc.text('Could not embed image', x, imgY + 15);
+            doc.setTextColor(0, 0, 0);
+            doc.setFontSize(9);
+            return maxImgH + 8;
+          }
+        };
+
+        const leftH = await drawLicensePhoto(
+          'Front',
+          margin,
+          driver.license_front_image_path,
+          licenseFrontPdf,
+        );
+        const rightH = await drawLicensePhoto(
+          'Back',
+          margin + colW + gap,
+          driver.license_back_image_path,
+          licenseBackPdf,
+        );
+        yPos = imgY + Math.max(leftH, rightH) + 6;
+      }
+
 
       // Driving Experience Section
       checkNewPage(60);
@@ -1382,6 +1708,84 @@ export default function DriverDetailPage() {
       doc.text('Signature of Applicant', margin + 10, yPos + 8);
       drawLine(margin + 10, yPos, 90);
 
+      // ----- Reference Check (manual mail-out form appendix) -----
+      const currentEmpRef =
+        parsedComplianceData?.employment_history?.current_employer;
+      const applyingRolePdf =
+        driver.driver_class?.name?.trim() ||
+        driver.driver_class?.code?.trim() ||
+        'truck driver';
+      const priorRolePdf = (
+        typeof currentEmpRef?.position === 'string'
+          ? currentEmpRef.position
+          : ''
+      ).trim();
+
+      checkNewPage(110);
+      yPos += 16;
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      const refHeading = 'Reference Check';
+      const refHeadingW = doc.getTextWidth(refHeading);
+      const refHx = pageWidth / 2 - refHeadingW / 2;
+      doc.text(refHeading, refHx, yPos);
+      doc.setLineWidth(0.4);
+      doc.line(refHx, yPos + 1, refHx + refHeadingW, yPos + 1);
+      yPos += lineHeight + 6;
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      const refIntro = doc.splitTextToSize(
+        'We appreciate your time in completing, in confidence, the information below.',
+        maxWidth,
+      );
+      doc.text(refIntro, margin, yPos);
+      yPos += refIntro.length * lineHeight + 6;
+
+      const applicantNamePdf = driver.user?.name || '____________________';
+      const licensePdf =
+        driver.license_number || '______________________';
+      const priorPhrase = priorRolePdf
+        ? priorRolePdf
+        : '________________________________________________________________';
+      const refBody = `${applicantNamePdf}, driver's license number ${licensePdf}, has completed an application to this company for a position as a ${applyingRolePdf} and states that he/she was employed by you as ${priorPhrase}.`;
+
+      const refBodyLines = doc.splitTextToSize(refBody, maxWidth);
+      doc.text(refBodyLines, margin, yPos);
+      yPos += refBodyLines.length * lineHeight + 6;
+
+      const refClosing = doc.splitTextToSize(
+        'Please reply to this inquiry below regarding this applicant. Your reply will be held in strictest confidence and will in no way involve you in any responsibility.',
+        maxWidth,
+      );
+      doc.text(refClosing, margin, yPos);
+      yPos += refClosing.length * lineHeight + 8;
+
+      if (!priorRolePdf) {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9);
+        doc.text('For completion by referee', margin, yPos);
+        yPos += lineHeight + 2;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(80, 80, 80);
+        doc.text('(blank lines for handwritten reply)', margin, yPos);
+        doc.setTextColor(0, 0, 0);
+        yPos += lineHeight + 4;
+        for (let ln = 0; ln < 3; ln += 1) {
+          drawLine(margin, yPos, maxWidth);
+          yPos += lineHeight + 8;
+        }
+      }
+
+      yPos += 4;
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.text('Kind regards,', margin, yPos);
+      yPos += lineHeight + 2;
+      doc.setFont('helvetica', 'bold');
+      doc.text('R & B Services Inc.', margin, yPos);
+
       // Save PDF
       const fileName = `Driver_Application_${driver.user?.name?.replace(/\s+/g, '_') || 'Driver'}_${new Date().toISOString().split('T')[0]}.pdf`;
       doc.save(fileName);
@@ -1389,6 +1793,8 @@ export default function DriverDetailPage() {
     } catch (error: any) {
       console.error('PDF export error:', error);
       toast.error('Failed to export PDF. Please try again.');
+    } finally {
+      setExportingPdf(false);
     }
   };
 
@@ -1566,6 +1972,18 @@ export default function DriverDetailPage() {
                   </p>
                 </div>
                 <div>
+                  <p className='text-slate-400 text-sm'>Gender</p>
+                  <p className='text-white font-medium capitalize'>
+                    {parsedComplianceData?.personal?.gender || 'N/A'}
+                  </p>
+                </div>
+                <div>
+                  <p className='text-slate-400 text-sm'>Phone Number</p>
+                  <p className='text-white font-medium'>
+                    {parsedComplianceData?.address?.cell_phone || 'N/A'}
+                  </p>
+                </div>
+                <div>
                   <p className='text-slate-400 text-sm'>Created At</p>
                   <p className='text-white font-medium'>
                     {new Date(driver.created_at).toLocaleDateString()}
@@ -1714,101 +2132,30 @@ export default function DriverDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Driving Experience */}
+          {/* Vehicle Types */}
           <Card className='bg-slate-800 border-slate-700'>
             <CardHeader>
               <CardTitle className='text-white flex items-center gap-2'>
                 <Truck className='h-5 w-5' />
-                Driving Experience & Vehicle
+                Vehicle Types
               </CardTitle>
             </CardHeader>
-            <CardContent className='space-y-4'>
-              <div className='grid grid-cols-2 gap-4'>
-                <div>
-                  <p className='text-slate-400 text-sm'>Years of Experience</p>
-                  <p className='text-white font-medium'>
-                    {driver.years_of_experience || 0} years
-                  </p>
-                </div>
-                <div>
-                  <p className='text-slate-400 text-sm'>Vehicle Ownership</p>
-                  <p className='text-white font-medium capitalize'>
-                    {driver.vehicle_ownership?.replace('-', ' ') || 'N/A'}
-                  </p>
-                </div>
-                <div>
-                  <p className='text-slate-400 text-sm'>Vehicle Types</p>
-                  <div className='flex flex-wrap gap-2 mt-1'>
-                    {driver.vehicle_types && driver.vehicle_types.length > 0 ? (
-                      driver.vehicle_types.map((type, index) => (
-                        <Badge
-                          key={index}
-                          variant='secondary'
-                          className='bg-blue-600'
-                        >
-                          {type}
-                        </Badge>
-                      ))
-                    ) : (
-                      <span className='text-slate-400'>N/A</span>
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <p className='text-slate-400 text-sm'>Vehicle Capacity</p>
-                  <p className='text-white font-medium'>
-                    {driver.vehicle_capacity || 'N/A'}
-                  </p>
-                </div>
+            <CardContent>
+              <div className='flex flex-wrap gap-2'>
+                {driver.vehicle_types && driver.vehicle_types.length > 0 ? (
+                  driver.vehicle_types.map((type, index) => (
+                    <Badge
+                      key={index}
+                      variant='secondary'
+                      className='bg-blue-600'
+                    >
+                      {type}
+                    </Badge>
+                  ))
+                ) : (
+                  <span className='text-slate-400'>N/A</span>
+                )}
               </div>
-              {driver.driving_history && (
-                <div>
-                  <p className='text-slate-400 text-sm mb-2'>Driving History</p>
-                  <p className='text-white text-sm bg-slate-700/50 p-3 rounded-lg'>
-                    {driver.driving_history}
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Route & Shift Details */}
-          <Card className='bg-slate-800 border-slate-700'>
-            <CardHeader>
-              <CardTitle className='text-white flex items-center gap-2'>
-                <MapPin className='h-5 w-5' />
-                Route & Shift Details
-              </CardTitle>
-            </CardHeader>
-            <CardContent className='space-y-4'>
-              <div className='grid grid-cols-2 gap-4'>
-                <div>
-                  <p className='text-slate-400 text-sm'>Route Type</p>
-                  <p className='text-white font-medium capitalize'>
-                    {driver.route_type?.replace('-', ' ') || 'N/A'}
-                  </p>
-                </div>
-                <div>
-                  <p className='text-slate-400 text-sm'>Shift Timing</p>
-                  <p className='text-white font-medium capitalize'>
-                    {driver.shift_timing || 'N/A'}
-                  </p>
-                </div>
-                <div>
-                  <p className='text-slate-400 text-sm'>Pay Type</p>
-                  <p className='text-white font-medium capitalize'>
-                    {driver.pay_type?.replace('-', ' ') || 'N/A'}
-                  </p>
-                </div>
-              </div>
-              {driver.route_details && (
-                <div>
-                  <p className='text-slate-400 text-sm mb-2'>Route Details</p>
-                  <p className='text-white text-sm bg-slate-700/50 p-3 rounded-lg'>
-                    {driver.route_details}
-                  </p>
-                </div>
-              )}
             </CardContent>
           </Card>
 
@@ -2406,9 +2753,9 @@ export default function DriverDetailPage() {
               <div className='space-y-3'>
                 <div className='flex items-center justify-between'>
                   <span className='text-slate-300 text-sm'>
-                    Medical Certificate
+                    PCC / Criminal Background Check
                   </span>
-                  {driver.medical_certificate_path ? (
+                  {driver.pcc_document_path ? (
                     <Badge variant='secondary' className='bg-green-600'>
                       <CheckCircle2 className='h-3 w-3 mr-1' />
                       Uploaded
@@ -2422,9 +2769,25 @@ export default function DriverDetailPage() {
                 </div>
                 <div className='flex items-center justify-between'>
                   <span className='text-slate-300 text-sm'>
-                    License Document
+                    License Front Image
                   </span>
-                  {driver.license_document_path ? (
+                  {driver.license_front_image_path ? (
+                    <Badge variant='secondary' className='bg-green-600'>
+                      <CheckCircle2 className='h-3 w-3 mr-1' />
+                      Uploaded
+                    </Badge>
+                  ) : (
+                    <Badge variant='secondary' className='bg-red-600'>
+                      <XCircle className='h-3 w-3 mr-1' />
+                      Missing
+                    </Badge>
+                  )}
+                </div>
+                <div className='flex items-center justify-between'>
+                  <span className='text-slate-300 text-sm'>
+                    License Back Image
+                  </span>
+                  {driver.license_back_image_path ? (
                     <Badge variant='secondary' className='bg-green-600'>
                       <CheckCircle2 className='h-3 w-3 mr-1' />
                       Uploaded
@@ -2504,21 +2867,39 @@ export default function DriverDetailPage() {
                       : 'Pending'}
                   </Badge>
                 </div>
-                <div className='flex items-center justify-between'>
+                <div className='flex items-center justify-between gap-3'>
                   <span className='text-slate-300 text-sm'>
-                    Drug & Alcohol Test
+                    Reference check
                   </span>
-                  {driver.drug_alcohol_test ? (
-                    <Badge variant='secondary' className='bg-green-600'>
-                      <CheckCircle2 className='h-3 w-3 mr-1' />
-                      Completed
-                    </Badge>
-                  ) : (
-                    <Badge variant='secondary' className='bg-red-600'>
-                      <XCircle className='h-3 w-3 mr-1' />
-                      Not Completed
-                    </Badge>
-                  )}
+                  <div className='flex items-center gap-2 shrink-0'>
+                    {isUpdatingReferenceCheck ? (
+                      <Spinner
+                        className='h-5 w-5 shrink-0 text-blue-400'
+                        aria-label='Updating reference check'
+                      />
+                    ) : null}
+                    <Select
+                      disabled={isUpdatingReferenceCheck}
+                      value={
+                        driver.reference_check_status === 'completed'
+                          ? 'completed'
+                          : 'pending'
+                      }
+                      onValueChange={(v) =>
+                        handleReferenceCheckStatusChange(
+                          v as 'pending' | 'completed',
+                        )
+                      }
+                    >
+                      <SelectTrigger className='h-8 w-[130px] bg-slate-700 border-slate-600 text-white text-xs'>
+                        <SelectValue placeholder='Status' />
+                      </SelectTrigger>
+                      <SelectContent className='text-white bg-slate-700 border-slate-600'>
+                        <SelectItem value='pending'>Pending</SelectItem>
+                        <SelectItem value='completed'>Completed</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </div>
 
@@ -2559,6 +2940,58 @@ export default function DriverDetailPage() {
             </CardContent>
           </Card>
 
+          <Card className='border-slate-700 bg-slate-800'>
+            <CardHeader>
+              <CardTitle className='flex items-center gap-2 text-white'>
+                <FileText className='h-5 w-5' />
+                Uploaded Documents
+              </CardTitle>
+              <CardDescription className='text-slate-400'>
+                Images show inline; PDFs use the embedded viewer. Use Open if
+                the preview does not load.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className='grid gap-4 sm:grid-cols-2'>
+                <DocumentPreviewTile
+                  title='PCC / Criminal Background Check'
+                  path={driver.pcc_document_path}
+                  absoluteUrl={driver.pcc_document_url}
+                />
+                <DocumentPreviewTile
+                  title='License (front)'
+                  path={driver.license_front_image_path}
+                  absoluteUrl={driver.license_front_image_url}
+                />
+                <DocumentPreviewTile
+                  title='License (back)'
+                  path={driver.license_back_image_path}
+                  absoluteUrl={driver.license_back_image_url}
+                />
+                <DocumentPreviewTile
+                  title='License (legacy)'
+                  path={driver.license_document_path}
+                  absoluteUrl={driver.license_document_url}
+                />
+                <DocumentPreviewTile
+                  title='Abstract'
+                  path={driver.abstract_document_path}
+                  absoluteUrl={driver.abstract_document_url}
+                />
+                <DocumentPreviewTile
+                  title='CVOR'
+                  path={driver.cvor_document_path}
+                  absoluteUrl={driver.cvor_document_url}
+                />
+                <DocumentPreviewTile
+                  title='Safety certificate'
+                  path={driver.safety_certificate_path}
+                  absoluteUrl={driver.safety_certificate_url}
+                />
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Compliance Notes */}
           {/* {driver.compliance_notes && (
             <Card className="bg-slate-800 border-slate-700">
@@ -2593,11 +3026,21 @@ export default function DriverDetailPage() {
               </Button>
               <Button
                 variant='outline'
-                className='w-full gap-2 border-slate-600 text-slate-300 hover:text-white hover:bg-slate-700 bg-transparent'
+                disabled={exportingPdf}
+                className='w-full gap-2 border-slate-600 bg-transparent text-slate-300 hover:bg-slate-700 hover:text-white disabled:opacity-70'
                 onClick={exportToPDF}
               >
-                <Download className='mr-2 h-4 w-4' />
-                Export to PDF
+                {exportingPdf ? (
+                  <>
+                    <Spinner className='mr-2 h-4 w-4 shrink-0' />
+                    Generating PDF…
+                  </>
+                ) : (
+                  <>
+                    <Download className='mr-2 h-4 w-4 shrink-0' />
+                    Export to PDF
+                  </>
+                )}
               </Button>
             </CardContent>
           </Card>
