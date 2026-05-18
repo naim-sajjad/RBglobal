@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Driver;
 use App\Models\User;
+use App\Services\DriverApplicationPdfService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -107,6 +108,22 @@ class DriverController extends Controller
     }
 
     /**
+     * Employment application PDF (DomPDF): compliance JSON, uploads summary, licence photos, references.
+     */
+    public function applicationPdf(Driver $driver)
+    {
+        $currentUser = auth()->user();
+
+        if (! $currentUser->is_global_admin && $driver->user_id !== $currentUser->id) {
+            if (! $currentUser->hasPermissionTo('drivers.view')) {
+                abort(403, 'You do not have permission to view this driver');
+            }
+        }
+
+        return DriverApplicationPdfService::download($driver);
+    }
+
+    /**
      * Create driver (admin flow)
      */
     public function store(Request $request)
@@ -161,6 +178,7 @@ class DriverController extends Controller
             'license_expiry_date' => $validated['license_expiry_date'] ?? null,
             'vehicle_types' => $validated['vehicle_types'] ?? null,
             'background_check_status' => $validated['background_check_status'] ?? 'pending',
+            'reference_check_status' => $validated['reference_check_status'] ?? 'pending',
             'compliance_notes' => $validated['compliance_notes'] ?? null,
             'status' => $validated['status'] ?? 'pending_approval', // Admin can set initial status
             'driver_class_id' => $validated['driver_class_id'] ?? null,
@@ -222,6 +240,7 @@ class DriverController extends Controller
             'license_expiry_date' => $validated['license_expiry_date'] ?? null,
             'vehicle_types' => $validated['vehicle_types'] ?? null,
             'background_check_status' => 'pending',
+            'reference_check_status' => 'pending',
             'compliance_notes' => $validated['compliance_notes'] ?? null,
             'status' => 'pending_approval', // Always pending for self-registration
             'driver_class_id' => $validated['driver_class_id'] ?? null,
@@ -297,9 +316,10 @@ class DriverController extends Controller
             unset($validated[$stripKey]);
         }
 
-        // Drivers can only update their own profile, not status
+        // Drivers can only update their own profile, not status or HR verification flags
         if ($driver->user_id === $currentUser->id && !$currentUser->is_global_admin) {
             unset($validated['status']); // Drivers can't change their own status
+            unset($validated['reference_check_status']);
         }
 
         $driver->update($this->filterToDriverTableColumns($validated));
@@ -416,6 +436,7 @@ class DriverController extends Controller
             'cvor_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
             'safety_certificate' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
             'background_check_status' => ['nullable', Rule::in(['pending', 'completed'])],
+            'reference_check_status' => ['nullable', Rule::in(['pending', 'completed'])],
             'compliance_notes' => 'nullable|string',
 
             // Status (admin only)

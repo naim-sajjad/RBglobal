@@ -77,6 +77,7 @@ Route::prefix('v1/tenant')->middleware([
     Route::post('/drivers', [DriverController::class, 'store'])->middleware('permission:drivers.create');
     Route::get('/drivers/my-profile', [DriverController::class, 'myProfile']); // Driver's own profile
     Route::get('/drivers/{driver}', [DriverController::class, 'show'])->middleware('permission:drivers.view');
+    Route::get('/drivers/{driver}/application-pdf', [DriverController::class, 'applicationPdf'])->middleware('permission:drivers.view');
     // POST + PUT: multipart uploads are unreliable on PUT with PHP; SPA uses POST + FormData for updates with files
     Route::match(['put', 'post'], '/drivers/{driver}', [DriverController::class, 'update'])->middleware('permission:drivers.update');
     Route::delete('/drivers/{driver}', [DriverController::class, 'destroy'])->middleware('permission:drivers.delete');
