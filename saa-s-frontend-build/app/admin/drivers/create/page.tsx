@@ -20,12 +20,18 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Spinner } from '@/components/ui/spinner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle, ArrowLeft, Upload, X, FileImage } from 'lucide-react';
+import { AlertCircle, ArrowLeft } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { CreateDriverData, Tenant, DriverClass } from '@/lib/types';
+import {
+  getDefaultDriverCompliancePayload,
+  parseDriverComplianceNotes,
+  serializeDriverCompliancePayload,
+  type DriverCompliancePayload,
+} from '@/lib/admin-driver-compliance';
+import { DriverCreateExtendedSteps } from '@/components/admin/driver-create-extended';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
 import { Textarea } from '@/components/ui/textarea';
@@ -45,7 +51,10 @@ export default function CreateDriverPage() {
   const [isLoadingDriver, setIsLoadingDriver] = useState(isEditing);
   const [error, setError] = useState('');
   const [currentSection, setCurrentSection] = useState(1);
-  const totalSections = 5;
+  const totalSections = 6;
+  const [compliance, setCompliance] = useState<DriverCompliancePayload>(() =>
+    getDefaultDriverCompliancePayload(),
+  );
 
   const vehicleTypeOptions = ['Truck', 'Van', 'Trailer', 'Reefer', 'Flatbed'];
   const licenseTypes = ['AZ', 'DZ', 'G-Class', 'G1/G2', 'Other'];
@@ -59,31 +68,29 @@ export default function CreateDriverPage() {
     license_type: undefined,
     license_other: '',
     issuing_authority: '',
+    license_issue_date: '',
     license_expiry_date: '',
-    years_of_experience: 0,
-    driving_history: '',
     vehicle_types: [],
-    vehicle_ownership: undefined,
-    vehicle_capacity: '',
-    route_type: undefined,
-    route_details: '',
-    shift_timing: undefined,
-    pay_type: undefined,
-    drug_alcohol_test: false,
-    compliance_notes: '',
     status: 'pending_approval',
     driver_class_id: undefined,
     driver_class_effective_date: '',
+    payee_business_name: '',
+    payee_address: '',
+    background_check_status: 'pending',
   });
 
   const [documentFiles, setDocumentFiles] = useState<{
-    medical_certificate: File | null;
+    pcc_document: File | null;
+    license_front_image: File | null;
+    license_back_image: File | null;
     license_document: File | null;
     abstract_document: File | null;
     cvor_document: File | null;
     safety_certificate: File | null;
   }>({
-    medical_certificate: null,
+    pcc_document: null,
+    license_front_image: null,
+    license_back_image: null,
     license_document: null,
     abstract_document: null,
     cvor_document: null,
@@ -117,37 +124,37 @@ export default function CreateDriverPage() {
         return;
       }
 
-      // Populate form with driver data
+      // Populate form with driver data (structured fields mirror public registration JSON)
+      setCompliance(parseDriverComplianceNotes(driver.compliance_notes));
       setFormData({
         name: driver.user?.name || '',
         email: driver.user?.email || '',
         password: '', // Don't populate password
         tenant_id: driver.tenant_id || '',
         license_number: driver.license_number || '',
-        license_type: driver.license_type as any,
+        license_type: driver.license_type as CreateDriverData['license_type'],
         license_other: driver.license_other || '',
         issuing_authority: driver.issuing_authority || '',
+        license_issue_date: driver.license_issue_date
+          ? new Date(driver.license_issue_date).toISOString().split('T')[0]
+          : '',
         license_expiry_date: driver.license_expiry_date
           ? new Date(driver.license_expiry_date).toISOString().split('T')[0]
           : '',
-        years_of_experience: driver.years_of_experience || 0,
-        driving_history: driver.driving_history || '',
         vehicle_types: driver.vehicle_types || [],
-        vehicle_ownership: driver.vehicle_ownership as any,
-        vehicle_capacity: driver.vehicle_capacity || '',
-        route_type: driver.route_type as any,
-        route_details: driver.route_details || '',
-        shift_timing: driver.shift_timing as any,
-        pay_type: driver.pay_type as any,
-        drug_alcohol_test: driver.drug_alcohol_test || false,
-        compliance_notes: driver.compliance_notes || '',
-        status: driver.status as any,
+        status: driver.status as CreateDriverData['status'],
         driver_class_id: driver.driver_class_id ?? undefined,
         driver_class_effective_date: driver.driver_class_effective_date
           ? new Date(driver.driver_class_effective_date)
               .toISOString()
               .split('T')[0]
           : '',
+        payee_business_name: driver.payee_business_name || '',
+        payee_address: driver.payee_address || '',
+        background_check_status:
+          driver.background_check_status === 'completed'
+            ? 'completed'
+            : 'pending',
       });
     } catch (err: any) {
       toast.error('Failed to load driver data');
@@ -174,7 +181,10 @@ export default function CreateDriverPage() {
     setError('');
   };
 
-  const handleFileChange = (field: string, file: File | null) => {
+  const handleFileChange = (
+    field: keyof typeof documentFiles,
+    file: File | null,
+  ) => {
     setDocumentFiles((prev) => ({ ...prev, [field]: file }));
   };
 
@@ -189,8 +199,7 @@ export default function CreateDriverPage() {
     });
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const submitDriver = async (navigateAfterSave: boolean) => {
     setError('');
     setIsLoading(true);
 
@@ -202,15 +211,22 @@ export default function CreateDriverPage() {
     }
 
     try {
-      const submitData: any = {
+      const submitData: Record<string, unknown> = {
         ...formData,
+        compliance_notes: serializeDriverCompliancePayload(compliance),
         // Add document files
-        medical_certificate: documentFiles.medical_certificate,
+        pcc_document: documentFiles.pcc_document,
+        license_front_image: documentFiles.license_front_image,
+        license_back_image: documentFiles.license_back_image,
         license_document: documentFiles.license_document,
         abstract_document: documentFiles.abstract_document,
         cvor_document: documentFiles.cvor_document,
         safety_certificate: documentFiles.safety_certificate,
       };
+
+      submitData.payee_business_name = formData.payee_business_name?.trim() || '';
+      submitData.payee_address = formData.payee_address?.trim() || '';
+      submitData.background_check_status = formData.background_check_status;
 
       // Remove password if not provided (for editing)
       if (isEditing && !submitData.password) {
@@ -221,13 +237,17 @@ export default function CreateDriverPage() {
         formData.driver_class_effective_date || null;
 
       if (isEditing && driverId) {
-        // Update existing driver
-        await apiClient.updateDriver(driverId, submitData);
-        toast.success('Driver profile updated successfully');
-        router.push(isDriver ? '/driver/profile' : '/admin/drivers');
+        await apiClient.updateDriver(driverId, submitData as CreateDriverData);
+        toast.success(
+          navigateAfterSave
+            ? 'Driver profile saved. Returning to list…'
+            : 'Driver profile saved.',
+        );
+        if (navigateAfterSave) {
+          router.push(isDriver ? '/driver/profile' : '/admin/drivers');
+        }
       } else {
-        // Create new driver
-        await apiClient.createDriver(submitData);
+        await apiClient.createDriver(submitData as CreateDriverData);
         toast.success('Driver created successfully');
         router.push('/admin/drivers');
       }
@@ -240,6 +260,15 @@ export default function CreateDriverPage() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSubmit = (
+    e: React.FormEvent,
+    opts?: { navigateAfter?: boolean },
+  ) => {
+    e.preventDefault();
+    const navigateAfterSave = opts?.navigateAfter ?? !isEditing;
+    void submitDriver(navigateAfterSave);
   };
 
   const nextSection = (e?: React.MouseEvent) => {
@@ -260,58 +289,6 @@ export default function CreateDriverPage() {
     if (currentSection > 1) {
       setCurrentSection(currentSection - 1);
     }
-  };
-
-  const DocumentUploadField = ({
-    field,
-    label,
-    required = false,
-  }: {
-    field: keyof typeof documentFiles;
-    label: string;
-    required?: boolean;
-  }) => {
-    const file = documentFiles[field];
-
-    return (
-      <div className='space-y-2'>
-        <Label htmlFor={field} className='text-slate-200'>
-          {label} {required && '*'}
-        </Label>
-        <div className='flex items-center gap-2'>
-          <Input
-            id={field}
-            type='file'
-            accept='.pdf,.jpg,.jpeg,.png'
-            onChange={(e) => {
-              const selectedFile = e.target.files?.[0] || null;
-              handleFileChange(field, selectedFile);
-            }}
-            disabled={isLoading}
-            className='text-white bg-slate-700 border-slate-600 text-white'
-            required={required}
-          />
-          {file && (
-            <div className='flex items-center gap-2'>
-              <FileImage className='h-4 w-4 text-green-400' />
-              <span className='text-sm text-slate-300'>{file.name}</span>
-              <Button
-                type='button'
-                variant='ghost'
-                size='sm'
-                onClick={() => handleFileChange(field, null)}
-                className='h-6 w-6 p-0 text-red-400 hover:text-red-300'
-              >
-                <X className='h-4 w-4' />
-              </Button>
-            </div>
-          )}
-        </div>
-        <p className='text-xs text-slate-400'>
-          Accepted: PDF, JPG, PNG (Max 5MB)
-        </p>
-      </div>
-    );
   };
 
   if (isLoadingDriver) {
@@ -351,27 +328,47 @@ export default function CreateDriverPage() {
       {/* Progress Indicator */}
       <Card className='bg-slate-800 border-slate-700'>
         <CardContent className='pt-6'>
-          <div className='flex items-center justify-between'>
-            {[1, 2, 3, 4, 5].map((section) => (
-              <div key={section} className='flex items-center flex-1'>
+          <div className='flex items-center'>
+            {[
+              'Account',
+              'Address',
+              'License',
+              'Driving',
+              'Employment',
+              'Docs',
+            ].map((label, idx) => {
+              const section = idx + 1;
+              return (
                 <div
-                  className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold ${
-                    section <= currentSection
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-slate-700 text-slate-400'
-                  }`}
+                  key={label}
+                  className='flex flex-1 items-center min-w-0'
                 >
-                  {section}
+                  <div className='flex shrink-0 flex-col items-center gap-1'>
+                    <div
+                      className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-semibold sm:h-10 sm:w-10 ${
+                        section <= currentSection
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-slate-700 text-slate-400'
+                      }`}
+                    >
+                      {section}
+                    </div>
+                    <span className='hidden max-w-[4.5rem] text-center text-[10px] uppercase tracking-wide text-slate-500 sm:block'>
+                      {label}
+                    </span>
+                  </div>
+                  {section < totalSections ? (
+                    <div
+                      className={`mx-1 h-1 min-h-px flex-1 ${
+                        section < currentSection
+                          ? 'bg-blue-600'
+                          : 'bg-slate-700'
+                      }`}
+                    />
+                  ) : null}
                 </div>
-                {section < 5 && (
-                  <div
-                    className={`flex-1 h-1 mx-2 ${
-                      section < currentSection ? 'bg-blue-600' : 'bg-slate-700'
-                    }`}
-                  />
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </CardContent>
       </Card>
@@ -379,7 +376,15 @@ export default function CreateDriverPage() {
       {/* Form Card */}
       <Card className='bg-slate-800 border-slate-700'>
         <CardContent className='pt-6'>
-          <form onSubmit={handleSubmit} className='space-y-6'>
+          <form
+            onSubmit={(e) =>
+              handleSubmit(
+                e,
+                isEditing ? { navigateAfter: false } : undefined,
+              )
+            }
+            className='space-y-6'
+          >
             {error && (
               <Alert variant='destructive'>
                 <AlertCircle className='h-4 w-4' />
@@ -387,15 +392,14 @@ export default function CreateDriverPage() {
               </Alert>
             )}
 
-            {/* Section A: License Information */}
+            {/* Section 1: Account & personal (mirrors registration JSON → compliance_notes.personal + user) */}
             {currentSection === 1 && (
               <div className='space-y-4'>
                 <h3 className='text-lg font-semibold text-white'>
-                  License Information
+                  Account &amp; personal
                 </h3>
 
-                {/* Basic User Info */}
-                <div className='grid grid-cols-2 gap-4'>
+                <div className='grid gap-4 sm:grid-cols-2'>
                   <div className='space-y-2'>
                     <Label htmlFor='name' className='text-slate-200'>
                       Full Name *
@@ -407,7 +411,7 @@ export default function CreateDriverPage() {
                       onChange={handleChange}
                       placeholder='Enter full name'
                       disabled={isLoading}
-                      className='text-white bg-slate-700 border-slate-600 text-white'
+                      className='border-slate-600 bg-slate-700 text-white'
                       required
                     />
                   </div>
@@ -423,18 +427,18 @@ export default function CreateDriverPage() {
                       onChange={handleChange}
                       placeholder='your@email.com'
                       disabled={isLoading}
-                      className='text-white bg-slate-700 border-slate-600 text-white'
+                      className='border-slate-600 bg-slate-700 text-white'
                       required
                     />
                   </div>
                 </div>
 
-                <div className='grid grid-cols-2 gap-4'>
+                <div className='grid gap-4 sm:grid-cols-2'>
                   <div className='space-y-2'>
                     <Label htmlFor='password' className='text-slate-200'>
                       Password {!isEditing && '*'}
                       {isEditing && (
-                        <span className='text-slate-400 text-xs ml-2'>
+                        <span className='ml-2 text-xs text-slate-400'>
                           (Leave blank to keep current password)
                         </span>
                       )}
@@ -451,12 +455,12 @@ export default function CreateDriverPage() {
                           : 'At least 8 characters'
                       }
                       disabled={isLoading || isLoadingDriver}
-                      className='text-white bg-slate-700 border-slate-600 text-white'
+                      className='border-slate-600 bg-slate-700 text-white'
                       required={!isEditing}
-                      minLength={8}
+                      minLength={isEditing ? undefined : 8}
                     />
                   </div>
-                  {currentUser?.is_global_admin && (
+                  {currentUser?.is_global_admin ? (
                     <div className='space-y-2'>
                       <Label htmlFor='tenant_id' className='text-slate-200'>
                         Tenant
@@ -468,10 +472,10 @@ export default function CreateDriverPage() {
                         }
                         disabled={isLoading}
                       >
-                        <SelectTrigger className='text-white bg-slate-700 border-slate-600 text-white'>
+                        <SelectTrigger className='border-slate-600 bg-slate-700 text-white'>
                           <SelectValue placeholder='Select tenant' />
                         </SelectTrigger>
-                        <SelectContent className='text-white bg-slate-700 border-slate-600'>
+                        <SelectContent className='border-slate-600 bg-slate-700 text-white'>
                           {tenants.map((tenant) => (
                             <SelectItem key={tenant.id} value={tenant.id}>
                               {tenant.name ||
@@ -482,478 +486,160 @@ export default function CreateDriverPage() {
                         </SelectContent>
                       </Select>
                     </div>
-                  )}
+                  ) : null}
                 </div>
 
-                <div className='grid grid-cols-2 gap-4'>
+                <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3'>
                   <div className='space-y-2'>
-                    <Label htmlFor='license_number' className='text-slate-200'>
-                      License Number *
-                    </Label>
+                    <Label className='text-slate-200'>Middle initial</Label>
                     <Input
-                      id='license_number'
-                      name='license_number'
-                      value={formData.license_number}
-                      onChange={handleChange}
-                      placeholder='Enter license number'
-                      disabled={isLoading}
-                      className='text-white bg-slate-700 border-slate-600 text-white'
-                      required
-                    />
-                  </div>
-                  <div className='space-y-2'>
-                    <Label htmlFor='license_type' className='text-slate-200'>
-                      License Type *
-                    </Label>
-                    <Select
-                      value={formData.license_type || ''}
-                      onValueChange={(value) =>
-                        setFormData({ ...formData, license_type: value as any })
+                      value={compliance.personal.middle_initial}
+                      onChange={(e) =>
+                        setCompliance((p) => ({
+                          ...p,
+                          personal: {
+                            ...p.personal,
+                            middle_initial: e.target.value,
+                          },
+                        }))
                       }
                       disabled={isLoading}
-                    >
-                      <SelectTrigger className='text-white bg-slate-700 border-slate-600 text-white'>
-                        <SelectValue placeholder='Select license type' />
-                      </SelectTrigger>
-                      <SelectContent className='text-white bg-slate-700 border-slate-600'>
-                        {licenseTypes.map((type) => (
-                          <SelectItem key={type} value={type}>
-                            {type}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                {formData.license_type === 'Other' && (
-                  <div className='space-y-2'>
-                    <Label htmlFor='license_other' className='text-slate-200'>
-                      Specify License Type *
-                    </Label>
-                    <Input
-                      id='license_other'
-                      name='license_other'
-                      value={formData.license_other}
-                      onChange={handleChange}
-                      placeholder='Enter license type'
-                      disabled={isLoading}
-                      className='text-white bg-slate-700 border-slate-600 text-white'
-                      required
-                    />
-                  </div>
-                )}
-                <div className='grid grid-cols-2 gap-4'>
-                  <div className='space-y-2'>
-                    <Label
-                      htmlFor='issuing_authority'
-                      className='text-slate-200'
-                    >
-                      Issuing Authority
-                    </Label>
-                    <Input
-                      id='issuing_authority'
-                      name='issuing_authority'
-                      value={formData.issuing_authority}
-                      onChange={handleChange}
-                      placeholder='e.g., DMV, MTO'
-                      disabled={isLoading}
-                      className='text-white bg-slate-700 border-slate-600 text-white'
+                      className='border-slate-600 bg-slate-700 text-white'
+                      maxLength={4}
                     />
                   </div>
                   <div className='space-y-2'>
-                    <Label
-                      htmlFor='license_expiry_date'
-                      className='text-slate-200'
-                    >
-                      License Expiry Date *
-                    </Label>
+                    <Label className='text-slate-200'>Gender</Label>
                     <Input
-                      id='license_expiry_date'
-                      name='license_expiry_date'
+                      value={compliance.personal.gender}
+                      onChange={(e) =>
+                        setCompliance((p) => ({
+                          ...p,
+                          personal: {
+                            ...p.personal,
+                            gender: e.target.value,
+                          },
+                        }))
+                      }
+                      disabled={isLoading}
+                      className='border-slate-600 bg-slate-700 text-white'
+                    />
+                  </div>
+                  <div className='space-y-2'>
+                    <Label className='text-slate-200'>Date of birth</Label>
+                    <Input
                       type='date'
-                      value={formData.license_expiry_date}
-                      onChange={handleChange}
-                      disabled={isLoading}
-                      className='text-white bg-slate-700 border-slate-600 text-white'
-                      required
-                      min={new Date().toISOString().split('T')[0]}
-                    />
-                  </div>
-                </div>
-
-                {/* License Document Upload */}
-                <DocumentUploadField
-                  field='license_document'
-                  label='License Document'
-                />
-              </div>
-            )}
-
-            {/* Section B: Driving Experience */}
-            {currentSection === 2 && (
-              <div className='space-y-4'>
-                <h3 className='text-lg font-semibold text-white'>
-                  Driving Experience
-                </h3>
-                <div className='space-y-2'>
-                  <Label
-                    htmlFor='years_of_experience'
-                    className='text-slate-200'
-                  >
-                    Years of Experience *
-                  </Label>
-                  <Input
-                    id='years_of_experience'
-                    name='years_of_experience'
-                    type='number'
-                    min='0'
-                    value={formData.years_of_experience}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        years_of_experience: parseInt(e.target.value) || 0,
-                      })
-                    }
-                    placeholder='0'
-                    disabled={isLoading}
-                    className='text-white bg-slate-700 border-slate-600 text-white'
-                    required
-                  />
-                </div>
-                <div className='space-y-2'>
-                  <Label htmlFor='driving_history' className='text-slate-200'>
-                    Driving History
-                  </Label>
-                  <Textarea
-                    id='driving_history'
-                    name='driving_history'
-                    value={formData.driving_history}
-                    onChange={handleChange}
-                    placeholder='Accidents, violations, endorsements...'
-                    disabled={isLoading}
-                    className='text-white bg-slate-700 border-slate-600 text-white min-h-[100px]'
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Section C: Vehicle Information */}
-            {currentSection === 3 && (
-              <div className='space-y-4'>
-                <h3 className='text-lg font-semibold text-white'>
-                  Vehicle Information
-                </h3>
-                <div className='space-y-2'>
-                  <Label className='text-slate-200'>Vehicle Types</Label>
-                  <div className='grid grid-cols-2 gap-2 border border-slate-600 rounded-lg p-3 bg-slate-700/50'>
-                    {vehicleTypeOptions.map((type) => (
-                      <div key={type} className='flex items-center gap-2'>
-                        <Checkbox
-                          id={`vehicle-${type}`}
-                          checked={
-                            formData.vehicle_types?.includes(type) || false
-                          }
-                          onCheckedChange={() => handleVehicleTypeToggle(type)}
-                          disabled={isLoading}
-                          className='border-slate-500'
-                        />
-                        <label
-                          htmlFor={`vehicle-${type}`}
-                          className='text-slate-300 text-sm cursor-pointer'
-                        >
-                          {type}
-                        </label>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div className='grid grid-cols-2 gap-4'>
-                  <div className='space-y-2'>
-                    <Label
-                      htmlFor='vehicle_ownership'
-                      className='text-slate-200'
-                    >
-                      Vehicle Ownership
-                    </Label>
-                    <Select
-                      value={formData.vehicle_ownership || ''}
-                      onValueChange={(value) =>
-                        setFormData({
-                          ...formData,
-                          vehicle_ownership: value as any,
-                        })
+                      value={compliance.personal.date_of_birth}
+                      onChange={(e) =>
+                        setCompliance((p) => ({
+                          ...p,
+                          personal: {
+                            ...p.personal,
+                            date_of_birth: e.target.value,
+                          },
+                        }))
                       }
                       disabled={isLoading}
-                    >
-                      <SelectTrigger className='text-white bg-slate-700 border-slate-600 text-white'>
-                        <SelectValue placeholder='Select ownership' />
-                      </SelectTrigger>
-                      <SelectContent className='text-white bg-slate-700 border-slate-600'>
-                        <SelectItem value='company-owned'>
-                          Company-Owned
-                        </SelectItem>
-                        <SelectItem value='self-owned'>Self-Owned</SelectItem>
-                      </SelectContent>
-                    </Select>
+                      className='border-slate-600 bg-slate-700 text-white'
+                    />
                   </div>
-                  <div className='space-y-2'>
-                    <Label
-                      htmlFor='vehicle_capacity'
-                      className='text-slate-200'
-                    >
-                      Vehicle Capacity
+                  <div className='space-y-2 lg:col-span-2'>
+                    <Label className='text-slate-200'>
+                      Legally entitled to work in Canada
                     </Label>
                     <Input
-                      id='vehicle_capacity'
-                      name='vehicle_capacity'
-                      value={formData.vehicle_capacity}
-                      onChange={handleChange}
-                      placeholder='e.g., 10,000 lbs'
+                      value={compliance.personal.work_eligibility_canada}
+                      onChange={(e) =>
+                        setCompliance((p) => ({
+                          ...p,
+                          personal: {
+                            ...p.personal,
+                            work_eligibility_canada: e.target.value,
+                          },
+                        }))
+                      }
                       disabled={isLoading}
-                      className='text-white bg-slate-700 border-slate-600 text-white'
+                      placeholder='Yes / Citizen / Permit number…'
+                      className='border-slate-600 bg-slate-700 text-white'
+                    />
+                  </div>
+                  <div className='space-y-2 lg:col-span-3'>
+                    <Label className='text-slate-200'>Education</Label>
+                    <Input
+                      value={compliance.personal.education}
+                      onChange={(e) =>
+                        setCompliance((p) => ({
+                          ...p,
+                          personal: {
+                            ...p.personal,
+                            education: e.target.value,
+                          },
+                        }))
+                      }
+                      disabled={isLoading}
+                      className='border-slate-600 bg-slate-700 text-white'
+                    />
+                  </div>
+                  <div className='space-y-2'>
+                    <Label className='text-slate-200'>Medical limitations</Label>
+                    <Input
+                      value={compliance.personal.medical_limitations}
+                      onChange={(e) =>
+                        setCompliance((p) => ({
+                          ...p,
+                          personal: {
+                            ...p.personal,
+                            medical_limitations: e.target.value,
+                          },
+                        }))
+                      }
+                      disabled={isLoading}
+                      placeholder='Yes / No'
+                      className='border-slate-600 bg-slate-700 text-white'
+                    />
+                  </div>
+                  <div className='space-y-2 lg:col-span-2'>
+                    <Label className='text-slate-200'>
+                      Medical limitations explanation
+                    </Label>
+                    <Textarea
+                      value={compliance.personal.medical_limitations_explanation}
+                      onChange={(e) =>
+                        setCompliance((p) => ({
+                          ...p,
+                          personal: {
+                            ...p.personal,
+                            medical_limitations_explanation: e.target.value,
+                          },
+                        }))
+                      }
+                      disabled={isLoading}
+                      className='min-h-[72px] border-slate-600 bg-slate-700 text-white'
                     />
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Section D: Route & Shift Details */}
-            {currentSection === 4 && (
-              <div className='space-y-4'>
-                <h3 className='text-lg font-semibold text-white'>
-                  Route & Shift Details
-                </h3>
-                <div className='grid grid-cols-2 gap-4'>
-                  <div className='space-y-2'>
-                    <Label htmlFor='route_type' className='text-slate-200'>
-                      Route Type
-                    </Label>
-                    <Select
-                      value={formData.route_type || ''}
-                      onValueChange={(value) =>
-                        setFormData({ ...formData, route_type: value as any })
-                      }
-                      disabled={isLoading}
-                    >
-                      <SelectTrigger className='text-white bg-slate-700 border-slate-600 text-white'>
-                        <SelectValue placeholder='Select route type' />
-                      </SelectTrigger>
-                      <SelectContent className='text-white bg-slate-700 border-slate-600'>
-                        <SelectItem value='local'>Local</SelectItem>
-                        <SelectItem value='regional'>Regional</SelectItem>
-                        <SelectItem value='long-haul'>Long-Haul</SelectItem>
-                        <SelectItem value='intercity'>Intercity</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className='space-y-2'>
-                    <Label htmlFor='shift_timing' className='text-slate-200'>
-                      Shift Timing
-                    </Label>
-                    <Select
-                      value={formData.shift_timing || ''}
-                      onValueChange={(value) =>
-                        setFormData({ ...formData, shift_timing: value as any })
-                      }
-                      disabled={isLoading}
-                    >
-                      <SelectTrigger className='text-white bg-slate-700 border-slate-600 text-white'>
-                        <SelectValue placeholder='Select shift' />
-                      </SelectTrigger>
-                      <SelectContent className='text-white bg-slate-700 border-slate-600'>
-                        <SelectItem value='day'>Day</SelectItem>
-                        <SelectItem value='night'>Night</SelectItem>
-                        <SelectItem value='rotational'>Rotational</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className='space-y-2'>
-                  <Label htmlFor='pay_type' className='text-slate-200'>
-                    Pay Type
-                  </Label>
-                  <Select
-                    value={formData.pay_type || ''}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, pay_type: value as any })
-                    }
-                    disabled={isLoading}
-                  >
-                    <SelectTrigger className='text-white bg-slate-700 border-slate-600 text-white'>
-                      <SelectValue placeholder='Select pay type' />
-                    </SelectTrigger>
-                    <SelectContent className='text-white bg-slate-700 border-slate-600'>
-                      <SelectItem value='hourly'>Hourly</SelectItem>
-                      <SelectItem value='per_mile'>Per Mile</SelectItem>
-                      <SelectItem value='per_trip'>Per Trip</SelectItem>
-                      <SelectItem value='fixed_salary'>Fixed Salary</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className='space-y-2'>
-                  <Label htmlFor='route_details' className='text-slate-200'>
-                    Route Details
-                  </Label>
-                  <Textarea
-                    id='route_details'
-                    name='route_details'
-                    value={formData.route_details}
-                    onChange={handleChange}
-                    placeholder='Preferred routes, regions, cities...'
-                    disabled={isLoading}
-                    className='text-white bg-slate-700 border-slate-600 text-white min-h-[100px]'
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Section E: Compliance & Documents */}
-            {currentSection === 5 && (
-              <div className='space-y-4'>
-                <h3 className='text-lg font-semibold text-white'>
-                  Compliance Requirements & Documents
-                </h3>
-
-                {/* Document Uploads */}
-                <div className='grid grid-cols-2 gap-4'>
-                  <DocumentUploadField
-                    field='medical_certificate'
-                    label='Medical Certificate'
-                  />
-                  <DocumentUploadField
-                    field='abstract_document'
-                    label='Abstract Document'
-                  />
-                  <DocumentUploadField
-                    field='cvor_document'
-                    label='CVOR Document'
-                  />
-                  <DocumentUploadField
-                    field='safety_certificate'
-                    label='Safety Certificate'
-                  />
-                </div>
-
-                <div className='flex items-center gap-2'>
-                  <Checkbox
-                    id='drug_alcohol_test'
-                    checked={formData.drug_alcohol_test}
-                    onCheckedChange={(checked) =>
-                      setFormData({
-                        ...formData,
-                        drug_alcohol_test: checked as boolean,
-                      })
-                    }
-                    disabled={isLoading}
-                    className='border-slate-500'
-                  />
-                  <Label
-                    htmlFor='drug_alcohol_test'
-                    className='text-slate-200 cursor-pointer'
-                  >
-                    Drug & Alcohol Test Completed
-                  </Label>
-                </div>
-
-                <div className='space-y-2'>
-                  <Label htmlFor='compliance_notes' className='text-slate-200'>
-                    Compliance Notes
-                  </Label>
-                  <Textarea
-                    id='compliance_notes'
-                    name='compliance_notes'
-                    value={formData.compliance_notes}
-                    onChange={handleChange}
-                    placeholder='Additional compliance information...'
-                    disabled={isLoading}
-                    className='text-white bg-slate-700 border-slate-600 text-white min-h-[80px]'
-                  />
-                </div>
-
-                {/* Status (Admin only) */}
-                <div className='space-y-2'>
-                  <Label htmlFor='status' className='text-slate-200'>
-                    Initial Status
-                  </Label>
-                  <Select
-                    value={formData.status || 'pending_approval'}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, status: value as any })
-                    }
-                    disabled={isLoading}
-                  >
-                    <SelectTrigger className='text-white bg-slate-700 border-slate-600 text-white'>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className='text-white bg-slate-700 border-slate-600'>
-                      <SelectItem value='pending_approval'>
-                        Pending Approval
-                      </SelectItem>
-                      <SelectItem value='active'>Active</SelectItem>
-                      <SelectItem value='inactive'>Inactive</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Driver Class (pay tier) */}
-                <div className='space-y-2'>
-                  <Label htmlFor='driver_class_id' className='text-slate-200'>
-                    Driver Class
-                  </Label>
-                  <Select
-                    value={
-                      formData.driver_class_id != null
-                        ? String(formData.driver_class_id)
-                        : ''
-                    }
-                    onValueChange={(value) =>
-                      setFormData({
-                        ...formData,
-                        driver_class_id: value ? Number(value) : undefined,
-                      })
-                    }
-                    disabled={isLoading}
-                  >
-                    <SelectTrigger className='text-white bg-slate-700 border-slate-600 text-white'>
-                      <SelectValue placeholder='Select class (optional)' />
-                    </SelectTrigger>
-                    <SelectContent className='text-white bg-slate-700 border-slate-600'>
-                      <SelectItem value=''>None</SelectItem>
-                      {driverClasses.map((dc) => (
-                        <SelectItem key={dc.id} value={String(dc.id)}>
-                          {dc.code}
-                          {dc.name ? ` — ${dc.name}` : ''}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className='space-y-2'>
-                  <Label
-                    htmlFor='driver_class_effective_date'
-                    className='text-slate-200'
-                  >
-                    Class Effective Date (optional)
-                  </Label>
-                  <Input
-                    id='driver_class_effective_date'
-                    type='date'
-                    value={formData.driver_class_effective_date ?? ''}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        driver_class_effective_date: e.target.value,
-                      })
-                    }
-                    disabled={isLoading}
-                    className='text-white bg-slate-700 border-slate-600 text-white'
-                  />
-                </div>
-              </div>
-            )}
+            <DriverCreateExtendedSteps
+              currentSection={currentSection}
+              isLoading={isLoading}
+              isEditing={isEditing}
+              compliance={compliance}
+              setCompliance={setCompliance}
+              formData={formData}
+              setFormData={setFormData}
+              handleChange={handleChange}
+              handleVehicleTypeToggle={handleVehicleTypeToggle}
+              vehicleTypeOptions={vehicleTypeOptions}
+              licenseTypes={licenseTypes}
+              documentFiles={documentFiles}
+              handleFileChange={handleFileChange}
+              driverClasses={driverClasses}
+            />
 
             {/* Navigation Buttons */}
-            <div className='flex gap-3 justify-between pt-4 border-t border-slate-700'>
+            <div className='flex flex-wrap items-center justify-between gap-3 border-t border-slate-700 pt-4'>
               <Button
                 type='button'
                 variant='outline'
@@ -963,39 +649,59 @@ export default function CreateDriverPage() {
                   prevSection(e);
                 }}
                 disabled={currentSection === 1 || isLoading}
-                className='border-slate-600 bg-transparent text-slate-600 hover:text-white hover:bg-slate-600'
+                className='border-slate-600 bg-transparent text-slate-600 hover:bg-slate-600 hover:text-white'
               >
                 Previous
               </Button>
-              {currentSection < totalSections ? (
-                <Button
-                  type='button'
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    nextSection(e);
-                  }}
-                  disabled={isLoading}
-                  className='bg-blue-600 hover:bg-blue-700'
-                >
-                  Next
-                </Button>
-              ) : (
-                <Button
-                  type='submit'
-                  disabled={isLoading}
-                  className='bg-blue-600 hover:bg-blue-700'
-                >
-                  {isLoading && <Spinner className='mr-2 h-4 w-4' />}
-                  {isLoading
-                    ? isEditing
-                      ? 'Updating...'
-                      : 'Creating...'
-                    : isEditing
-                      ? 'Update Driver'
-                      : 'Create Driver'}
-                </Button>
-              )}
+              <div className='flex flex-wrap items-center gap-2'>
+                {isEditing && driverId ? (
+                  <>
+                    <Button
+                      type='submit'
+                      disabled={isLoading}
+                      variant='outline'
+                      className='border-slate-500 text-slate-100 hover:bg-slate-700'
+                    >
+                      {isLoading && <Spinner className='mr-2 h-4 w-4 shrink-0' />}
+                      {isLoading ? 'Saving…' : 'Save changes'}
+                    </Button>
+                    <Button
+                      type='button'
+                      disabled={isLoading}
+                      variant='outline'
+                      className='border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white'
+                      onClick={() => void submitDriver(true)}
+                    >
+                      Save &amp; close
+                    </Button>
+                  </>
+                ) : null}
+                {currentSection < totalSections ? (
+                  <Button
+                    type='button'
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      nextSection(e);
+                    }}
+                    disabled={isLoading}
+                    className='bg-blue-600 hover:bg-blue-700'
+                  >
+                    Next
+                  </Button>
+                ) : (
+                  !isEditing && (
+                    <Button
+                      type='submit'
+                      disabled={isLoading}
+                      className='bg-blue-600 hover:bg-blue-700'
+                    >
+                      {isLoading && <Spinner className='mr-2 h-4 w-4 shrink-0' />}
+                      {isLoading ? 'Creating...' : 'Create Driver'}
+                    </Button>
+                  )
+                )}
+              </div>
             </div>
           </form>
         </CardContent>

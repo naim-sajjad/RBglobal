@@ -155,27 +155,34 @@ export interface Driver {
   license_type?: 'AZ' | 'DZ' | 'G-Class' | 'G1/G2' | 'Other';
   license_other?: string;
   issuing_authority?: string;
+  license_issue_date?: string;
   license_expiry_date?: string;
-  // Driving Experience
-  years_of_experience?: number;
-  driving_history?: string;
   // Vehicle Information
   vehicle_types?: string[];
-  vehicle_ownership?: 'company-owned' | 'self-owned';
-  vehicle_capacity?: string;
-  // Route & Shift Details
-  route_type?: 'local' | 'regional' | 'long-haul' | 'intercity';
-  route_details?: string;
-  shift_timing?: 'day' | 'night' | 'rotational';
-  pay_type?: 'hourly' | 'per_mile' | 'per_trip' | 'fixed_salary';
+  years_of_experience?: number | null;
+  driving_history?: string | null;
+  route_type?: string | null;
+  pay_type?: string | null;
+  shift_timing?: string | null;
+  drug_alcohol_test?: boolean;
   // Compliance Requirements & Documents
-  medical_certificate_path?: string;
-  license_document_path?: string;
+  pcc_document_path?: string;
+  license_document_path?: string; // legacy
+  license_front_image_path?: string;
+  license_back_image_path?: string;
   abstract_document_path?: string;
   cvor_document_path?: string;
   safety_certificate_path?: string;
+  /** Full browser URLs returned by API (APP_URL/storage/...) */
+  pcc_document_url?: string | null;
+  license_document_url?: string | null;
+  license_front_image_url?: string | null;
+  license_back_image_url?: string | null;
+  abstract_document_url?: string | null;
+  cvor_document_url?: string | null;
+  safety_certificate_url?: string | null;
   background_check_status?: 'pending' | 'completed';
-  drug_alcohol_test?: boolean;
+  reference_check_status?: 'pending' | 'completed';
   compliance_notes?: string;
   /** Remittance slip “Payment to” (e.g. corporation + mailing address) */
   payee_business_name?: string | null;
@@ -205,28 +212,21 @@ export interface CreateDriverData {
   license_type?: 'AZ' | 'DZ' | 'G-Class' | 'G1/G2' | 'Other';
   license_other?: string;
   issuing_authority?: string;
+  license_issue_date?: string;
   license_expiry_date?: string;
-  // Driving Experience
-  years_of_experience?: number;
-  driving_history?: string;
   // Vehicle Information
   vehicle_types?: string[];
-  vehicle_ownership?: 'company-owned' | 'self-owned';
-  vehicle_capacity?: string;
-  // Route & Shift Details
-  route_type?: 'local' | 'regional' | 'long-haul' | 'intercity';
-  route_details?: string;
-  shift_timing?: 'day' | 'night' | 'rotational';
-  pay_type?: 'hourly' | 'per_mile' | 'per_trip' | 'fixed_salary';
   // Compliance Requirements & Documents
-  medical_certificate?: File;
   license_document?: File;
   abstract_document?: File;
   cvor_document?: File;
   safety_certificate?: File;
   background_check_status?: 'pending' | 'completed';
+  reference_check_status?: 'pending' | 'completed';
   drug_alcohol_test?: boolean;
   compliance_notes?: string;
+  payee_business_name?: string | null;
+  payee_address?: string | null;
   // Status (admin only)
   status?: 'pending_approval' | 'active' | 'inactive' | 'suspended';
   // Driver class (pay tier)

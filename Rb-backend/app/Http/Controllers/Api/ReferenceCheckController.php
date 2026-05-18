@@ -6,9 +6,24 @@ use App\Http\Controllers\Controller;
 use App\Models\Driver;
 use App\Models\ReferenceCheck;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 
 class ReferenceCheckController extends Controller
 {
+    /**
+     * When a referee or admin submits the full reference form, mark the driver's reference check completed (auto).
+     * Admins can still set pending/completed manually on the driver record.
+     */
+    private function markDriverReferenceCheckCompleted(ReferenceCheck $check): void
+    {
+        if (! Schema::hasColumn('drivers', 'reference_check_status')) {
+            return;
+        }
+        Driver::query()->whereKey($check->driver_id)->update([
+            'reference_check_status' => 'completed',
+        ]);
+    }
+
     /**
      * Ensure the driver can be accessed by the current user (tenant scope or super admin).
      */
@@ -162,6 +177,8 @@ class ReferenceCheckController extends Controller
             'completed_at' => now(),
         ]);
 
+        $this->markDriverReferenceCheckCompleted($referenceCheck);
+
         return response()->json($referenceCheck->fresh());
     }
 
@@ -220,6 +237,8 @@ class ReferenceCheckController extends Controller
             'status' => 'completed',
             'completed_at' => now(),
         ]);
+
+        $this->markDriverReferenceCheckCompleted($check);
 
         return response()->json(['message' => 'Reference check submitted successfully.', 'reference_check' => $check->fresh()]);
     }

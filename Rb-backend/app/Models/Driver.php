@@ -44,6 +44,7 @@ class Driver extends Model
         'cvor_document_path',
         'safety_certificate_path',
         'background_check_status',
+        'reference_check_status',
         'drug_alcohol_test',
         'compliance_notes',
         // Remittance slip (payment to — e.g. corporation name & mailing address)
