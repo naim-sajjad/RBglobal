@@ -518,14 +518,15 @@ export default function DriverDetailPage() {
   };
 
   const exportToPDF = async () => {
-    if (!driver || exportingPdf) return;
+    if (!driver) return;
+    const pdfDriver = driver;
 
     setExportingPdf(true);
     try {
       // Fetch reference checks for this driver (so they are included in PDF)
       let referenceChecks: any[] = [];
       try {
-        const checksData = await apiClient.getReferenceChecks(driver.id);
+        const checksData = await apiClient.getReferenceChecks(pdfDriver.id);
         referenceChecks = Array.isArray(checksData)
           ? checksData
           : (checksData?.data ?? []);
@@ -604,6 +605,539 @@ export default function DriverDetailPage() {
           yPos = 20;
         }
       };
+
+      const formatPdfDate = (value?: string | null) => {
+        if (!value) return '';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return value;
+        return date.toLocaleDateString('en-GB', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+        });
+      };
+
+      const yesNoValue = (value: unknown) => {
+        if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+        if (value === null || value === undefined || value === '') return 'N/A';
+        return String(value);
+      };
+
+      const addSectionTitle = (title: string) => {
+        checkNewPage(18);
+        yPos += 4;
+        doc.setFillColor(30, 58, 138);
+        doc.rect(margin, yPos, maxWidth, 8, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'bold');
+        doc.text(title, margin + 3, yPos + 5.5);
+        doc.setTextColor(0, 0, 0);
+        yPos += 13;
+      };
+
+      const addTextField = (
+        label: string,
+        value: unknown,
+        labelWidth = 52,
+      ) => {
+        checkNewPage(14);
+        doc.setFontSize(9.5);
+        doc.setFont('helvetica', 'bold');
+        const text = value === null || value === undefined || value === ''
+          ? 'N/A'
+          : String(value);
+        const labelText = `${label}:`;
+        const effectiveLabelWidth = Math.max(
+          labelWidth,
+          Math.min(86, doc.getTextWidth(labelText) + 4),
+        );
+
+        if (effectiveLabelWidth > maxWidth * 0.48) {
+          const labelLines = doc.splitTextToSize(labelText, maxWidth);
+          doc.text(labelLines, margin, yPos);
+          yPos += labelLines.length * lineHeight;
+          doc.setFont('helvetica', 'normal');
+          const valueLines = doc.splitTextToSize(text, maxWidth);
+          doc.text(valueLines, margin, yPos);
+          yPos += valueLines.length * lineHeight + 2;
+          return;
+        }
+
+        doc.text(labelText, margin, yPos);
+        doc.setFont('helvetica', 'normal');
+        const lines = doc.splitTextToSize(
+          text,
+          maxWidth - effectiveLabelWidth - 4,
+        );
+        doc.text(lines, margin + effectiveLabelWidth, yPos);
+        yPos += Math.max(lineHeight, lines.length * lineHeight) + 2;
+      };
+
+      const addTwoColumnFields = (
+        leftLabel: string,
+        leftValue: unknown,
+        rightLabel: string,
+        rightValue: unknown,
+      ) => {
+        checkNewPage(12);
+        const leftX = margin;
+        const rightX = margin + maxWidth / 2 + 4;
+        const colWidth = maxWidth / 2 - 8;
+        const leftText =
+          leftValue === null || leftValue === undefined || leftValue === ''
+            ? 'N/A'
+            : String(leftValue);
+        const rightText =
+          rightValue === null || rightValue === undefined || rightValue === ''
+            ? 'N/A'
+            : String(rightValue);
+        const leftLabelText = `${leftLabel}:`;
+        const rightLabelText = `${rightLabel}:`;
+        const leftLabelWidth = Math.min(
+          colWidth * 0.68,
+          Math.max(34, doc.getTextWidth(leftLabelText) + 4),
+        );
+        const rightLabelWidth = Math.min(
+          colWidth * 0.68,
+          Math.max(34, doc.getTextWidth(rightLabelText) + 4),
+        );
+        const leftLines = doc.splitTextToSize(
+          leftText,
+          colWidth - leftLabelWidth - 2,
+        );
+        const rightLines = doc.splitTextToSize(
+          rightText,
+          colWidth - rightLabelWidth - 2,
+        );
+
+        doc.setFontSize(9.5);
+        doc.setFont('helvetica', 'bold');
+        doc.text(leftLabelText, leftX, yPos);
+        doc.text(rightLabelText, rightX, yPos);
+        doc.setFont('helvetica', 'normal');
+        doc.text(leftLines, leftX + leftLabelWidth, yPos);
+        doc.text(rightLines, rightX + rightLabelWidth, yPos);
+        yPos += Math.max(lineHeight, leftLines.length * lineHeight, rightLines.length * lineHeight) + 2;
+      };
+
+      const addYesNoField = (label: string, value: unknown) => {
+        checkNewPage(18);
+        doc.setFontSize(9.5);
+        doc.setFont('helvetica', 'bold');
+        const labelLines = doc.splitTextToSize(`${label}:`, maxWidth);
+        doc.text(labelLines, margin, yPos);
+        yPos += labelLines.length * lineHeight;
+        doc.setFont('helvetica', 'normal');
+        const normalized = String(value || '').toLowerCase();
+        const isYes = normalized === 'yes' || normalized === 'true';
+        const isNo = normalized === 'no' || normalized === 'false';
+        addCheckbox('Yes', isYes, margin + 6, yPos);
+        addCheckbox('No', isNo, margin + 42, yPos);
+        yPos += lineHeight + 4;
+      };
+
+      const addTable = (
+        headers: string[],
+        rows: Array<Array<unknown>>,
+        widths: number[],
+      ) => {
+        checkNewPage(16);
+        doc.setFontSize(8.5);
+        doc.setFont('helvetica', 'bold');
+        let x = margin;
+        headers.forEach((header, index) => {
+          doc.text(header, x, yPos);
+          x += widths[index];
+        });
+        yPos += 5;
+        drawLine(margin, yPos - 2, maxWidth);
+        yPos += 4;
+        doc.setFont('helvetica', 'normal');
+
+        if (rows.length === 0) {
+          doc.text('None recorded', margin, yPos);
+          yPos += lineHeight + 2;
+          return;
+        }
+
+        rows.forEach((row) => {
+          checkNewPage(14);
+          x = margin;
+          let rowHeight = lineHeight;
+          row.forEach((cell, index) => {
+            const text =
+              cell === null || cell === undefined || cell === ''
+                ? 'N/A'
+                : String(cell);
+            const lines = doc.splitTextToSize(text, widths[index] - 3);
+            doc.text(lines, x, yPos);
+            rowHeight = Math.max(rowHeight, lines.length * lineHeight);
+            x += widths[index];
+          });
+          yPos += rowHeight + 1;
+        });
+      };
+
+      // New driver application PDF sequence: match the registration wizard order.
+      yPos = 10;
+      try {
+        const pdfLogoImg = new Image();
+        const pdfLogoSrc =
+          typeof RbLogo === 'string'
+            ? RbLogo
+            : (RbLogo as any)?.src ||
+              (RbLogo as any)?.default ||
+              String(RbLogo);
+        pdfLogoImg.crossOrigin = 'anonymous';
+        const pdfLogoDataUrl = await new Promise<string>((resolve, reject) => {
+          pdfLogoImg.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = pdfLogoImg.width;
+            canvas.height = pdfLogoImg.height;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+              reject(new Error('Failed to get canvas context'));
+              return;
+            }
+            ctx.drawImage(pdfLogoImg, 0, 0);
+            resolve(canvas.toDataURL('image/jpeg', 0.95));
+          };
+          pdfLogoImg.onerror = () =>
+            reject(new Error('Failed to load logo image'));
+          pdfLogoImg.src = pdfLogoSrc;
+        });
+        const pdfLogoWidth = 38;
+        const pdfLogoHeight =
+          (pdfLogoImg.height / pdfLogoImg.width) * pdfLogoWidth;
+        doc.addImage(
+          pdfLogoDataUrl,
+          'JPEG',
+          (pageWidth - pdfLogoWidth) / 2,
+          yPos,
+          pdfLogoWidth,
+          pdfLogoHeight,
+        );
+        yPos += pdfLogoHeight + 8;
+      } catch {
+        doc.setFillColor(30, 58, 138);
+        doc.rect((pageWidth - 24) / 2, yPos, 24, 16, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold');
+        doc.text('R&B', pageWidth / 2, yPos + 10, { align: 'center' });
+        doc.setTextColor(0, 0, 0);
+        yPos += 24;
+      }
+
+      doc.setFillColor(30, 58, 138);
+      doc.rect(margin, yPos, maxWidth, 10, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text('DRIVER REGISTRATION APPLICATION', pageWidth / 2, yPos + 7, {
+        align: 'center',
+      });
+      doc.setTextColor(0, 0, 0);
+      yPos += 17;
+      addTwoColumnFields(
+        'Applicant',
+        pdfDriver.user?.name || 'Driver',
+        'Export Date',
+        formatPdfDate(new Date().toISOString()),
+      );
+
+      const pdfNameParts = pdfDriver.user?.name?.trim().split(/\s+/) || [];
+      const pdfFirstName = pdfNameParts[0] || '';
+      const pdfLastName = pdfNameParts.slice(1).join(' ') || '';
+      const pdfPersonal = parsedComplianceData?.personal || {};
+      const pdfAddress = parsedComplianceData?.address || {};
+      const pdfLicense = parsedComplianceData?.license || {};
+      const pdfQuestions = parsedComplianceData?.questions || {};
+      const pdfDriving = parsedComplianceData?.driving_experience || {};
+      const pdfAccident = pdfDriving.accident_history || {};
+      const pdfEmployment = parsedComplianceData?.employment_history || {};
+      const pdfLicenseType =
+        pdfDriver.license_type === 'Other' && pdfDriver.license_other
+          ? pdfDriver.license_other
+          : pdfDriver.license_type;
+
+      addSectionTitle('1. Personal Information');
+      addTwoColumnFields('First Name', pdfFirstName, 'Last Name', pdfLastName);
+      addTwoColumnFields(
+        'Middle Initial',
+        pdfPersonal.middle_initial,
+        'Gender',
+        pdfPersonal.gender,
+      );
+      addTwoColumnFields(
+        'Date of Birth',
+        formatPdfDate(pdfPersonal.date_of_birth),
+        'Phone Number',
+        pdfAddress.cell_phone,
+      );
+      addTextField('Email', pdfDriver.user?.email);
+      addTextField('Certification or Education', pdfPersonal.education);
+      addYesNoField(
+        'Are you legally entitled to work in Canada?',
+        pdfPersonal.work_eligibility_canada,
+      );
+      addYesNoField(
+        'Do you have any physical difficulties or medical limitation that might stop you from performing the position of a truck driver?',
+        pdfPersonal.medical_limitations,
+      );
+      if (String(pdfPersonal.medical_limitations || '').toLowerCase() === 'yes') {
+        addTextField(
+          'If Yes, please explain',
+          pdfPersonal.medical_limitations_explanation,
+        );
+      }
+
+      addSectionTitle('2. Address Information');
+      addTextField('Street Address', pdfAddress.current_address);
+      addTwoColumnFields('City', pdfAddress.city, 'Province', pdfAddress.province);
+      addTwoColumnFields(
+        'Postal Code',
+        pdfAddress.postal_code,
+        'Living since / time period',
+        formatPdfDate(pdfAddress.current_address_living_since) ||
+          pdfAddress.current_address_living_since,
+      );
+      const pdfPreviousAddresses = Array.isArray(pdfAddress.previous_addresses)
+        ? pdfAddress.previous_addresses
+        : [];
+      addTable(
+        ['Previous Address', 'From', 'To'],
+        pdfPreviousAddresses.map((addr: any) => [
+          addr.address,
+          formatPdfDate(addr.from_date) || addr.from_date,
+          formatPdfDate(addr.to_date) || addr.to_date,
+        ]),
+        [100, 42, 42],
+      );
+
+      addSectionTitle('3. License Information');
+      addTwoColumnFields(
+        'License Number',
+        pdfDriver.license_number,
+        'Province',
+        pdfLicense.license_province,
+      );
+      addTwoColumnFields('Class', pdfLicense.license_class, 'License type', pdfLicenseType);
+      addTwoColumnFields(
+        'Issue Date',
+        formatPdfDate((pdfDriver as any).license_issue_date),
+        'Expiry Date',
+        formatPdfDate(pdfDriver.license_expiry_date),
+      );
+      addTextField('Issuing Authority', pdfDriver.issuing_authority);
+      addTwoColumnFields(
+        'Endorsements',
+        pdfLicense.license_endorsements,
+        'Conditions',
+        pdfLicense.license_conditions,
+      );
+      addYesNoField(
+        'Have you ever been denied a license or permit to operate a vehicle?',
+        pdfQuestions.license_denied,
+      );
+      addYesNoField(
+        'Have you ever had your driving privileges revoked or suspended?',
+        pdfQuestions.privileges_revoked,
+      );
+      addYesNoField(
+        'Do you have a dangerous good certificate?',
+        pdfQuestions.dangerous_goods_certificate,
+      );
+      addTwoColumnFields(
+        'License front image',
+        (pdfDriver as any).license_front_image_path ? 'Uploaded' : 'N/A',
+        'License back image',
+        (pdfDriver as any).license_back_image_path ? 'Uploaded' : 'N/A',
+      );
+
+      addSectionTitle('4. Driving Experience');
+      addTextField(
+        'Vehicle Types',
+        Array.isArray(pdfDriver.vehicle_types)
+          ? pdfDriver.vehicle_types.join(', ')
+          : pdfDriver.vehicle_types,
+      );
+      const pdfEquipment = Array.isArray(pdfDriving.equipment_used)
+        ? pdfDriving.equipment_used
+        : [];
+      addTable(
+        ['Make', 'Tractor Type', 'Transmissions', 'Trailer Type', 'Areas Operated'],
+        pdfEquipment.map((item: any) => [
+          item.make,
+          item.tractor_type,
+          item.transmissions,
+          item.trailer_type,
+          item.areas_operated,
+        ]),
+        [30, 34, 36, 40, 44],
+      );
+      addYesNoField('Ever had accidents?', pdfAccident.ever_had_accidents);
+      if (String(pdfAccident.ever_had_accidents || '').toLowerCase() === 'yes') {
+        addTextField('Number of incidents', pdfAccident.number_of_incidents);
+        addTextField('If Yes, please explain', pdfAccident.accident_explanation);
+      }
+      const pdfViolations = Array.isArray(pdfDriving.traffic_violations)
+        ? pdfDriving.traffic_violations
+        : [];
+      addTable(
+        ['Date', 'Location', 'Violation/Charge', 'Penalty'],
+        pdfViolations.map((item: any) => [
+          formatPdfDate(item.date) || item.date,
+          item.location,
+          item.violation_charge,
+          item.penalty,
+        ]),
+        [34, 45, 65, 40],
+      );
+
+      addSectionTitle('5. Employment History');
+      const pdfCurrentEmployer = pdfEmployment.current_employer || {};
+      addTextField('Current/Most Recent Employer - Company', pdfCurrentEmployer.company);
+      addTwoColumnFields(
+        'Supervisor',
+        pdfCurrentEmployer.supervisor,
+        'Phone',
+        pdfCurrentEmployer.phone,
+      );
+      addTextField('Address', pdfCurrentEmployer.address);
+      addTwoColumnFields(
+        'Position',
+        pdfCurrentEmployer.position,
+        'Start Date',
+        formatPdfDate(pdfCurrentEmployer.start_date) ||
+          pdfCurrentEmployer.start_date,
+      );
+      addTextField(
+        'End Date',
+        formatPdfDate(pdfCurrentEmployer.end_date) || pdfCurrentEmployer.end_date,
+      );
+      addTextField('Reasons for Leaving', pdfCurrentEmployer.reasons_for_leaving);
+      const pdfPreviousEmployers = Array.isArray(pdfEmployment.previous_employers)
+        ? pdfEmployment.previous_employers
+        : [];
+      pdfPreviousEmployers.forEach((employer: any, index: number) => {
+        addSectionTitle(`5.${index + 1} Previous Employer`);
+        addTextField('Company', employer.company);
+        addTwoColumnFields('Supervisor', employer.supervisor, 'Phone', employer.phone);
+        addTextField('Address', employer.address);
+        addTwoColumnFields(
+          'Position',
+          employer.position,
+          'Start Date',
+          formatPdfDate(employer.start_date) || employer.start_date,
+        );
+        addTextField('End Date', formatPdfDate(employer.end_date) || employer.end_date);
+        addTextField('Reasons for Leaving', employer.reasons_for_leaving);
+      });
+
+      addSectionTitle('6. Documents');
+      addTwoColumnFields(
+        'PCC / Criminal Background Check',
+        (pdfDriver as any).pcc_document_path ? 'Uploaded' : 'N/A',
+        'Abstract Document',
+        pdfDriver.abstract_document_path ? 'Uploaded' : 'N/A',
+      );
+      addTwoColumnFields(
+        'CVOR Document',
+        pdfDriver.cvor_document_path ? 'Uploaded' : 'N/A',
+        'Safety Certificate (If Any)',
+        pdfDriver.safety_certificate_path ? 'Uploaded' : 'N/A',
+      );
+      addTwoColumnFields(
+        'Medical Certificate',
+        pdfDriver.medical_certificate_path ? 'Uploaded' : 'N/A',
+        'License Document',
+        pdfDriver.license_document_path ? 'Uploaded' : 'N/A',
+      );
+      addTwoColumnFields(
+        'Background Check',
+        pdfDriver.background_check_status,
+        'Drug & Alcohol Test',
+        yesNoValue(pdfDriver.drug_alcohol_test),
+      );
+      addTextField('Compliance Notes', parsedComplianceData?.existing_notes);
+
+      if (referenceChecks.length > 0) {
+        addSectionTitle('Reference Checks');
+        referenceChecks.forEach((refCheck: any, refIndex: number) => {
+          checkNewPage(40);
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(10);
+          doc.text(`Reference Check ${refIndex + 1}`, margin, yPos);
+          yPos += 6;
+          doc.setFont('helvetica', 'normal');
+          const pdfRefReq = refCheck.reference_request || {};
+          const pdfRefForm = refCheck.form_data || {};
+          addTwoColumnFields('Status', refCheck.status, 'Filled by', refCheck.filled_by);
+          addTextField('Previous Company', pdfRefReq.previous_company_name);
+          addTwoColumnFields(
+            'Company Phone',
+            pdfRefReq.previous_company_phone,
+            'Supervisor/Employer',
+            pdfRefReq.supervisor_employer_name,
+          );
+          if (refCheck.form_data) {
+            addTwoColumnFields(
+              'Date of Reference Check',
+              formatPdfDate(pdfRefForm.date_of_reference_check),
+              'Relationship',
+              pdfRefForm.relationship_to_applicant === 'other'
+                ? `Other: ${pdfRefForm.relationship_other_specify || ''}`
+                : 'Supervisor',
+            );
+            addTwoColumnFields(
+              'Employment From',
+              formatPdfDate(pdfRefForm.date_of_employment_from),
+              'To',
+              formatPdfDate(pdfRefForm.date_of_employment_to),
+            );
+            addTextField('Position(s) Held', pdfRefForm.positions_held);
+            addTextField('Nature of Job', pdfRefForm.nature_of_job);
+            addTextField('Reason for leaving', pdfRefForm.reason_for_leaving);
+            addTextField('Additional comments', pdfRefForm.additional_comments);
+          }
+        });
+      }
+
+      addSectionTitle('Declaration');
+      const pdfDeclarationText = [
+        'By completing and submitting this signed application I:',
+        'Authorize R&B Services Inc. to investigate my reputation, background, character and prior employment by contacting my employer, references or any other individuals the employer deems necessary.',
+        'Understand that I am required to abide by all the rules and regulations set out by this company.',
+        'Certify that all the entries and information on this application is true and complete to the best of my knowledge.',
+      ];
+      pdfDeclarationText.forEach((text) => {
+        checkNewPage(12);
+        const lines = doc.splitTextToSize(text, maxWidth);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9.5);
+        doc.text(lines, margin, yPos);
+        yPos += lines.length * lineHeight + 2;
+      });
+      yPos += 8;
+      checkNewPage(35);
+      const pdfPrintName = pdfDriver.user?.name || '';
+      const pdfSignedDate = formatPdfDate(new Date().toISOString());
+      doc.text(pdfPrintName, margin + 8, yPos);
+      drawLine(margin + 8, yPos + 2, 72);
+      doc.text('Print Name', margin + 24, yPos + 8);
+      doc.text(pdfSignedDate, pageWidth - margin - 70, yPos);
+      drawLine(pageWidth - margin - 70, yPos + 2, 60);
+      doc.text('Date', pageWidth - margin - 48, yPos + 8);
+      yPos += 25;
+      drawLine(margin + 8, yPos, 90);
+      doc.text('Signature of Applicant', margin + 8, yPos + 8);
+
+      const pdfDownloadName = `Driver_Application_${pdfDriver.user?.name?.replace(/\s+/g, '_') || 'Driver'}_${new Date().toISOString().split('T')[0]}.pdf`;
+      doc.save(pdfDownloadName);
+      toast.success('PDF exported successfully');
+      return;
 
       // Header with Logo
       try {
@@ -720,7 +1254,7 @@ export default function DriverDetailPage() {
       // Name Section
       doc.setFontSize(10);
       doc.setFont('helvetica', 'normal');
-      const nameParts = driver.user?.name?.split(' ') || [];
+      const nameParts = pdfDriver.user?.name?.split(' ') || [];
       const firstName = nameParts[0] || '';
       const lastName = nameParts.slice(1).join(' ') || '';
       const middleInitial =
@@ -924,7 +1458,7 @@ export default function DriverDetailPage() {
       doc.setFont('helvetica', 'normal');
       yPos = addFormField(
         'Licence Number',
-        driver.license_number || '',
+        pdfDriver.license_number || '',
         margin,
         yPos,
         40,
@@ -946,11 +1480,7 @@ export default function DriverDetailPage() {
         20,
         30,
       );
-      const expiryDate = driver.license_expiry_date
-        ? new Date(driver.license_expiry_date)
-            .toLocaleDateString('en-CA')
-            .replace(/\//g, '-')
-        : '';
+      const expiryDate = formatPdfDate(pdfDriver.license_expiry_date);
       yPos = addFormField(
         'Expiry',
         expiryDate,
@@ -1126,7 +1656,7 @@ export default function DriverDetailPage() {
       doc.setFont('helvetica', 'normal');
       yPos = addFormField(
         'Years of Experience',
-        (driver.years_of_experience || 0).toString(),
+        (pdfDriver.years_of_experience || 0).toString(),
         margin,
         yPos,
         50,
@@ -1685,7 +2215,7 @@ export default function DriverDetailPage() {
       yPos += 10;
 
       // ===== PRINT NAME & DATE =====
-      const printName = driver.user?.name || '';
+      const printName = pdfDriver.user?.name || '';
       const signedDate = new Date().toLocaleDateString('en-GB', {
         day: 'numeric',
         month: 'short',
@@ -1787,7 +2317,7 @@ export default function DriverDetailPage() {
       doc.text('R & B Services Inc.', margin, yPos);
 
       // Save PDF
-      const fileName = `Driver_Application_${driver.user?.name?.replace(/\s+/g, '_') || 'Driver'}_${new Date().toISOString().split('T')[0]}.pdf`;
+      const fileName = `Driver_Application_${pdfDriver.user?.name?.replace(/\s+/g, '_') || 'Driver'}_${new Date().toISOString().split('T')[0]}.pdf`;
       doc.save(fileName);
       toast.success('PDF exported successfully');
     } catch (error: any) {

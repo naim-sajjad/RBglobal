@@ -36,7 +36,6 @@ function DocumentsFieldsInner({ data, setData }: DocumentsSectionProps) {
             pcc_document: f,
           }))
         }
-        required
       />
 
       <DocumentDropzone
@@ -62,7 +61,7 @@ function DocumentsFieldsInner({ data, setData }: DocumentsSectionProps) {
       />
 
       <DocumentDropzone
-        label='Safety Certificate'
+        label='Safety Certificate (If Any)'
         file={data.safety_certificate}
         onFileChange={(f) =>
           setData((prev) => ({

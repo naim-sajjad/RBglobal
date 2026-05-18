@@ -796,12 +796,6 @@ export function validateDriverRegisterSection(
       }
 
     case 6:
-      if (!data.pcc_document) {
-        return {
-          isValid: false,
-          errorMessage: 'PCC / Criminal Background Check upload is required',
-        };
-      }
       return { isValid: true, errorMessage: '' };
 
     case 7:

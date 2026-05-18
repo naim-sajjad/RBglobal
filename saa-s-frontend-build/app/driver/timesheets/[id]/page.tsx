@@ -524,7 +524,7 @@ export default function DriverTimesheetDetailPage() {
                         <Input
                           type='number'
                           min={0}
-                          step={c.unit === 'per_hour' ? '0.01' : '1'}
+                          step='0.01'
                           value={
                             additionalQuantities[c.key ?? c.charge_type] ?? ''
                           }

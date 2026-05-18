@@ -275,7 +275,8 @@ export default function AdminTimesheetsPage() {
                       )}
                     </TableCell>
                     <TableCell className='text-right text-white'>
-                      {typeof ts.weekly_total === 'number'
+                      {ts.status === 'approved' &&
+                      Number.isFinite(Number(ts.weekly_total))
                         ? `$${Number(ts.weekly_total).toFixed(2)}`
                         : '—'}
                     </TableCell>
