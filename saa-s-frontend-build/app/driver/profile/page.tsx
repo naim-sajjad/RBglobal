@@ -141,8 +141,14 @@ export default function DriverProfilePage() {
     const issues: string[] = [];
 
     // Check required documents
-    if (!driver.license_document_path) {
-      issues.push('License Document missing');
+    if (!driver.pcc_document_path) {
+      issues.push('PCC / Criminal Background Check missing');
+    }
+    if (!driver.license_front_image_path) {
+      issues.push('License front image missing');
+    }
+    if (!driver.license_back_image_path) {
+      issues.push('License back image missing');
     }
     if (!driver.abstract_document_path) {
       issues.push('Abstract Document missing');
@@ -170,11 +176,6 @@ export default function DriverProfilePage() {
     // Check background check
     if (driver.background_check_status !== 'completed') {
       issues.push('Background check not completed');
-    }
-
-    // Check drug & alcohol test
-    if (!driver.drug_alcohol_test) {
-      issues.push('Drug & Alcohol test not completed');
     }
 
     return {
@@ -1038,9 +1039,41 @@ export default function DriverProfilePage() {
               <div className='space-y-3'>
                 <div className='flex items-center justify-between'>
                   <span className='text-slate-300 text-sm'>
-                    License Document
+                    PCC / Criminal Background Check
                   </span>
-                  {driver.license_document_path ? (
+                  {driver.pcc_document_path ? (
+                    <Badge variant='secondary' className='bg-green-600'>
+                      <CheckCircle2 className='h-3 w-3 mr-1' />
+                      Uploaded
+                    </Badge>
+                  ) : (
+                    <Badge variant='secondary' className='bg-red-600'>
+                      <XCircle className='h-3 w-3 mr-1' />
+                      Missing
+                    </Badge>
+                  )}
+                </div>
+                <div className='flex items-center justify-between'>
+                  <span className='text-slate-300 text-sm'>
+                    License Front Image
+                  </span>
+                  {driver.license_front_image_path ? (
+                    <Badge variant='secondary' className='bg-green-600'>
+                      <CheckCircle2 className='h-3 w-3 mr-1' />
+                      Uploaded
+                    </Badge>
+                  ) : (
+                    <Badge variant='secondary' className='bg-red-600'>
+                      <XCircle className='h-3 w-3 mr-1' />
+                      Missing
+                    </Badge>
+                  )}
+                </div>
+                <div className='flex items-center justify-between'>
+                  <span className='text-slate-300 text-sm'>
+                    License Back Image
+                  </span>
+                  {driver.license_back_image_path ? (
                     <Badge variant='secondary' className='bg-green-600'>
                       <CheckCircle2 className='h-3 w-3 mr-1' />
                       Uploaded
@@ -1119,22 +1152,6 @@ export default function DriverProfilePage() {
                       ? 'Completed'
                       : 'Pending'}
                   </Badge>
-                </div>
-                <div className='flex items-center justify-between'>
-                  <span className='text-slate-300 text-sm'>
-                    Drug & Alcohol Test
-                  </span>
-                  {driver.drug_alcohol_test ? (
-                    <Badge variant='secondary' className='bg-green-600'>
-                      <CheckCircle2 className='h-3 w-3 mr-1' />
-                      Completed
-                    </Badge>
-                  ) : (
-                    <Badge variant='secondary' className='bg-red-600'>
-                      <XCircle className='h-3 w-3 mr-1' />
-                      Not Completed
-                    </Badge>
-                  )}
                 </div>
               </div>
 

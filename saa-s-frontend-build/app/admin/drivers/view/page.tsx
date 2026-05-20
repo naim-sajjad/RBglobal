@@ -65,6 +65,9 @@ function getPublicStorageUrl(
     process.env.NEXT_PUBLIC_API_URL || 'http://localhost/api/v1';
   const origin = apiBase.replace(/\/api\/v1\/?$/i, '').replace(/\/$/, '');
   return `${origin}/storage/${trimmed}`;
+
+
+
 }
 
 function documentKind(path: string): 'image' | 'pdf' | 'other' {
@@ -80,7 +83,7 @@ function storageRelativePathForFetch(
   relativePath: string | undefined | null,
   resolvedUrl: string | undefined | null,
 ): string | null {
-  const trimmed = relativePath?.replace(/^\/+/, '').trim();
+const trimmed = relativePath?.replace(/^\/+/, '').trim();
   if (trimmed) {
     return trimmed;
   }
@@ -92,7 +95,8 @@ function storageRelativePathForFetch(
     const parsed = new URL(u);
     const idx = parsed.pathname.indexOf('/storage/');
     if (idx >= 0) {
-      return parsed.pathname
+      
+ return parsed.pathname
         .slice(idx + '/storage/'.length)
         .replace(/^\/+/, '');
     }
@@ -197,6 +201,7 @@ function DocumentPreviewTile({
 }) {
   const url =
     (absoluteUrl && absoluteUrl.trim()) || getPublicStorageUrl(path || undefined);
+
   const kindProbe =
     (path && path.trim()) ||
     (url
@@ -210,7 +215,7 @@ function DocumentPreviewTile({
     <div className='overflow-hidden rounded-lg border border-slate-700 bg-slate-900/40'>
       <div className='flex items-center justify-between gap-2 border-b border-slate-700 px-3 py-2'>
         <p className='truncate text-sm font-medium text-white'>{title}</p>
-        {hasFile && url ? (
+         {hasFile && url ? (
           <a
             href={url}
             target='_blank'
@@ -223,12 +228,12 @@ function DocumentPreviewTile({
         ) : null}
       </div>
       <div className='flex min-h-[140px] items-center justify-center bg-slate-950/40 p-2'>
-        {!hasFile || !url ? (
+       {!hasFile || !url ? (
           <p className='text-xs text-slate-500'>No file uploaded</p>
         ) : kind === 'image' ? (
           // eslint-disable-next-line @next/next/no-img-element -- public storage URL from API
           <img
-            src={url}
+           src={url}
             alt={title}
             className='max-h-52 w-full rounded object-contain'
           />
@@ -1040,6 +1045,12 @@ export default function DriverDetailPage() {
       addTwoColumnFields(
         'PCC / Criminal Background Check',
         (pdfDriver as any).pcc_document_path ? 'Uploaded' : 'N/A',
+        'License Front Image',
+        (pdfDriver as any).license_front_image_path ? 'Uploaded' : 'N/A',
+      );
+      addTwoColumnFields(
+        'License Back Image',
+        (pdfDriver as any).license_back_image_path ? 'Uploaded' : 'N/A',
         'Abstract Document',
         pdfDriver.abstract_document_path ? 'Uploaded' : 'N/A',
       );
@@ -1050,21 +1061,21 @@ export default function DriverDetailPage() {
         pdfDriver.safety_certificate_path ? 'Uploaded' : 'N/A',
       );
       addTwoColumnFields(
-        'Medical Certificate',
-        pdfDriver.medical_certificate_path ? 'Uploaded' : 'N/A',
-        'License Document',
-        pdfDriver.license_document_path ? 'Uploaded' : 'N/A',
-      );
-      addTwoColumnFields(
         'Background Check',
         pdfDriver.background_check_status,
-        'Drug & Alcohol Test',
-        yesNoValue(pdfDriver.drug_alcohol_test),
+        'Reference Check',
+        pdfDriver.reference_check_status || 'pending',
       );
       addTextField('Compliance Notes', parsedComplianceData?.existing_notes);
 
+      addSectionTitle('Reference Checks');
+      addTwoColumnFields(
+        'Driver reference check status',
+        pdfDriver.reference_check_status || 'pending',
+        'Reference checks on file',
+        referenceChecks.length,
+      );
       if (referenceChecks.length > 0) {
-        addSectionTitle('Reference Checks');
         referenceChecks.forEach((refCheck: any, refIndex: number) => {
           checkNewPage(40);
           doc.setFont('helvetica', 'bold');
