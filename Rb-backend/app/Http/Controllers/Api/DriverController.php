@@ -428,7 +428,7 @@ class DriverController extends Controller
             'vehicle_types.*' => ['nullable', Rule::in(['Truck', 'Van', 'Trailer', 'Reefer', 'Flatbed'])],
 
             // Compliance Requirements & Documents
-            'pcc_document' => ($isUpdate ? 'nullable' : 'required') . '|file|mimes:pdf,jpg,jpeg,png|max:5120',
+            'pcc_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
             'license_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
             'license_front_image' => ($isUpdate ? 'nullable' : 'required') . '|file|mimes:jpg,jpeg,png|max:5120',
             'license_back_image' => ($isUpdate ? 'nullable' : 'required') . '|file|mimes:jpg,jpeg,png|max:5120',
