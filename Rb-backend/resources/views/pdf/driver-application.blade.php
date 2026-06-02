@@ -1,4 +1,4 @@
-@extends('pdf.layouts.minimal')
+﻿@extends('pdf.layouts.minimal')
 
 @php
     $p = $c['personal'] ?? [];
@@ -75,13 +75,19 @@
         font-weight: bold;
         margin-bottom: 12px;
     }
-    .row { margin-bottom: 6px; }
-    .label { font-weight: bold; display: inline-block; min-width: 160px; }
+    .row { display: table; width: 100%; table-layout: fixed; margin-bottom: 6px; }
+    .label { font-weight: bold; display: table-cell; width: 165px; padding-right: 8px; vertical-align: bottom; }
+    .value { display: table-cell; border-bottom: 1px solid #111; min-height: 14px; padding: 0 4px 2px 4px; vertical-align: bottom; }
     .muted { color: #555; font-size: 9px; }
-    .chk { margin-right: 12px; }
+    .chk { display: inline-block; margin-right: 18px; white-space: nowrap; }
+    .choice { display: inline-block; margin-right: 18px; white-space: nowrap; }
+    .choice-box { display: inline-block; width: 11px; height: 11px; border: 1px solid #111; text-align: center; line-height: 10px; font-size: 9px; font-weight: bold; margin-right: 4px; vertical-align: middle; }
     .section-break { page-break-before: always; }
     .section { margin-bottom: 16px; }
     .subtitle { font-size: 13px; font-weight: bold; border-bottom: 1px solid #ccc; padding-bottom: 4px; margin-top: 12px; }
+    table.field-table td { border: none; padding: 3px 6px 3px 0; vertical-align: bottom; }
+    table.field-table td:first-child { width: 165px; font-weight: bold; }
+    table.field-table td:last-child { border-bottom: 1px solid #111; padding-left: 4px; }
     table.doc-grid { margin-top: 8px; }
     table.license-images { width: 100%; margin-top: 8px; }
     table.license-images td { vertical-align: top; width: 50%; text-align: center; border: 1px dashed #bbb; padding: 8px; }
@@ -103,19 +109,19 @@
 
 <h2>Applicant name</h2>
 <div class="section">
-    <div class="row"><span class="label">First</span>{{ $firstName }}</div>
-    <div class="row"><span class="label">Last</span>{{ $lastName }}</div>
-    <div class="row"><span class="label">Middle initial</span>{{ $p['middle_initial'] ?: 'N/A' }}</div>
+    <div class="row"><span class="label">First</span><span class="value">{{ $firstName }}</span></div>
+    <div class="row"><span class="label">Last</span><span class="value">{{ $lastName }}</span></div>
+    <div class="row"><span class="label">Middle initial</span><span class="value">{{ $p['middle_initial'] ?: 'N/A' }}</span></div>
 </div>
 
 <h2>Current address</h2>
 <div class="section">
-    <div class="row"><span class="label">Street / unit</span>{{ $addr['current_address'] ?: 'N/A' }}</div>
-    <div class="row"><span class="label">Living since</span>{{ $addr['current_address_living_since'] ?: 'N/A' }}</div>
-    <div class="row"><span class="label">City</span>{{ $addr['city'] ?: 'N/A' }}</div>
-    <div class="row"><span class="label">Province</span>{{ $addr['province'] ?: 'N/A' }}</div>
-    <div class="row"><span class="label">Postal code</span>{{ $addr['postal_code'] ?: 'N/A' }}</div>
-    <div class="row"><span class="label">Cell #</span>{{ $addr['cell_phone'] ?: 'N/A' }}</div>
+    <div class="row"><span class="label">Street / unit</span><span class="value">{{ $addr['current_address'] ?: 'N/A' }}</span></div>
+    <div class="row"><span class="label">Living since</span><span class="value">{{ $addr['current_address_living_since'] ?: 'N/A' }}</span></div>
+    <div class="row"><span class="label">City</span><span class="value">{{ $addr['city'] ?: 'N/A' }}</span></div>
+    <div class="row"><span class="label">Province</span><span class="value">{{ $addr['province'] ?: 'N/A' }}</span></div>
+    <div class="row"><span class="label">Postal code</span><span class="value">{{ $addr['postal_code'] ?: 'N/A' }}</span></div>
+    <div class="row"><span class="label">Cell #</span><span class="value">{{ $addr['cell_phone'] ?: 'N/A' }}</span></div>
 </div>
 
 @if (count($prevAddrs))
@@ -124,7 +130,7 @@
         @foreach ($prevAddrs as $i => $a)
             @if (is_array($a))
                 <p style="margin: 8px 0 4px 0;"><strong>Address {{ $i + 1 }}</strong></p>
-                <div class="row"><span class="label">Address</span>{{ ($a['address'] ?? '') ?: 'N/A' }}</div>
+                <div class="row"><span class="label">Address</span><span class="value">{{ ($a['address'] ?? '') ?: 'N/A' }}</span></div>
                 @php
                     $period = '';
                     if (! empty($a['from_date']) && ! empty($a['to_date'])) {
@@ -133,7 +139,7 @@
                         $period = (string) $a['duration'];
                     }
                 @endphp
-                <div class="row"><span class="label">Dates lived there</span>{{ $period ?: 'N/A' }}</div>
+                <div class="row"><span class="label">Dates lived there</span><span class="value">{{ $period ?: 'N/A' }}</span></div>
                 <hr class="soft" />
             @endif
         @endforeach
@@ -144,17 +150,21 @@
 <div class="section">
     <div class="row">
         <span class="label">Legally entitled to work in Canada</span>
-        <span class="chk">YES @if(strtolower(trim((string)($p['work_eligibility_canada'] ?? ''))) === 'yes') ✓ @endif</span>
-        <span class="chk">NO @if(strtolower(trim((string)($p['work_eligibility_canada'] ?? ''))) === 'no') ✓ @endif</span>
+        <span class="value">
+            <span class="choice"><span class="choice-box">@if(strtolower(trim((string)($p['work_eligibility_canada'] ?? ''))) === 'yes') &#10003; @else &nbsp; @endif</span>YES</span>
+            <span class="choice"><span class="choice-box">@if(strtolower(trim((string)($p['work_eligibility_canada'] ?? ''))) === 'no') &#10003; @else &nbsp; @endif</span>NO</span>
+        </span>
     </div>
-    <div class="row"><span class="label">Gender</span>{{ $p['gender'] ?: 'N/A' }}</div>
-    <div class="row"><span class="label">Date of birth</span>{{ $dobFmt ?: 'N/A' }}</div>
-    <div class="row"><span class="label">Education / certifications</span>{{ $p['education'] ?: 'N/A' }}</div>
-    <p style="margin-top:10px;"><strong>Medical limitation question</strong> — Physical difficulties affecting ability to drive:</p>
+    <div class="row"><span class="label">Gender</span><span class="value">{{ $p['gender'] ?: 'N/A' }}</span></div>
+    <div class="row"><span class="label">Date of birth</span><span class="value">{{ $dobFmt ?: 'N/A' }}</span></div>
+    <div class="row"><span class="label">Education / certifications</span><span class="value">{{ $p['education'] ?: 'N/A' }}</span></div>
+    <p style="margin-top:10px;"><strong>Medical limitation question</strong> &mdash; Physical difficulties affecting ability to drive:</p>
     <div class="row">
         <span class="label">Answer</span>
-        <span class="chk">YES @if(strtolower(trim((string)($p['medical_limitations'] ?? ''))) === 'yes') ✓ @endif</span>
-        <span class="chk">NO @if(strtolower(trim((string)($p['medical_limitations'] ?? ''))) === 'no') ✓ @endif</span>
+        <span class="value">
+            <span class="choice"><span class="choice-box">@if(strtolower(trim((string)($p['medical_limitations'] ?? ''))) === 'yes') &#10003; @else &nbsp; @endif</span>YES</span>
+            <span class="choice"><span class="choice-box">@if(strtolower(trim((string)($p['medical_limitations'] ?? ''))) === 'no') &#10003; @else &nbsp; @endif</span>NO</span>
+        </span>
     </div>
     @if (strtolower(trim((string)($p['medical_limitations'] ?? ''))) === 'yes' && ! empty($p['medical_limitations_explanation']))
         <p>{{ $p['medical_limitations_explanation'] }}</p>
@@ -163,33 +173,39 @@
 
 <h2 class="section-break">Driver's licence information</h2>
 <div class="section">
-    <div class="row"><span class="label">Licence number (record)</span>{{ $driver->license_number ?: 'N/A' }}</div>
-    <div class="row"><span class="label">Licence type (record)</span>{{ $driver->license_type ?: 'N/A' }}</div>
+    <div class="row"><span class="label">Licence number (record)</span><span class="value">{{ $driver->license_number ?: 'N/A' }}</span></div>
+    <div class="row"><span class="label">Licence type (record)</span><span class="value">{{ $driver->license_type ?: 'N/A' }}</span></div>
     @if ($driver->license_type === 'Other' && ($driver->license_other ?? '') !== '')
-        <div class="row"><span class="label">Other type</span>{{ $driver->license_other }}</div>
+        <div class="row"><span class="label">Other type</span><span class="value">{{ $driver->license_other }}</span></div>
     @endif
-    <div class="row"><span class="label">Province (form)</span>{{ $lic['license_province'] ?: 'N/A' }}</div>
-    <div class="row"><span class="label">Class (form)</span>{{ $lic['license_class'] ?: 'N/A' }}</div>
-    <div class="row"><span class="label">Issue date</span>{{ $issueFmt ?: 'N/A' }}</div>
-    <div class="row"><span class="label">Expiry</span>{{ $expiryFmt ?: 'N/A' }}</div>
-    <div class="row"><span class="label">Issuing authority</span>{{ $driver->issuing_authority ?: 'N/A' }}</div>
-    <div class="row"><span class="label">Endorsements</span>{{ $lic['license_endorsements'] ?: 'N/A' }}</div>
-    <div class="row"><span class="label">Conditions</span>{{ $lic['license_conditions'] ?: 'N/A' }}</div>
+    <div class="row"><span class="label">Province (form)</span><span class="value">{{ $lic['license_province'] ?: 'N/A' }}</span></div>
+    <div class="row"><span class="label">Class (form)</span><span class="value">{{ $lic['license_class'] ?: 'N/A' }}</span></div>
+    <div class="row"><span class="label">Issue date</span><span class="value">{{ $issueFmt ?: 'N/A' }}</span></div>
+    <div class="row"><span class="label">Expiry</span><span class="value">{{ $expiryFmt ?: 'N/A' }}</span></div>
+    <div class="row"><span class="label">Issuing authority</span><span class="value">{{ $driver->issuing_authority ?: 'N/A' }}</span></div>
+    <div class="row"><span class="label">Endorsements</span><span class="value">{{ $lic['license_endorsements'] ?: 'N/A' }}</span></div>
+    <div class="row"><span class="label">Conditions</span><span class="value">{{ $lic['license_conditions'] ?: 'N/A' }}</span></div>
     <hr class="soft" />
     <div class="row">
         <span class="label">Ever denied licence or permit?</span>
-        YES @if(strtolower(trim((string)($q['license_denied'] ?? ''))) === 'yes') ✓ @else &nbsp;&nbsp; @endif
-        / NO @if(strtolower(trim((string)($q['license_denied'] ?? ''))) === 'no') ✓ @endif
+        <span class="value">
+            <span class="choice"><span class="choice-box">@if(strtolower(trim((string)($q['license_denied'] ?? ''))) === 'yes') &#10003; @else &nbsp; @endif</span>YES</span>
+            <span class="choice"><span class="choice-box">@if(strtolower(trim((string)($q['license_denied'] ?? ''))) === 'no') &#10003; @else &nbsp; @endif</span>NO</span>
+        </span>
     </div>
     <div class="row">
         <span class="label">Privileges revoked / suspended?</span>
-        YES @if(strtolower(trim((string)($q['privileges_revoked'] ?? ''))) === 'yes') ✓ @else &nbsp;&nbsp; @endif
-        / NO @if(strtolower(trim((string)($q['privileges_revoked'] ?? ''))) === 'no') ✓ @endif
+        <span class="value">
+            <span class="choice"><span class="choice-box">@if(strtolower(trim((string)($q['privileges_revoked'] ?? ''))) === 'yes') &#10003; @else &nbsp; @endif</span>YES</span>
+            <span class="choice"><span class="choice-box">@if(strtolower(trim((string)($q['privileges_revoked'] ?? ''))) === 'no') &#10003; @else &nbsp; @endif</span>NO</span>
+        </span>
     </div>
     <div class="row">
         <span class="label">Dangerous goods certificate?</span>
-        YES @if(strtolower(trim((string)($q['dangerous_goods_certificate'] ?? ''))) === 'yes') ✓ @else &nbsp;&nbsp; @endif
-        / NO @if(strtolower(trim((string)($q['dangerous_goods_certificate'] ?? ''))) === 'no') ✓ @endif
+        <span class="value">
+            <span class="choice"><span class="choice-box">@if(strtolower(trim((string)($q['dangerous_goods_certificate'] ?? ''))) === 'yes') &#10003; @else &nbsp; @endif</span>YES</span>
+            <span class="choice"><span class="choice-box">@if(strtolower(trim((string)($q['dangerous_goods_certificate'] ?? ''))) === 'no') &#10003; @else &nbsp; @endif</span>NO</span>
+        </span>
     </div>
 </div>
 
@@ -220,11 +236,11 @@
 
 <h2 class="section-break">Driving experience</h2>
 <div class="section">
-    <div class="row"><span class="label">Years of experience (record)</span>{{ $driver->years_of_experience !== null ? (string) $driver->years_of_experience : 'N/A' }}</div>
-    <div class="row"><span class="label">Driving history summary</span>{{ ($driver->driving_history ?? '') !== '' ? $driver->driving_history : 'N/A' }}</div>
-    <div class="row"><span class="label">Vehicle types (record)</span>{{ ($vehicleTypesLabel !== '') ? $vehicleTypesLabel : 'N/A' }}</div>
-    <div class="row"><span class="label">Route type</span>{{ $driver->route_type ?: 'N/A' }}</div>
-    <div class="row"><span class="label">Pay type</span>{{ $driver->pay_type ?: 'N/A' }}</div>
+    <div class="row"><span class="label">Years of experience (record)</span><span class="value">{{ $driver->years_of_experience !== null ? (string) $driver->years_of_experience : 'N/A' }}</span></div>
+    <div class="row"><span class="label">Driving history summary</span><span class="value">{{ ($driver->driving_history ?? '') !== '' ? $driver->driving_history : 'N/A' }}</span></div>
+    <div class="row"><span class="label">Vehicle types (record)</span><span class="value">{{ ($vehicleTypesLabel !== '') ? $vehicleTypesLabel : 'N/A' }}</span></div>
+    <div class="row"><span class="label">Route type</span><span class="value">{{ $driver->route_type ?: 'N/A' }}</span></div>
+    <div class="row"><span class="label">Pay type</span><span class="value">{{ $driver->pay_type ?: 'N/A' }}</span></div>
 </div>
 
 @if (count($equipment))
@@ -258,13 +274,15 @@
 <h3>Accidents</h3>
 <div class="section">
     <div class="row">
-        Ever had accidents:
-        YES @if(strtolower(trim((string)($acc['ever_had_accidents'] ?? ''))) === 'yes') ✓ @else &nbsp;&nbsp; @endif
-        / NO @if(strtolower(trim((string)($acc['ever_had_accidents'] ?? ''))) === 'no') ✓ @endif
+        <span class="label">Ever had accidents</span>
+        <span class="value">
+            <span class="choice"><span class="choice-box">@if(strtolower(trim((string)($acc['ever_had_accidents'] ?? ''))) === 'yes') &#10003; @else &nbsp; @endif</span>YES</span>
+            <span class="choice"><span class="choice-box">@if(strtolower(trim((string)($acc['ever_had_accidents'] ?? ''))) === 'no') &#10003; @else &nbsp; @endif</span>NO</span>
+        </span>
     </div>
     @if (strtolower(trim((string)($acc['ever_had_accidents'] ?? ''))) === 'yes')
-        <div class="row"><span class="label"># Incidents</span>{{ ($acc['number_of_incidents'] ?? '') ?: 'N/A' }}</div>
-        <div class="row"><span class="label">Explanation</span>{{ ($acc['accident_explanation'] ?? '') ?: 'N/A' }}</div>
+        <div class="row"><span class="label"># Incidents</span><span class="value">{{ ($acc['number_of_incidents'] ?? '') ?: 'N/A' }}</span></div>
+        <div class="row"><span class="label">Explanation</span><span class="value">{{ ($acc['accident_explanation'] ?? '') ?: 'N/A' }}</span></div>
     @endif
 </div>
 
@@ -296,7 +314,7 @@
 
 <h2 class="section-break">Employment history (approx. last 10 years)</h2>
 <h3>Current / most recent employer</h3>
-<table class="meta">
+<table class="meta field-table">
     @foreach (['company' => 'Company', 'supervisor' => 'Supervisor', 'address' => 'Address', 'phone' => 'Phone', 'position' => 'Position', 'start_date' => 'Start', 'end_date' => 'End'] as $fk => $fl)
         <tr><td>{{ $fl }}</td><td>{{ ($curEmp[$fk] ?? '') ?: 'N/A' }}</td></tr>
     @endforeach
@@ -307,7 +325,7 @@
     @foreach ($prevEmployers as $pe)
         @if (is_array($pe))
             <h3>Previous employer</h3>
-            <table class="meta">
+            <table class="meta field-table">
                 @foreach (['company' => 'Company', 'supervisor' => 'Supervisor', 'address' => 'Address', 'phone' => 'Phone', 'position' => 'Position', 'start_date' => 'Start', 'end_date' => 'End'] as $fk => $fl)
                     <tr><td>{{ $fl }}</td><td>{{ ($pe[$fk] ?? '') ?: 'N/A' }}</td></tr>
                 @endforeach
@@ -350,8 +368,8 @@
 </table>
 
 <div class="section" style="margin-top:12px;">
-    <div class="row"><span class="label">Background check</span>{{ ucfirst(str_replace('_', ' ', $driver->background_check_status ?? 'N/A')) }}</div>
-    <div class="row"><span class="label">Drug / alcohol acknowledgement</span>{{ $driver->drug_alcohol_test ? 'Yes (record)' : 'N/A / No' }}</div>
+    <div class="row"><span class="label">Background check</span><span class="value">{{ ucfirst(str_replace('_', ' ', $driver->background_check_status ?? 'N/A')) }}</span></div>
+    <div class="row"><span class="label">Drug / alcohol acknowledgement</span><span class="value">{{ $driver->drug_alcohol_test ? 'Yes (record)' : 'N/A / No' }}</span></div>
 </div>
 
 @if (($c['existing_notes'] ?? '') !== '')
@@ -360,7 +378,7 @@
 @endif
 
 <h3>Payroll / payee identifiers (when provided)</h3>
-<table class="meta">
+<table class="meta field-table">
     <tr><td>Driver status</td><td>{{ ucfirst(str_replace('_', ' ', $driver->status ?? 'N/A')) }}</td></tr>
     <tr><td>Pay tier / class</td><td>{{ optional($driver->driverClass)->name ?? optional($driver->driverClass)->code ?? 'N/A' }}</td></tr>
     <tr><td>Payee business name</td><td>{{ ($driver->payee_business_name ?? '') ?: 'N/A' }}</td></tr>
@@ -402,7 +420,7 @@
 
 <p style="margin-top: 24px;"><strong>Signature of applicant</strong></p>
 <div style="border-bottom: 1px solid #111; min-height: 28px;"></div>
-<p class="muted">Electronic application — applicant attestation referenced by submitted record.</p>
+<p class="muted">Electronic application &mdash; applicant attestation referenced by submitted record.</p>
 
 @php
     $applyingRole = trim((string) (optional($driver->driverClass)->name ?? ''));

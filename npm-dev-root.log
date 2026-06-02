@@ -1,0 +1,49 @@
+
+> dev
+> npm --prefix saa-s-frontend-build run dev
+
+
+> my-v0-project@0.1.0 dev
+> next dev
+
+   ▲ Next.js 16.0.10 (Turbopack)
+   - Local:         http://localhost:3000
+   - Network:       http://172.18.160.1:3000
+   - Environments: .env
+
+ ✓ Starting...
+Creating turbopack project {
+  dir: 'D:\\xampp\\htdocs\\rbglobal\\RBglobal\\saa-s-frontend-build',
+  testMode: true
+}
+ ✓ Ready in 925ms
+ ○ Compiling /admin/drivers/view ...
+ GET /admin/drivers/view/?id=16 200 in 8.4s (compile: 7.6s, render: 778ms)
+ GET /admin/drivers/view/?id=16 200 in 127ms (compile: 15ms, render: 111ms)
+ GET /api/storage-file/?path=drivers%2F16%2Flicense%2FdCBwNnF7GXjSByd9dvIrDGVQoYdaSC0CIjD7XGld.jpg 502 in 616ms (compile: 364ms, render: 252ms)
+ GET /api/storage-file/?path=drivers%2F16%2Flicense%2FmFsErrGojunIpo4IkpfH5rPa0WBAHUF5fv225CGI.jpg 502 in 103ms (compile: 4ms, render: 99ms)
+ GET /admin/drivers/create/?id=16 200 in 1295ms (compile: 1214ms, render: 81ms)
+ GET /admin/drivers/ 200 in 769ms (compile: 723ms, render: 46ms)
+ GET /admin/drivers/view/?id=16 200 in 57ms (compile: 6ms, render: 51ms)
+ GET / 200 in 964ms (compile: 785ms, render: 179ms)
+ GET /home/ 200 in 947ms (compile: 875ms, render: 72ms)
+ GET /login/ 200 in 1290ms (compile: 1197ms, render: 93ms)
+ GET /register/ 200 in 894ms (compile: 818ms, render: 76ms)
+ GET /driver/register/ 200 in 3.7s (compile: 3.1s, render: 650ms)
+ ✓ Compiled in 271ms
+ GET /driver/register/ 200 in 381ms (compile: 273ms, render: 108ms)
+ GET /driver/register/ 200 in 57ms (compile: 13ms, render: 45ms)
+ GET /driver/register/ 200 in 49ms (compile: 9ms, render: 40ms)
+ GET /driver/register/ 200 in 35ms (compile: 5ms, render: 30ms)
+ GET /driver/register/ 200 in 571ms (compile: 7ms, render: 564ms)
+ GET /login/ 200 in 66ms (compile: 14ms, render: 52ms)
+ GET /driver/register/ 200 in 61ms (compile: 12ms, render: 49ms)
+ GET /driver/register/ 200 in 39ms (compile: 6ms, render: 33ms)
+ GET /login/ 200 in 47ms (compile: 6ms, render: 41ms)
+ GET / 200 in 53ms (compile: 6ms, render: 47ms)
+ GET /home/ 200 in 340ms (compile: 185ms, render: 154ms)
+ GET /home/ 200 in 84ms (compile: 9ms, render: 75ms)
+ GET /driver/register/ 200 in 51ms (compile: 4ms, render: 48ms)
+ GET /login/ 200 in 57ms (compile: 6ms, render: 51ms)
+ GET /register/ 200 in 60ms (compile: 15ms, render: 45ms)
+ GET /register/ 200 in 49ms (compile: 11ms, render: 37ms)
