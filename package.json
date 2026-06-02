@@ -1,0 +1,11 @@
+{
+  "name": "rbglobal-workspace",
+  "private": true,
+  "scripts": {
+    "install": "npm --prefix saa-s-frontend-build install",
+    "dev": "npm --prefix saa-s-frontend-build run dev",
+    "build": "npm --prefix saa-s-frontend-build run build",
+    "start": "npm --prefix saa-s-frontend-build run start",
+    "lint": "npm --prefix saa-s-frontend-build run lint"
+  }
+}

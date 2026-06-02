@@ -10,7 +10,7 @@
 </p>
 
 <h3 style="margin-top: 12px;">Request for Information from Previous Employer</h3>
-<table class="meta">
+<table class="meta field-table">
     <tr><td>Applicant</td><td>{{ $req['applicant_name'] ?? 'N/A' }}</td></tr>
     <tr><td>Driver's License #</td><td>{{ $req['drivers_license_number'] ?? 'N/A' }}</td></tr>
     <tr><td>Previous Company</td><td>{{ $req['previous_company_name'] ?? 'N/A' }}</td></tr>
@@ -20,7 +20,7 @@
 
 @if (is_array($formData))
     <h3 style="margin-top: 12px;">Reference check form details</h3>
-    <table class="meta">
+    <table class="meta field-table">
         <tr><td>Date of Reference Check</td><td>{{ $formData['date_of_reference_check'] ?? 'N/A' }}</td></tr>
         <tr><td>Relationship</td><td>{{ ($formData['relationship_to_applicant'] ?? '') === 'other'
             ? ('Other: '.($formData['relationship_other_specify'] ?? 'N/A'))

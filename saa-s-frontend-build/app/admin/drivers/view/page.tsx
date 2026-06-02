@@ -549,12 +549,24 @@ export default function DriverDetailPage() {
       const margin = 10;
       const maxWidth = pageWidth - margin * 2;
       const lineHeight = 6;
+      const wrappedTextOptions = { lineHeightFactor: 1.75 };
 
       // Helper function to draw a line
       const drawLine = (x: number, y: number, length: number) => {
-        doc.setLineWidth(0.5);
+        doc.setLineWidth(0.35);
         doc.setDrawColor(0, 0, 0);
         doc.line(x, y, x + length, y);
+      };
+
+      const drawValueLines = (
+        lines: string[],
+        x: number,
+        y: number,
+        width: number,
+      ) => {
+        lines.forEach((_, index) => {
+          drawLine(x, y + index * lineHeight + 1.8, width);
+        });
       };
 
       // Helper function to add form field (label with underlined value)
@@ -584,22 +596,21 @@ export default function DriverDetailPage() {
       ) => {
         doc.setFontSize(10);
         doc.setFont('helvetica', 'normal');
-        // Draw checkbox square - position it so text doesn't overlap
-        const checkboxSize = 4;
-        const checkboxY = y - 3.5; // Align checkbox with text baseline
-        const textX = x + checkboxSize + 4; // Increased spacing between checkbox and text
+        const checkboxSize = 4.2;
+        const checkboxY = y - 3.4;
+        const textX = x + checkboxSize + 4.5;
 
-        // Draw checkbox
+        doc.setLineWidth(0.45);
+        doc.setDrawColor(0, 0, 0);
         doc.rect(x, checkboxY, checkboxSize, checkboxSize);
 
         if (checked) {
-          // Draw checkmark inside checkbox
-          doc.setLineWidth(0.8);
-          doc.line(x + 0.5, checkboxY + 2, x + 1.5, checkboxY + 3);
-          doc.line(x + 1.5, checkboxY + 3, x + 3.5, checkboxY + 0.5);
+          doc.setLineWidth(0.65);
+          doc.line(x + 0.8, checkboxY + 2.2, x + 1.7, checkboxY + 3.1);
+          doc.line(x + 1.7, checkboxY + 3.1, x + 3.5, checkboxY + 0.9);
+          doc.setLineWidth(0.45);
         }
 
-        // Add label text AFTER checkbox with proper spacing to avoid overlap
         doc.text(label, textX, y);
       };
 
@@ -653,29 +664,33 @@ export default function DriverDetailPage() {
           ? 'N/A'
           : String(value);
         const labelText = `${label}:`;
-        const effectiveLabelWidth = Math.max(
-          labelWidth,
-          Math.min(86, doc.getTextWidth(labelText) + 4),
+        const effectiveLabelWidth = Math.min(
+          doc.getTextWidth(labelText) + 3,
+          86,
         );
 
         if (effectiveLabelWidth > maxWidth * 0.48) {
           const labelLines = doc.splitTextToSize(labelText, maxWidth);
-          doc.text(labelLines, margin, yPos);
+          doc.text(labelLines, margin, yPos, wrappedTextOptions);
           yPos += labelLines.length * lineHeight;
           doc.setFont('helvetica', 'normal');
           const valueLines = doc.splitTextToSize(text, maxWidth);
-          doc.text(valueLines, margin, yPos);
+          doc.text(valueLines, margin, yPos, wrappedTextOptions);
+          drawValueLines(valueLines, margin, yPos, maxWidth);
           yPos += valueLines.length * lineHeight + 2;
           return;
         }
 
         doc.text(labelText, margin, yPos);
         doc.setFont('helvetica', 'normal');
+        const valueX = margin + effectiveLabelWidth;
+        const valueWidth = maxWidth - effectiveLabelWidth;
         const lines = doc.splitTextToSize(
           text,
-          maxWidth - effectiveLabelWidth - 4,
+          valueWidth - 4,
         );
-        doc.text(lines, margin + effectiveLabelWidth, yPos);
+        doc.text(lines, valueX, yPos, wrappedTextOptions);
+        drawValueLines(lines, valueX, yPos, valueWidth);
         yPos += Math.max(lineHeight, lines.length * lineHeight) + 2;
       };
 
@@ -700,12 +715,12 @@ export default function DriverDetailPage() {
         const leftLabelText = `${leftLabel}:`;
         const rightLabelText = `${rightLabel}:`;
         const leftLabelWidth = Math.min(
-          colWidth * 0.68,
-          Math.max(34, doc.getTextWidth(leftLabelText) + 4),
+          colWidth * 0.72,
+          doc.getTextWidth(leftLabelText) + 3,
         );
         const rightLabelWidth = Math.min(
-          colWidth * 0.68,
-          Math.max(34, doc.getTextWidth(rightLabelText) + 4),
+          colWidth * 0.72,
+          doc.getTextWidth(rightLabelText) + 3,
         );
         const leftLines = doc.splitTextToSize(
           leftText,
@@ -721,8 +736,14 @@ export default function DriverDetailPage() {
         doc.text(leftLabelText, leftX, yPos);
         doc.text(rightLabelText, rightX, yPos);
         doc.setFont('helvetica', 'normal');
-        doc.text(leftLines, leftX + leftLabelWidth, yPos);
-        doc.text(rightLines, rightX + rightLabelWidth, yPos);
+        const leftValueX = leftX + leftLabelWidth;
+        const rightValueX = rightX + rightLabelWidth;
+        const leftValueWidth = colWidth - leftLabelWidth;
+        const rightValueWidth = colWidth - rightLabelWidth;
+        doc.text(leftLines, leftValueX, yPos, wrappedTextOptions);
+        doc.text(rightLines, rightValueX, yPos, wrappedTextOptions);
+        drawValueLines(leftLines, leftValueX, yPos, leftValueWidth);
+        drawValueLines(rightLines, rightValueX, yPos, rightValueWidth);
         yPos += Math.max(lineHeight, leftLines.length * lineHeight, rightLines.length * lineHeight) + 2;
       };
 
@@ -731,15 +752,72 @@ export default function DriverDetailPage() {
         doc.setFontSize(9.5);
         doc.setFont('helvetica', 'bold');
         const labelLines = doc.splitTextToSize(`${label}:`, maxWidth);
-        doc.text(labelLines, margin, yPos);
+        doc.text(labelLines, margin, yPos, wrappedTextOptions);
         yPos += labelLines.length * lineHeight;
         doc.setFont('helvetica', 'normal');
         const normalized = String(value || '').toLowerCase();
         const isYes = normalized === 'yes' || normalized === 'true';
         const isNo = normalized === 'no' || normalized === 'false';
-        addCheckbox('Yes', isYes, margin + 6, yPos);
-        addCheckbox('No', isNo, margin + 42, yPos);
+        addCheckbox('YES', isYes, margin + 6, yPos);
+        addCheckbox('NO', isNo, margin + 42, yPos);
         yPos += lineHeight + 4;
+      };
+
+      const addUploadedImagePreview = async (
+        label: string,
+        relativePath: string | undefined | null,
+        resolvedUrl?: string | null,
+      ) => {
+        if (!relativePath && !resolvedUrl) {
+          return;
+        }
+
+        const loaded = await fetchStorageImageForPdf(relativePath, resolvedUrl);
+        checkNewPage(92);
+        doc.setFontSize(9.5);
+        doc.setFont('helvetica', 'bold');
+        doc.text(`${label}:`, margin, yPos);
+        yPos += lineHeight + 2;
+
+        if (!loaded) {
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(100, 100, 100);
+          doc.text('Could not load uploaded image', margin, yPos);
+          doc.setTextColor(0, 0, 0);
+          yPos += lineHeight + 4;
+          return;
+        }
+
+        try {
+          const { width: naturalWidth, height: naturalHeight } =
+            await measureDataUrlImage(loaded.dataUrl);
+          const maxImageWidth = maxWidth;
+          const maxImageHeight = 78;
+          const scale = Math.min(
+            maxImageWidth / naturalWidth,
+            maxImageHeight / naturalHeight,
+            1,
+          );
+          const imageWidth = naturalWidth * scale;
+          const imageHeight = naturalHeight * scale;
+          doc.addImage(
+            loaded.dataUrl,
+            loaded.format,
+            margin,
+            yPos,
+            imageWidth,
+            imageHeight,
+            undefined,
+            'FAST',
+          );
+          yPos += imageHeight + 8;
+        } catch {
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(180, 0, 0);
+          doc.text('Could not embed uploaded image', margin, yPos);
+          doc.setTextColor(0, 0, 0);
+          yPos += lineHeight + 4;
+        }
       };
 
       const addTable = (
@@ -776,7 +854,7 @@ export default function DriverDetailPage() {
                 ? 'N/A'
                 : String(cell);
             const lines = doc.splitTextToSize(text, widths[index] - 3);
-            doc.text(lines, x, yPos);
+            doc.text(lines, x, yPos, wrappedTextOptions);
             rowHeight = Math.max(rowHeight, lines.length * lineHeight);
             x += widths[index];
           });
@@ -954,11 +1032,15 @@ export default function DriverDetailPage() {
         'Do you have a dangerous good certificate?',
         pdfQuestions.dangerous_goods_certificate,
       );
-      addTwoColumnFields(
-        'License front image',
-        (pdfDriver as any).license_front_image_path ? 'Uploaded' : 'N/A',
-        'License back image',
-        (pdfDriver as any).license_back_image_path ? 'Uploaded' : 'N/A',
+      await addUploadedImagePreview(
+        'License Front Image',
+        (pdfDriver as any).license_front_image_path,
+        (pdfDriver as any).license_front_image_url,
+      );
+      await addUploadedImagePreview(
+        'License Back Image',
+        (pdfDriver as any).license_back_image_path,
+        (pdfDriver as any).license_back_image_url,
       );
 
       addSectionTitle('4. Driving Experience');
@@ -1031,16 +1113,17 @@ export default function DriverDetailPage() {
         addTextField('Company', employer.company);
         addTwoColumnFields('Supervisor', employer.supervisor, 'Phone', employer.phone);
         addTextField('Address', employer.address);
+        addTextField('Position', employer.position);
         addTwoColumnFields(
-          'Position',
-          employer.position,
           'Start Date',
           formatPdfDate(employer.start_date) || employer.start_date,
+          'End Date',
+          formatPdfDate(employer.end_date) || employer.end_date,
         );
-        addTextField('End Date', formatPdfDate(employer.end_date) || employer.end_date);
         addTextField('Reasons for Leaving', employer.reasons_for_leaving);
       });
 
+      /*
       addSectionTitle('6. Documents');
       addTwoColumnFields(
         'PCC / Criminal Background Check',
@@ -1067,6 +1150,7 @@ export default function DriverDetailPage() {
         pdfDriver.reference_check_status || 'pending',
       );
       addTextField('Compliance Notes', parsedComplianceData?.existing_notes);
+      */
 
       addSectionTitle('Reference Checks');
       addTwoColumnFields(
@@ -3242,21 +3326,23 @@ export default function DriverDetailPage() {
                                   {emp.position || 'N/A'}
                                 </p>
                               </div>
-                              <div>
-                                <p className='text-slate-400 text-sm'>
-                                  Start Date
-                                </p>
-                                <p className='text-white font-medium'>
-                                  {emp.start_date || 'N/A'}
-                                </p>
-                              </div>
-                              <div>
-                                <p className='text-slate-400 text-sm'>
-                                  End Date
-                                </p>
-                                <p className='text-white font-medium'>
-                                  {emp.end_date || 'N/A'}
-                                </p>
+                              <div className='col-span-2 grid grid-cols-1 gap-4 sm:grid-cols-2'>
+                                <div>
+                                  <p className='text-slate-400 text-sm'>
+                                    Start Date
+                                  </p>
+                                  <p className='text-white font-medium'>
+                                    {emp.start_date || 'N/A'}
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className='text-slate-400 text-sm'>
+                                    End Date
+                                  </p>
+                                  <p className='text-white font-medium'>
+                                    {emp.end_date || 'N/A'}
+                                  </p>
+                                </div>
                               </div>
                               {emp.reasons_for_leaving && (
                                 <div className='col-span-2'>
