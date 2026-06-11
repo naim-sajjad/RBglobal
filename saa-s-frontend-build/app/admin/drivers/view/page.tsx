@@ -544,8 +544,12 @@ export default function DriverDetailPage() {
       const { jsPDF } = await import('jspdf');
       const doc = new jsPDF();
 
-      let yPos = 0;
       const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const pageVerticalMargin = 8;
+      const pageTopMargin = pageVerticalMargin;
+      const pageBottomMargin = pageVerticalMargin;
+      let yPos = pageTopMargin;
       const margin = 10;
       const maxWidth = pageWidth - margin * 2;
       const lineHeight = 6;
@@ -616,9 +620,9 @@ export default function DriverDetailPage() {
 
       // Helper function to check if new page needed
       const checkNewPage = (requiredSpace: number) => {
-        if (yPos + requiredSpace > doc.internal.pageSize.getHeight() - 20) {
+        if (yPos + requiredSpace > pageHeight - pageBottomMargin) {
           doc.addPage();
-          yPos = 20;
+          yPos = pageTopMargin;
         }
       };
 
@@ -639,9 +643,9 @@ export default function DriverDetailPage() {
         return String(value);
       };
 
-      const addSectionTitle = (title: string) => {
-        checkNewPage(18);
-        yPos += 4;
+      const addSectionTitle = (title: string, topGap = 5) => {
+        checkNewPage(18 + topGap);
+        yPos += topGap;
         doc.setFillColor(30, 58, 138);
         doc.rect(margin, yPos, maxWidth, 8, 'F');
         doc.setTextColor(255, 255, 255);
@@ -649,7 +653,7 @@ export default function DriverDetailPage() {
         doc.setFont('helvetica', 'bold');
         doc.text(title, margin + 3, yPos + 5.5);
         doc.setTextColor(0, 0, 0);
-        yPos += 13;
+        yPos += 14;
       };
 
       const addTextField = (
@@ -773,7 +777,7 @@ export default function DriverDetailPage() {
         }
 
         const loaded = await fetchStorageImageForPdf(relativePath, resolvedUrl);
-        checkNewPage(92);
+        checkNewPage(68);
         doc.setFontSize(9.5);
         doc.setFont('helvetica', 'bold');
         doc.text(`${label}:`, margin, yPos);
@@ -791,8 +795,8 @@ export default function DriverDetailPage() {
         try {
           const { width: naturalWidth, height: naturalHeight } =
             await measureDataUrlImage(loaded.dataUrl);
-          const maxImageWidth = maxWidth;
-          const maxImageHeight = 78;
+          const maxImageWidth = 128;
+          const maxImageHeight = 54;
           const scale = Math.min(
             maxImageWidth / naturalWidth,
             maxImageHeight / naturalHeight,
@@ -810,7 +814,7 @@ export default function DriverDetailPage() {
             undefined,
             'FAST',
           );
-          yPos += imageHeight + 8;
+          yPos += imageHeight + 5;
         } catch {
           doc.setFont('helvetica', 'normal');
           doc.setTextColor(180, 0, 0);
@@ -1109,6 +1113,7 @@ export default function DriverDetailPage() {
         ? pdfEmployment.previous_employers
         : [];
       pdfPreviousEmployers.forEach((employer: any, index: number) => {
+        checkNewPage(68);
         addSectionTitle(`5.${index + 1} Previous Employer`);
         addTextField('Company', employer.company);
         addTwoColumnFields('Supervisor', employer.supervisor, 'Phone', employer.phone);
@@ -1152,82 +1157,159 @@ export default function DriverDetailPage() {
       addTextField('Compliance Notes', parsedComplianceData?.existing_notes);
       */
 
-      addSectionTitle('Reference Checks');
-      addTwoColumnFields(
-        'Driver reference check status',
-        pdfDriver.reference_check_status || 'pending',
-        'Reference checks on file',
-        referenceChecks.length,
-      );
-      if (referenceChecks.length > 0) {
-        referenceChecks.forEach((refCheck: any, refIndex: number) => {
-          checkNewPage(40);
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(10);
-          doc.text(`Reference Check ${refIndex + 1}`, margin, yPos);
-          yPos += 6;
-          doc.setFont('helvetica', 'normal');
-          const pdfRefReq = refCheck.reference_request || {};
-          const pdfRefForm = refCheck.form_data || {};
-          addTwoColumnFields('Status', refCheck.status, 'Filled by', refCheck.filled_by);
-          addTextField('Previous Company', pdfRefReq.previous_company_name);
-          addTwoColumnFields(
-            'Company Phone',
-            pdfRefReq.previous_company_phone,
-            'Supervisor/Employer',
-            pdfRefReq.supervisor_employer_name,
-          );
-          if (refCheck.form_data) {
-            addTwoColumnFields(
-              'Date of Reference Check',
-              formatPdfDate(pdfRefForm.date_of_reference_check),
-              'Relationship',
-              pdfRefForm.relationship_to_applicant === 'other'
-                ? `Other: ${pdfRefForm.relationship_other_specify || ''}`
-                : 'Supervisor',
-            );
-            addTwoColumnFields(
-              'Employment From',
-              formatPdfDate(pdfRefForm.date_of_employment_from),
-              'To',
-              formatPdfDate(pdfRefForm.date_of_employment_to),
-            );
-            addTextField('Position(s) Held', pdfRefForm.positions_held);
-            addTextField('Nature of Job', pdfRefForm.nature_of_job);
-            addTextField('Reason for leaving', pdfRefForm.reason_for_leaving);
-            addTextField('Additional comments', pdfRefForm.additional_comments);
-          }
-        });
-      }
+      checkNewPage(90);
+      addSectionTitle('Declaration', 2);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.text('To be read and signed by the applicant', pageWidth / 2, yPos, {
+        align: 'center',
+      });
+      yPos += 8;
 
-      addSectionTitle('Declaration');
       const pdfDeclarationText = [
         'By completing and submitting this signed application I:',
         'Authorize R&B Services Inc. to investigate my reputation, background, character and prior employment by contacting my employer, references or any other individuals the employer deems necessary.',
-        'Understand that I am required to abide by all the rules and regulations set out by this company.',
+        'Understanding that I am required to abide by all the rules and regulations set out by this company.',
         'Certify that all the entries and information on this application is true and complete to the best of my knowledge.',
       ];
       pdfDeclarationText.forEach((text) => {
-        checkNewPage(12);
+        checkNewPage(14);
         const lines = doc.splitTextToSize(text, maxWidth);
         doc.setFont('helvetica', 'normal');
-        doc.setFontSize(9.5);
+        doc.setFontSize(10);
         doc.text(lines, margin, yPos);
         yPos += lines.length * lineHeight + 2;
       });
-      yPos += 8;
-      checkNewPage(35);
+
+      yPos += 6;
+      checkNewPage(46);
       const pdfPrintName = pdfDriver.user?.name || '';
       const pdfSignedDate = formatPdfDate(new Date().toISOString());
-      doc.text(pdfPrintName, margin + 8, yPos);
-      drawLine(margin + 8, yPos + 2, 72);
-      doc.text('Print Name', margin + 24, yPos + 8);
-      doc.text(pdfSignedDate, pageWidth - margin - 70, yPos);
-      drawLine(pageWidth - margin - 70, yPos + 2, 60);
-      doc.text('Date', pageWidth - margin - 48, yPos + 8);
-      yPos += 25;
-      drawLine(margin + 8, yPos, 90);
-      doc.text('Signature of Applicant', margin + 8, yPos + 8);
+      const pdfDeclarationLineX = margin + 14;
+      const pdfDeclarationLineWidth = 62;
+      const pdfDateLineX = pageWidth - margin - 76;
+      const pdfDateLineWidth = 54;
+      const centerPdfText = (text: string, x: number, width: number, y: number) => {
+        doc.text(text, x + width / 2 - doc.getTextWidth(text) / 2, y);
+      };
+
+      doc.text(pdfPrintName, pdfDeclarationLineX, yPos);
+      drawLine(pdfDeclarationLineX, yPos + 2, pdfDeclarationLineWidth);
+      centerPdfText('Print Name', pdfDeclarationLineX, pdfDeclarationLineWidth, yPos + 10);
+
+      doc.text(pdfSignedDate, pdfDateLineX, yPos);
+      drawLine(pdfDateLineX, yPos + 2, pdfDateLineWidth);
+      centerPdfText('Date', pdfDateLineX, pdfDateLineWidth, yPos + 10);
+
+      yPos += 21;
+      drawLine(pdfDeclarationLineX, yPos, pdfDeclarationLineWidth);
+      doc.text('Signature of Applicant', pdfDeclarationLineX, yPos + 10);
+
+      checkNewPage(126);
+      yPos += 12;
+
+      const appendixRefCheck = referenceChecks[0] || {};
+      const appendixRefRequest = appendixRefCheck.reference_request || {};
+      const appendixRefForm = appendixRefCheck.form_data || {};
+      const hasReferenceRequestData = Boolean(
+        appendixRefRequest.previous_company_name ||
+          appendixRefRequest.previous_company_phone ||
+          appendixRefRequest.supervisor_employer_name,
+      );
+      const appendixApplicantName = hasReferenceRequestData
+        ? appendixRefRequest.applicant_name || ''
+        : '';
+      const appendixLicenseNumber = hasReferenceRequestData
+        ? appendixRefRequest.drivers_license_number || ''
+        : '';
+      const appendixCompanyName = hasReferenceRequestData
+        ? appendixRefRequest.previous_company_name || ''
+        : '';
+      const appendixCompanyPhone = hasReferenceRequestData
+        ? appendixRefRequest.previous_company_phone || ''
+        : '';
+      const appendixSupervisor = hasReferenceRequestData
+        ? appendixRefRequest.supervisor_employer_name || ''
+        : '';
+      const appendixSignatureDate = hasReferenceRequestData
+        ? formatPdfDate(appendixRefRequest.applicant_signature_date) || ''
+        : '';
+      const appendixPosition = hasReferenceRequestData
+        ? appendixRefForm.positions_held || ''
+        : '';
+      const appendixAppliedRole = hasReferenceRequestData
+        ? pdfDriver.driver_class?.name?.trim() ||
+          pdfDriver.driver_class?.code?.trim() ||
+          ''
+        : '';
+      const appendixX = margin;
+      const appendixWidth = maxWidth;
+      const addInlinePdfField = (
+        label: string,
+        value: string,
+        x: number,
+        y: number,
+        lineWidth: number,
+      ) => {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.text(label, x, y);
+        const labelWidth = doc.getTextWidth(label);
+        const valueX = x + labelWidth + 1.5;
+        doc.setFont('helvetica', 'normal');
+        doc.text(value || '', valueX, y);
+        drawLine(valueX, y + 1.6, lineWidth);
+      };
+
+      addSectionTitle('Request for Information from Previous Employer', 2);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      const requestInfoLines = doc.splitTextToSize(
+        'I hereby authorize you to release the following information to R & B Services Inc. for the sole purpose of obtaining reference information regarding current and / or previous employment.',
+        appendixWidth,
+      );
+      doc.text(requestInfoLines, appendixX, yPos);
+      yPos += requestInfoLines.length * lineHeight + 9;
+
+      addInlinePdfField('Applicant Name:', appendixApplicantName, appendixX, yPos, 70);
+      yPos += 9;
+      addInlinePdfField("Driver's License Number:", appendixLicenseNumber, appendixX, yPos, 70);
+      yPos += 13;
+      addInlinePdfField('Previous Company Name:', appendixCompanyName, appendixX, yPos, 56);
+      addInlinePdfField('Phone #:', appendixCompanyPhone, appendixX + 118, yPos, 46);
+      yPos += 9;
+      addInlinePdfField('Name of Supervisor/ Employer:', appendixSupervisor, appendixX, yPos, 82);
+      yPos += 13;
+      addInlinePdfField("Applicant's Signature:", '', appendixX, yPos, 58);
+      addInlinePdfField('Date:', appendixSignatureDate, appendixX + 106, yPos, 48);
+
+      yPos += 10;
+
+      addSectionTitle('Reference Check', 2);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.text(
+        'We appreciate your time in completing, in confidence, the information below.',
+        appendixX,
+        yPos,
+      );
+      yPos += 9;
+
+      const referenceBody = `${appendixApplicantName || '________________________'}, driver's license number ${appendixLicenseNumber || '________________________'}, has completed an application to this company for a position as a ${appendixAppliedRole || '________________'} and states that he/ she was employed by you as a ${appendixPosition || '________________________'}.`;
+      const referenceBodyLines = doc.splitTextToSize(referenceBody, appendixWidth);
+      doc.text(referenceBodyLines, appendixX, yPos);
+      yPos += referenceBodyLines.length * lineHeight + 5;
+
+      const referenceClosingLines = doc.splitTextToSize(
+        'Please reply to this inquiry below regarding this applicant. Your reply will be held in strictest confidence and will in no way involve you in any responsibility.',
+        appendixWidth,
+      );
+      doc.text(referenceClosingLines, appendixX, yPos);
+      yPos += referenceClosingLines.length * lineHeight + 3;
+      doc.text('Kind regards,', appendixX, yPos);
+      yPos += 4;
+      doc.setFont('helvetica', 'bold');
+      doc.text('R & B Services Inc.', appendixX, yPos);
 
       const pdfDownloadName = `Driver_Application_${pdfDriver.user?.name?.replace(/\s+/g, '_') || 'Driver'}_${new Date().toISOString().split('T')[0]}.pdf`;
       doc.save(pdfDownloadName);
