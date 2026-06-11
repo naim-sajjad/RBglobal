@@ -1,1 +1,8 @@
 [baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+
+-----
+[1m[31mFATAL[39m[0m: An unexpected Turbopack error occurred. A panic log has been written to C:\Users\RASHID~1\AppData\Local\Temp\next-panic-7d9ec0df348f8052ff7aab95c8f72e44.log.
+
+To help make Turbopack better, report this error by clicking here: https://github.com/vercel/next.js/discussions/new?category=turbopack-error-report&title=Turbopack%20Error%3A%20Cell%20CellId%20%7B%20type_id%3A%20ValueTypeId%20%7B%20id%3A%20230%2C%20name%3A%20ValueType%20%7B%20name%3A%20%22turbo_tasks%3A%3Aeffect%3A%3AEffectInstance%22%2C%20dbg%3A%20%22%28trait%20fn%29%22%2C%20dbg_depth%3A%20%22%28trait%20fn%29%22%20%7D%20%7D%2C%20index%3A%200%20%7D%20no%20longer%20exists%20in%20task%20%3CDiskFileSystem%20as%20FileSystem%3E%3A%3Awrite%20%28no%20cell%20of%20this%20type%20exists%29&body=Turbopack%20version%3A%20%603f6a39f6%60%0ANext.js%20version%3A%20%600.0.0%60%0A%0AError%20message%3A%0A%60%60%60%0ATurbopack%20Error%3A%20Cell%20CellId%20%7B%20type_id%3A%20ValueTypeId%20%7B%20id%3A%20230%2C%20name%3A%20ValueType%20%7B%20name%3A%20%22turbo_tasks%3A%3Aeffect%3A%3AEffectInstance%22%2C%20dbg%3A%20%22%28trait%20fn%29%22%2C%20dbg_depth%3A%20%22%28trait%20fn%29%22%20%7D%20%7D%2C%20index%3A%200%20%7D%20no%20longer%20exists%20in%20task%20%3CDiskFileSystem%20as%20FileSystem%3E%3A%3Awrite%20%28no%20cell%20of%20this%20type%20exists%29%0A%60%60%60&labels=Turbopack,Turbopack%20Panic%20Backtrace
+-----
+

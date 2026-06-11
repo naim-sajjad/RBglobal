@@ -151,15 +151,22 @@ export default function LoginPage() {
               </Button>
 
               <div className='text-center text-sm'>
-                <p className='text-slate-400'>
-                  Don't have an account?{' '}
+                <p className='text-slate-400'>Don't have an account?</p>
+                <div className='mt-1 flex flex-wrap items-center justify-center gap-x-2 gap-y-1'>
                   <Link
-                    href='/register'
+                    href='/register/'
                     className='text-blue-400 hover:text-blue-300'
                   >
-                    Register here
+                    Register as employer
                   </Link>
-                </p>
+                  <span className='text-slate-500'>|</span>
+                  <Link
+                    href='/driver/register/'
+                    className='text-blue-400 hover:text-blue-300'
+                  >
+                    Register as driver
+                  </Link>
+                </div>
               </div>
             </form>
           </CardContent>

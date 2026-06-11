@@ -71,7 +71,7 @@ export default function Header() {
           </div>
           <div className='flex items-center gap-4'>
             <Link
-              href='/driver/register'
+              href='/driver/register/'
               className='hover:text-[#D4AF37] transition-colors'
             >
               Register
