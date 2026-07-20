@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class DriverController extends Controller
@@ -196,6 +197,152 @@ class DriverController extends Controller
                 201,
             );
         });
+    }
+
+    /**
+     * Bulk import drivers from a CSV or first-sheet XLSX file.
+     */
+    public function import(Request $request)
+    {
+        $currentUser = auth()->user();
+
+        if (!$currentUser->hasPermissionTo('drivers.create') && !$currentUser->is_global_admin) {
+            abort(403, 'You do not have permission to import drivers');
+        }
+
+        $request->validate([
+            'file' => 'required|file|max:10240',
+        ]);
+
+        $file = $request->file('file');
+        $extension = strtolower($file->getClientOriginalExtension());
+
+        if (!in_array($extension, ['csv', 'xlsx'], true)) {
+            return response()->json([
+                'message' => 'Please upload a CSV or XLSX file.',
+            ], 422);
+        }
+
+        try {
+            $rows = $extension === 'xlsx'
+                ? $this->readXlsxRows($file->getRealPath())
+                : $this->readCsvRows($file->getRealPath());
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => 'Unable to read the uploaded driver sheet.',
+            ], 422);
+        }
+
+        if (count($rows) < 2) {
+            return response()->json([
+                'message' => 'The uploaded sheet must include a header row and at least one driver row.',
+            ], 422);
+        }
+
+        $headers = array_map(fn ($value) => $this->normalizeImportHeader((string) $value), array_shift($rows));
+        $created = 0;
+        $updated = 0;
+        $skipped = 0;
+        $errors = [];
+
+        $tenantId = null;
+        if (tenant('id')) {
+            $tenantId = tenant('id');
+        } elseif ($request->has('tenant_id') && $currentUser->is_global_admin) {
+            $tenantId = $request->tenant_id;
+        }
+
+        DB::transaction(function () use ($rows, $headers, $tenantId, &$created, &$updated, &$skipped, &$errors) {
+            foreach ($rows as $index => $row) {
+                $rowNumber = $index + 2;
+                $data = $this->mapImportRow($headers, $row);
+
+                if ($this->isEmptyImportRow($data)) {
+                    continue;
+                }
+
+                $name = trim((string) ($data['name'] ?? ''));
+                $email = strtolower(trim((string) ($data['email'] ?? '')));
+
+                if ($name === '' || $email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                    $skipped++;
+                    $errors[] = "Row {$rowNumber}: name and a valid email are required.";
+                    continue;
+                }
+
+                $user = User::where('email', $email)->first();
+                $userWasRecentlyCreated = false;
+
+                if (!$user) {
+                    $user = User::create([
+                        'name' => $name,
+                        'email' => $email,
+                        'password' => Hash::make((string) ($data['password'] ?? Str::random(16))),
+                        'is_global_admin' => false,
+                    ]);
+                    $userWasRecentlyCreated = true;
+                    $user->assignRole('driver');
+                } elseif ($user->name !== $name) {
+                    $user->update(['name' => $name]);
+                }
+
+                if ($tenantId) {
+                    $user->tenants()->syncWithoutDetaching([$tenantId]);
+                }
+
+                $driver = Driver::where('user_id', $user->id)
+                    ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
+                    ->first();
+
+                $driverAttributes = $this->filterToDriverTableColumns([
+                    'user_id' => $user->id,
+                    'tenant_id' => $driver?->tenant_id ?? $tenantId,
+                    'license_number' => $this->blankToNull($data['license_number'] ?? null),
+                    'license_type' => $this->normalizeLicenseType($data['license_type'] ?? null),
+                    'license_other' => $this->blankToNull($data['license_other'] ?? null),
+                    'issuing_authority' => $this->blankToNull($data['issuing_authority'] ?? null),
+                    'license_issue_date' => $this->normalizeImportDate($data['license_issue_date'] ?? null),
+                    'license_expiry_date' => $this->normalizeImportDate($data['license_expiry_date'] ?? null),
+                    'vehicle_types' => $this->normalizeVehicleTypes($data['vehicle_types'] ?? null),
+                    'background_check_status' => $this->normalizeCheckStatus($data['background_check_status'] ?? null),
+                    'reference_check_status' => $this->normalizeCheckStatus($data['reference_check_status'] ?? null),
+                    'compliance_notes' => $this->blankToNull($data['compliance_notes'] ?? null),
+                    'status' => $this->normalizeDriverStatus($data['status'] ?? null),
+                    'payee_business_name' => $this->blankToNull($data['payee_business_name'] ?? null),
+                    'payee_address' => $this->blankToNull($data['payee_address'] ?? null),
+                ]);
+
+                $driverAttributes = array_filter(
+                    $driverAttributes,
+                    fn ($value, $key) => in_array($key, ['user_id', 'tenant_id'], true) || $value !== null,
+                    ARRAY_FILTER_USE_BOTH,
+                );
+
+                if ($driver) {
+                    $driver->update($driverAttributes);
+                    $updated++;
+                } else {
+                    Driver::create(array_merge([
+                        'background_check_status' => 'pending',
+                        'reference_check_status' => 'pending',
+                        'status' => 'pending_approval',
+                    ], $driverAttributes));
+                    $created++;
+                }
+
+                if (!$userWasRecentlyCreated && !$user->hasRole('driver')) {
+                    $user->assignRole('driver');
+                }
+            }
+        });
+
+        return response()->json([
+            'message' => "Driver import complete: {$created} created, {$updated} updated, {$skipped} skipped.",
+            'created' => $created,
+            'updated' => $updated,
+            'skipped' => $skipped,
+            'errors' => $errors,
+        ]);
     }
 
     /**
@@ -394,6 +541,365 @@ class DriverController extends Controller
         return response()->json(['message' => 'Driver deleted successfully']);
     }
 
+    private function readCsvRows(string $path): array
+    {
+        $rows = [];
+        $handle = fopen($path, 'r');
+
+        if ($handle === false) {
+            return [];
+        }
+
+        while (($row = fgetcsv($handle)) !== false) {
+            $rows[] = $row;
+        }
+
+        fclose($handle);
+
+        return $rows;
+    }
+
+    private function readXlsxRows(string $path): array
+    {
+        $entries = $this->readZipEntries($path);
+        if ($entries === []) {
+            return [];
+        }
+
+        $sharedStrings = $this->readXlsxSharedStrings($entries);
+        $sheetXmlPath = $this->firstXlsxSheetPath($entries);
+        $sheetXml = $sheetXmlPath ? ($entries[$sheetXmlPath] ?? false) : false;
+
+        if (!is_string($sheetXml)) {
+            return [];
+        }
+
+        $sheet = new \DOMDocument();
+        if (!$sheet->loadXML($sheetXml, LIBXML_NONET)) {
+            return [];
+        }
+
+        $rows = [];
+        $xpath = new \DOMXPath($sheet);
+        $xpath->registerNamespace('x', 'http://schemas.openxmlformats.org/spreadsheetml/2006/main');
+        $rowNodes = $xpath->query('//x:sheetData/x:row');
+
+        foreach ($rowNodes as $rowNode) {
+            $row = [];
+            $cellNodes = $xpath->query('./x:c', $rowNode);
+
+            foreach ($cellNodes as $cell) {
+                $reference = $cell instanceof \DOMElement ? $cell->getAttribute('r') : '';
+                $columnIndex = $this->xlsxColumnIndex($reference);
+                $type = $cell instanceof \DOMElement ? $cell->getAttribute('t') : '';
+                $value = '';
+
+                if ($type === 's') {
+                    $valueNode = $xpath->query('./x:v', $cell)->item(0);
+                    $value = $sharedStrings[(int) ($valueNode?->textContent ?? 0)] ?? '';
+                } elseif ($type === 'inlineStr') {
+                    $textNode = $xpath->query('./x:is/x:t', $cell)->item(0);
+                    $value = trim((string) ($textNode?->textContent ?? ''));
+                } else {
+                    $valueNode = $xpath->query('./x:v', $cell)->item(0);
+                    $value = trim((string) ($valueNode?->textContent ?? ''));
+                }
+
+                if ($columnIndex !== null) {
+                    $row[$columnIndex] = $value;
+                }
+            }
+
+            if ($row !== []) {
+                ksort($row);
+                $denseRow = [];
+                $maxIndex = max(array_keys($row));
+                for ($i = 0; $i <= $maxIndex; $i++) {
+                    $denseRow[] = $row[$i] ?? '';
+                }
+                $rows[] = $denseRow;
+            }
+        }
+
+        return $rows;
+    }
+
+    private function readZipEntries(string $path): array
+    {
+        $contents = file_get_contents($path);
+        if ($contents === false) {
+            return [];
+        }
+
+        $eocdOffset = strrpos($contents, "PK\x05\x06");
+        if ($eocdOffset === false) {
+            return [];
+        }
+
+        $eocd = unpack('vdisk/vstartDisk/ventriesDisk/ventries/VcentralSize/VcentralOffset/vcommentLength', substr($contents, $eocdOffset + 4, 18));
+        if (!is_array($eocd)) {
+            return [];
+        }
+
+        $entries = [];
+        $offset = (int) $eocd['centralOffset'];
+        $end = $offset + (int) $eocd['centralSize'];
+
+        while ($offset < $end && substr($contents, $offset, 4) === "PK\x01\x02") {
+            $header = unpack(
+                'vversionMade/vversionNeeded/vflags/vmethod/vtime/vdate/Vcrc/VcompressedSize/VuncompressedSize/vnameLength/vextraLength/vcommentLength/vdisk/vinternal/Vexternal/VlocalOffset',
+                substr($contents, $offset + 4, 42),
+            );
+
+            if (!is_array($header)) {
+                break;
+            }
+
+            $nameLength = (int) $header['nameLength'];
+            $extraLength = (int) $header['extraLength'];
+            $commentLength = (int) $header['commentLength'];
+            $name = substr($contents, $offset + 46, $nameLength);
+            $localOffset = (int) $header['localOffset'];
+
+            if ($name !== '' && substr($contents, $localOffset, 4) === "PK\x03\x04") {
+                $localHeader = unpack('vversion/vflags/vmethod/vtime/vdate/Vcrc/VcompressedSize/VuncompressedSize/vnameLength/vextraLength', substr($contents, $localOffset + 4, 26));
+
+                if (is_array($localHeader)) {
+                    $dataOffset = $localOffset + 30 + (int) $localHeader['nameLength'] + (int) $localHeader['extraLength'];
+                    $compressedData = substr($contents, $dataOffset, (int) $header['compressedSize']);
+                    $method = (int) $header['method'];
+
+                    if ($method === 0) {
+                        $entries[$name] = $compressedData;
+                    } elseif ($method === 8) {
+                        $inflated = gzinflate($compressedData);
+                        if ($inflated !== false) {
+                            $entries[$name] = $inflated;
+                        }
+                    }
+                }
+            }
+
+            $offset += 46 + $nameLength + $extraLength + $commentLength;
+        }
+
+        return $entries;
+    }
+
+    private function readXlsxSharedStrings(array $entries): array
+    {
+        $xml = $entries['xl/sharedStrings.xml'] ?? null;
+        if (!is_string($xml)) {
+            return [];
+        }
+
+        $strings = [];
+        $sharedStrings = new \DOMDocument();
+        if (!$sharedStrings->loadXML($xml, LIBXML_NONET)) {
+            return [];
+        }
+
+        $xpath = new \DOMXPath($sharedStrings);
+        $xpath->registerNamespace('x', 'http://schemas.openxmlformats.org/spreadsheetml/2006/main');
+        $stringNodes = $xpath->query('//x:si');
+
+        foreach ($stringNodes as $stringNode) {
+            $directTextNode = $xpath->query('./x:t', $stringNode)->item(0);
+            if ($directTextNode) {
+                $strings[] = $directTextNode->textContent;
+                continue;
+            }
+
+            $parts = [];
+            $runTextNodes = $xpath->query('./x:r/x:t', $stringNode);
+            foreach ($runTextNodes as $runTextNode) {
+                $parts[] = $runTextNode->textContent;
+            }
+            $strings[] = implode('', $parts);
+        }
+
+        return $strings;
+    }
+
+    private function firstXlsxSheetPath(array $entries): ?string
+    {
+        $workbookXml = $entries['xl/workbook.xml'] ?? null;
+        $relsXml = $entries['xl/_rels/workbook.xml.rels'] ?? null;
+
+        if (!is_string($workbookXml) || !is_string($relsXml)) {
+            return isset($entries['xl/worksheets/sheet1.xml']) ? 'xl/worksheets/sheet1.xml' : null;
+        }
+
+        $workbook = new \DOMDocument();
+        $rels = new \DOMDocument();
+        if (!$workbook->loadXML($workbookXml, LIBXML_NONET) || !$rels->loadXML($relsXml, LIBXML_NONET)) {
+            return null;
+        }
+
+        $workbookXpath = new \DOMXPath($workbook);
+        $workbookXpath->registerNamespace('x', 'http://schemas.openxmlformats.org/spreadsheetml/2006/main');
+        $workbookXpath->registerNamespace('r', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships');
+        $firstSheet = $workbookXpath->query('//x:sheets/x:sheet')->item(0);
+        $relationshipId = $firstSheet instanceof \DOMElement ? $firstSheet->getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id') : '';
+
+        $relsXpath = new \DOMXPath($rels);
+        $relsXpath->registerNamespace('rel', 'http://schemas.openxmlformats.org/package/2006/relationships');
+        $relationships = $relsXpath->query('//rel:Relationship');
+        foreach ($relationships as $relationship) {
+            if ($relationship instanceof \DOMElement && $relationship->getAttribute('Id') === $relationshipId) {
+                $target = ltrim($relationship->getAttribute('Target'), '/');
+                return str_starts_with($target, 'xl/') ? $target : 'xl/'.$target;
+            }
+        }
+
+        return null;
+    }
+
+    private function xlsxColumnIndex(string $reference): ?int
+    {
+        if (!preg_match('/^([A-Z]+)/i', $reference, $matches)) {
+            return null;
+        }
+
+        $letters = strtoupper($matches[1]);
+        $index = 0;
+        for ($i = 0; $i < strlen($letters); $i++) {
+            $index = $index * 26 + (ord($letters[$i]) - 64);
+        }
+
+        return $index - 1;
+    }
+
+    private function normalizeImportHeader(string $header): string
+    {
+        $normalized = Str::of($header)->lower()->replaceMatches('/[^a-z0-9]+/', '_')->trim('_')->toString();
+
+        return [
+            'full_name' => 'name',
+            'driver_name' => 'name',
+            'email_address' => 'email',
+            'licence_number' => 'license_number',
+            'licence_type' => 'license_type',
+            'licence_issue_date' => 'license_issue_date',
+            'licence_expiry_date' => 'license_expiry_date',
+            'license_expiration_date' => 'license_expiry_date',
+            'licence_expiration_date' => 'license_expiry_date',
+            'authority' => 'issuing_authority',
+            'vehicle_type' => 'vehicle_types',
+            'vehicle_types' => 'vehicle_types',
+            'background_check' => 'background_check_status',
+            'reference_check' => 'reference_check_status',
+            'payee_name' => 'payee_business_name',
+            'business_name' => 'payee_business_name',
+        ][$normalized] ?? $normalized;
+    }
+
+    private function mapImportRow(array $headers, array $row): array
+    {
+        $mapped = [];
+        foreach ($headers as $index => $header) {
+            if ($header !== '') {
+                $mapped[$header] = $row[$index] ?? null;
+            }
+        }
+
+        return $mapped;
+    }
+
+    private function isEmptyImportRow(array $row): bool
+    {
+        foreach ($row as $value) {
+            if (trim((string) $value) !== '') {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function blankToNull(mixed $value): ?string
+    {
+        $value = trim((string) $value);
+        return $value === '' ? null : $value;
+    }
+
+    private function normalizeImportDate(mixed $value): ?string
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return null;
+        }
+
+        if (is_numeric($value)) {
+            return gmdate('Y-m-d', ((int) $value - 25569) * 86400);
+        }
+
+        $timestamp = strtotime($value);
+        return $timestamp ? date('Y-m-d', $timestamp) : null;
+    }
+
+    private function normalizeLicenseType(mixed $value): ?string
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return null;
+        }
+
+        $allowed = ['AZ', 'DZ', 'G-Class', 'G1/G2', 'Other'];
+        foreach ($allowed as $type) {
+            if (strcasecmp($type, $value) === 0) {
+                return $type;
+            }
+        }
+
+        return 'Other';
+    }
+
+    private function normalizeVehicleTypes(mixed $value): ?array
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return null;
+        }
+
+        $allowed = ['Truck', 'Van', 'Trailer', 'Reefer', 'Flatbed'];
+        $parts = preg_split('/[,;|]+/', $value) ?: [];
+        $types = [];
+
+        foreach ($parts as $part) {
+            foreach ($allowed as $type) {
+                if (strcasecmp(trim($part), $type) === 0) {
+                    $types[] = $type;
+                }
+            }
+        }
+
+        return array_values(array_unique($types));
+    }
+
+    private function normalizeCheckStatus(mixed $value): ?string
+    {
+        $value = strtolower(trim((string) $value));
+        if ($value === '') {
+            return null;
+        }
+
+        return in_array($value, ['completed', 'complete', 'done', 'yes'], true) ? 'completed' : 'pending';
+    }
+
+    private function normalizeDriverStatus(mixed $value): ?string
+    {
+        $value = strtolower(trim((string) $value));
+        if ($value === '') {
+            return null;
+        }
+
+        $normalized = str_replace([' ', '-'], '_', $value);
+        return in_array($normalized, ['pending_approval', 'active', 'inactive', 'suspended'], true)
+            ? $normalized
+            : 'pending_approval';
+    }
+
     /**
      * Validate driver data
      */
@@ -514,4 +1020,3 @@ class DriverController extends Controller
         $driver->update($this->filterToDriverTableColumns($patch));
     }
 }
-

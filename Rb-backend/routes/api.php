@@ -75,6 +75,7 @@ Route::prefix('v1/tenant')->middleware([
     // Driver Management (show/index JSON appends *_{document,image}_url — full storage URLs)
     Route::get('/drivers', [DriverController::class, 'index'])->middleware('permission:drivers.view');
     Route::post('/drivers', [DriverController::class, 'store'])->middleware('permission:drivers.create');
+    Route::post('/drivers/import', [DriverController::class, 'import'])->middleware('permission:drivers.create');
     Route::get('/drivers/my-profile', [DriverController::class, 'myProfile']); // Driver's own profile
     Route::get('/drivers/{driver}', [DriverController::class, 'show'])->middleware('permission:drivers.view');
     Route::get('/drivers/{driver}/application-pdf', [DriverController::class, 'applicationPdf'])->middleware('permission:drivers.view');
@@ -167,4 +168,3 @@ Route::prefix('v1/tenant')->middleware([
     Route::get('/payroll/payslips/{payslip}/remittance-pdf', [PayrollFinancialController::class, 'remittancePdf']);
     Route::get('/payroll/driver-calculations/{driverCalculation}/pdf', [PayrollFinancialController::class, 'calculationPdf']);
 });
-

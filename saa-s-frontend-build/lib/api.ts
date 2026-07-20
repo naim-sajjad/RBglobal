@@ -235,6 +235,14 @@ class ApiClient {
     return response.data;
   }
 
+  async importDrivers(file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await this.client.post('/tenant/drivers/import', formData);
+    return response.data;
+  }
+
   async updateDriver(id: string | number, driverData: any) {
     const formData = new FormData();
 

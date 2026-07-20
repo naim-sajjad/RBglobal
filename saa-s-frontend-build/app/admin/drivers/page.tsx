@@ -42,6 +42,8 @@ import {
   Search,
   AlertCircle,
   CheckCircle2,
+  Upload,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import {
@@ -68,6 +70,11 @@ export default function DriversPage() {
   );
   const [isSaving, setIsSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [isDraggingUpload, setIsDraggingUpload] = useState(false);
+  const [isUploadingDrivers, setIsUploadingDrivers] = useState(false);
+  const [uploadErrors, setUploadErrors] = useState<string[]>([]);
   const [approvingDriver, setApprovingDriver] = useState<
     string | number | null
   >(null);
@@ -246,6 +253,52 @@ export default function DriversPage() {
     fetchDrivers();
   };
 
+  const handleUploadFileSelect = (file?: File | null) => {
+    if (!file) return;
+
+    const allowedExtensions = ['csv', 'xlsx'];
+    const extension = file.name.split('.').pop()?.toLowerCase();
+
+    if (!extension || !allowedExtensions.includes(extension)) {
+      toast.error('Please upload a CSV or XLSX driver sheet');
+      return;
+    }
+
+    setUploadFile(file);
+    setUploadErrors([]);
+  };
+
+  const handleUploadDrivers = async () => {
+    if (!uploadFile) {
+      toast.error('Select a driver sheet first');
+      return;
+    }
+
+    setIsUploadingDrivers(true);
+    setUploadErrors([]);
+
+    try {
+      const result = await apiClient.importDrivers(uploadFile);
+      toast.success(result.message || 'Driver sheet uploaded successfully');
+      setUploadErrors(Array.isArray(result.errors) ? result.errors : []);
+      setUploadFile(null);
+      setIsUploadDialogOpen(false);
+      await fetchDrivers();
+    } catch (err: any) {
+      const message =
+        err.response?.data?.message || 'Failed to upload driver sheet';
+      const errors = err.response?.data?.errors;
+      setUploadErrors(
+        Array.isArray(errors)
+          ? errors
+          : Object.values(errors || {}).flat().map(String),
+      );
+      toast.error(message);
+    } finally {
+      setIsUploadingDrivers(false);
+    }
+  };
+
   const toggleCreatedSort = () => {
     setSortBy('created_at');
     setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
@@ -297,13 +350,24 @@ export default function DriversPage() {
             Create, view, update, and manage drivers
           </p>
         </div>
-        <Button
-          onClick={() => router.push('/admin/drivers/create')}
-          className='bg-blue-600 hover:bg-blue-700'
-        >
-          <Plus className='mr-2 h-4 w-4' />
-          Add Driver
-        </Button>
+        <div className='flex items-center gap-2'>
+          <Button
+            onClick={() => router.push('/admin/drivers/create')}
+            className='bg-blue-600 hover:bg-blue-700'
+          >
+            <Plus className='mr-2 h-4 w-4' />
+            Add Driver
+          </Button>
+          <Button
+            type='button'
+            variant='outline'
+            onClick={() => setIsUploadDialogOpen(true)}
+            className='border-slate-600'
+          >
+            <Upload className='mr-2 h-4 w-4' />
+            Upload Driver
+          </Button>
+        </div>
       </div>
 
       {/* Search Bar */}
@@ -609,6 +673,94 @@ export default function DriversPage() {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Upload Driver Dialog */}
+      <Dialog open={isUploadDialogOpen} onOpenChange={setIsUploadDialogOpen}>
+        <DialogContent className='bg-slate-800 border-slate-700 max-w-xl'>
+          <DialogHeader>
+            <DialogTitle className='text-white'>Upload Driver</DialogTitle>
+            <DialogDescription className='text-slate-400'>
+              Upload a CSV or Excel sheet with driver rows.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className='space-y-4'>
+            <label
+              htmlFor='driver-sheet-upload'
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsDraggingUpload(true);
+              }}
+              onDragLeave={() => setIsDraggingUpload(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setIsDraggingUpload(false);
+                handleUploadFileSelect(e.dataTransfer.files?.[0]);
+              }}
+              className={`flex min-h-[180px] cursor-pointer flex-col items-center justify-center rounded-md border border-dashed px-6 py-8 text-center transition-colors ${
+                isDraggingUpload
+                  ? 'border-blue-400 bg-blue-500/10'
+                  : 'border-slate-600 bg-slate-900/40 hover:bg-slate-700/40'
+              }`}
+            >
+              <FileSpreadsheet className='mb-3 h-10 w-10 text-slate-300' />
+              <span className='text-sm font-medium text-white'>
+                {uploadFile ? uploadFile.name : 'Drop driver sheet here'}
+              </span>
+              <span className='mt-1 text-xs text-slate-400'>
+                CSV or XLSX files are supported
+              </span>
+              <Input
+                id='driver-sheet-upload'
+                type='file'
+                accept='.csv,.xlsx'
+                className='sr-only'
+                disabled={isUploadingDrivers}
+                onChange={(e) => handleUploadFileSelect(e.target.files?.[0])}
+              />
+            </label>
+
+            <div className='rounded-md border border-slate-700 bg-slate-900/40 p-3 text-xs text-slate-300'>
+              Required columns: name, email. Optional columns include
+              license_number, license_type, issuing_authority,
+              license_issue_date, license_expiry_date, status, vehicle_types.
+            </div>
+
+            {uploadErrors.length > 0 && (
+              <Alert variant='destructive'>
+                <AlertCircle className='h-4 w-4' />
+                <AlertDescription>
+                  <div className='space-y-1'>
+                    {uploadErrors.slice(0, 5).map((uploadError, index) => (
+                      <p key={`${uploadError}-${index}`}>{uploadError}</p>
+                    ))}
+                  </div>
+                </AlertDescription>
+              </Alert>
+            )}
+
+            <div className='flex justify-end gap-3'>
+              <Button
+                type='button'
+                variant='outline'
+                onClick={() => setIsUploadDialogOpen(false)}
+                disabled={isUploadingDrivers}
+                className='border-slate-600 bg-transparent'
+              >
+                Cancel
+              </Button>
+              <Button
+                type='button'
+                onClick={handleUploadDrivers}
+                disabled={!uploadFile || isUploadingDrivers}
+                className='bg-blue-600 hover:bg-blue-700'
+              >
+                {isUploadingDrivers ? 'Uploading...' : 'Upload Driver'}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
