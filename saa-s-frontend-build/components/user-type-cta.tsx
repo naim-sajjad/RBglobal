@@ -69,7 +69,7 @@ export default function UserTypeCTA() {
         />
       </div>
 
-      <div className="container mx-auto px-4 relative">
+      <div className="relative mx-auto w-full max-w-[1600px] px-5 lg:px-8">
         <div className="text-center mb-16">
           <div
             className={`inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#D4AF37]/10 text-[#D4AF37] text-sm font-semibold mb-6 transition-all duration-700 ${

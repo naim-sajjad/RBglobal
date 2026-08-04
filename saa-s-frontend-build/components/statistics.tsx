@@ -116,7 +116,7 @@ export default function Statistics() {
         <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#D4AF37]/30 to-transparent" />
       </div>
 
-      <div className="container mx-auto px-4 relative">
+      <div className="relative mx-auto w-full max-w-[1600px] px-5 lg:px-8">
         {/* Section title */}
         <div className={`text-center mb-16 transition-all duration-700 ${
           isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"

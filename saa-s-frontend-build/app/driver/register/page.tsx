@@ -2,8 +2,8 @@
 
 import React, { useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import Header from '@/components/web/Header';
-import Footer from '@/components/footer';
+import { SiteHeader } from '@/components/web/Header';
+import { SiteFooter } from '@/components/footer';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -372,25 +372,39 @@ export default function DriverRegisterPage() {
   };
 
   return (
-    <main className='light flex min-h-screen flex-col bg-gradient-to-br from-gray-50 to-gray-100 text-gray-900'>
-      <Header />
+    <main className='flex min-h-screen flex-col bg-gradient-to-br from-gray-50 to-gray-100 text-gray-900'>
+      <SiteHeader />
 
-      {/* Hero Section - fixed at top */}
-      <div className='flex-shrink-0 bg-gradient-to-r from-[#111827] to-[#1f2937] text-white py-16'>
-        <div className='container mx-auto px-4'>
-          <div className='max-w-3xl mx-auto text-center'>
-            <div className='inline-flex items-center justify-center w-20 h-20 rounded-full bg-[#D4AF37] mb-6'>
-              <Truck className='w-10 h-10 text-[#111827]' />
-            </div>
-            <h1 className='text-4xl md:text-5xl font-bold mb-4'>
+      {/* Public-page hero: offset for the fixed header and consistent with the rest of the website. */}
+      <section className='relative flex-shrink-0 overflow-hidden bg-gray-100 pb-20 pt-32 text-gray-950 lg:pb-24 lg:pt-40'>
+        <div className='pointer-events-none absolute -top-24 left-1/4 h-72 w-72 rounded-full bg-white opacity-80 blur-[120px]' />
+        <div className='pointer-events-none absolute bottom-0 right-1/4 h-64 w-64 rounded-full bg-[var(--accent-glow)] opacity-15 blur-[120px]' />
+        <div
+          className='pointer-events-none absolute inset-0 opacity-[0.45]'
+          style={{
+            backgroundImage:
+              'linear-gradient(to right, rgb(209 213 219) 1px, transparent 1px), linear-gradient(to bottom, rgb(209 213 219) 1px, transparent 1px)',
+            backgroundSize: '48px 48px',
+          }}
+        />
+
+        <div className='relative mx-auto w-full max-w-[1600px] px-5 text-center lg:px-8'>
+          <span className='inline-flex items-center gap-2 rounded-full border border-gray-300 bg-white/70 px-4 py-1.5 text-sm font-medium text-gray-700 shadow-sm backdrop-blur'>
+            <Truck className='h-4 w-4 text-[var(--accent-glow)]' />
+            Join our driving team
+          </span>
+          <h1 className='mx-auto mt-6 max-w-4xl text-balance text-4xl font-extrabold tracking-tight text-gray-950 sm:text-5xl lg:text-6xl'>
+            Start Your{' '}
+            <span className='text-[var(--accent-glow)]'>
               Driver Application
-            </h1>
-            <p className='text-xl text-gray-300 max-w-2xl mx-auto'>
-              {getHeroSubtitle(currentSection)}
-            </p>
-          </div>
+            </span>
+          </h1>
+          <p className='mx-auto mt-5 max-w-2xl text-pretty text-base leading-relaxed text-gray-700 sm:text-lg'>
+            {getHeroSubtitle(currentSection)} Complete the secure application
+            below to take the next step in your driving career.
+          </p>
         </div>
-      </div>
+      </section>
 
       {/* Form Section - only this area scrolls; document body does not scroll */}
       <div className='flex-1'>
@@ -520,7 +534,7 @@ export default function DriverRegisterPage() {
         </div>
       </div>
 
-      <Footer />
+      <SiteFooter />
     </main>
   );
 }

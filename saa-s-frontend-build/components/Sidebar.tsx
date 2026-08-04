@@ -24,6 +24,10 @@ import {
   Percent,
   Building2,
   UserPlus,
+  Globe2,
+  ChevronDown,
+  ClipboardList,
+  Newspaper,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -39,6 +43,7 @@ export function Sidebar() {
   const { user, logout } = useAuth();
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
+  const [websiteOpen, setWebsiteOpen] = useState(true);
 
   // Check if user is super-admin
   const isSuperAdmin =
@@ -185,6 +190,33 @@ export function Sidebar() {
                 <span>{item.label}</span>
               </Link>
             ))}
+            {!isDriver && (
+              <div>
+                <button
+                  type='button'
+                  onClick={() => setWebsiteOpen((open) => !open)}
+                  className='flex w-full cursor-pointer items-center gap-3 px-4 py-2 text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg transition-colors'
+                >
+                  <Globe2 className='w-5 h-5' />
+                  <span className='flex-1 text-left'>Website</span>
+                  <ChevronDown className={`w-4 h-4 transition-transform ${websiteOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {websiteOpen && (
+                  <div className='ml-5 mt-1 space-y-1 border-l border-slate-600 pl-3'>
+                    {[
+                      ['Forms and Submissions', '/dashboard/forms', <ClipboardList key='forms' className='w-4 h-4' />],
+                      ['Blogs', '/dashboard/website/blogs', <Newspaper key='blog' className='w-4 h-4' />],
+                      ['Jobs', '/dashboard/website/jobs', <Briefcase key='job' className='w-4 h-4' />],
+                    ].map(([label, href, icon]) => (
+                      <Link key={String(href)} href={String(href)} onClick={() => setIsOpen(false)}
+                        className='flex items-center gap-2 px-3 py-2 text-sm text-slate-400 hover:text-white hover:bg-slate-700 rounded-md'>
+                        {icon}{label}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </nav>
 
           {/* User section */}

@@ -12,6 +12,12 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // API clients must receive a 401 response; never redirect them to a
+        // browser-only named login route.
+        $middleware->redirectGuestsTo(
+            fn (\Illuminate\Http\Request $request) => $request->is('api/*') ? null : '/login'
+        );
+
         $middleware->api(prepend: [
             \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
         ]);

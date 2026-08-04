@@ -1,26 +1,24 @@
-import Header from "@/components/web/Header"
-import Footer from "@/components/footer"
-import CareerGrowthHero from "@/components/career-growth-course/career-growth-hero"
-import CourseIntro from "@/components/career-growth-course/course-intro"
-import CourseModules from "@/components/career-growth-course/course-modules"
-import WhatSetsUsApart from "@/components/career-growth-course/what-sets-us-apart"
-import CourseCTA from "@/components/career-growth-course/course-cta"
+import type { Metadata } from "next"
+import { SiteHeader } from "@/components/web/Header"
+import { SiteFooter } from "@/components/footer"
+import { CourseHero } from "@/components/course-hero"
+import { CourseModules } from "@/components/course-modules"
+import { CourseSkills } from "@/components/course-skills"
 
-export const metadata = {
-  title: "Career Growth Course - GenNextGlobalTech",
-  description: "Comprehensive career development course designed to equip professionals with essential skills for career advancement.",
+export const metadata: Metadata = {
+  title: "Career Growth Course | R&B Services Plus Inc.",
+  description:
+    "From crafting the perfect resume to excelling in the workplace, the Career Growth Course prepares you for long term success — resume building, interview prep, workplace success, and more.",
 }
 
 export default function CareerGrowthCoursePage() {
   return (
     <main className="min-h-screen bg-background">
-      <Header />
-      <CareerGrowthHero />
-      <CourseIntro />
+      <SiteHeader />
+      <CourseHero />
       <CourseModules />
-      <WhatSetsUsApart />
-      <CourseCTA />
-      <Footer />
+      <CourseSkills />
+      <SiteFooter />
     </main>
   )
 }
