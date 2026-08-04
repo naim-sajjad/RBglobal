@@ -5,7 +5,7 @@ import { MapPin } from "lucide-react"
 export default function MapSection() {
   return (
     <div className="w-full py-16 bg-gradient-to-br from-gray-50 to-white">
-      <div className="container mx-auto px-4">
+      <div className="mx-auto w-full max-w-[1600px] px-5 lg:px-8">
         <div className="text-center mb-12 animate-fade-in-up">
           <h2 className="text-3xl md:text-4xl font-bold text-[#111827] mb-4">
             Visit Our Office

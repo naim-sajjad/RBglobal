@@ -1,31 +1,22 @@
-"use client"
+import type { Metadata } from "next"
+import { SiteHeader } from "@/components/web/Header"
+import { ContactHero } from "@/components/contact-hero"
+import { ContactForm } from "@/components/contact-form"
+import { SiteFooter } from "@/components/footer"
 
-import ContactHero from "@/components/contact/contact-hero"
-import ContactForm from "@/components/contact/contact-form"
-import ContactInfo from "@/components/contact/contact-info"
-import MapSection from "@/components/contact/map-section"
-import Faq from "@/components/contact/faq"
-import Header from "@/components/web/Header"
-import Footer from "@/components/footer"
+export const metadata: Metadata = {
+  title: "Contact Us | R&B Services Plus Inc.",
+  description:
+    "Get in touch with R&B Services Plus Inc. Whether you're hiring or looking for work in trucking, warehousing or office roles across Toronto and the GTA, our team is ready to help.",
+}
 
 export default function ContactPage() {
   return (
-    <main className="min-h-screen bg-background">
-       <Header />
+    <main className="bg-background">
+      <SiteHeader />
       <ContactHero />
-      <div className="container mx-auto px-4 py-12">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-12 mb-16">
-          <div className="lg:col-span-2">
-            <ContactForm />
-          </div>
-          <div>
-            <ContactInfo />
-          </div>
-        </div>
-      </div>
-      <MapSection />
-      <Faq />
-            <Footer />
+      <ContactForm />
+      <SiteFooter />
     </main>
   )
 }

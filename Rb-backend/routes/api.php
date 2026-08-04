@@ -16,6 +16,17 @@ use App\Http\Controllers\Api\TimesheetController;
 use App\Http\Controllers\Api\InvoiceFinancialController;
 use App\Http\Controllers\Api\PayrollFinancialController;
 use App\Http\Controllers\Api\TenantCompanyProfileController;
+use App\Http\Controllers\ContactSubmissionController;
+use App\Http\Controllers\NewsletterSubscriberController;
+use App\Http\Controllers\AdminFormsController;
+use App\Http\Controllers\BlogCategoryController;
+use App\Http\Controllers\BlogPostController;
+use App\Http\Controllers\AdminAuthController;
+use App\Http\Controllers\AdminUserController;
+use App\Http\Controllers\DashboardStatsController;
+use App\Http\Controllers\JobPostController;
+use App\Http\Controllers\JobApplicationController;
+use App\Http\Controllers\CareerGrowthRegistrationController;
 
 /*
 |--------------------------------------------------------------------------
@@ -167,4 +178,115 @@ Route::prefix('v1/tenant')->middleware([
     Route::get('/payroll/payslips/{payslip}/invoice-pdf', [PayrollFinancialController::class, 'payslipInvoicePdf']);
     Route::get('/payroll/payslips/{payslip}/remittance-pdf', [PayrollFinancialController::class, 'remittancePdf']);
     Route::get('/payroll/driver-calculations/{driverCalculation}/pdf', [PayrollFinancialController::class, 'calculationPdf']);
+});
+
+
+
+
+/**
+ * Website Admin Routes
+ */
+
+Route::post('/contact-submissions', [ContactSubmissionController::class, 'store'])
+    ->middleware('throttle:contact-submissions');
+Route::post('/newsletter-subscriptions', [NewsletterSubscriberController::class, 'store'])
+    ->middleware('throttle:newsletter-subscriptions');
+Route::get('/newsletter/unsubscribe/{token}', [NewsletterSubscriberController::class, 'unsubscribe']);
+Route::get('/blog-posts', [BlogPostController::class, 'publicIndex']);
+Route::get('/blog-posts/{slug}', [BlogPostController::class, 'publicShow']);
+Route::get('/blog-categories', [BlogCategoryController::class, 'publicIndex']);
+Route::get('/jobs', [JobPostController::class, 'publicIndex']);
+Route::get('/jobs/{slug}', [JobPostController::class, 'publicShow']);
+Route::get('/job-posts', [JobPostController::class, 'publicIndex']);
+Route::get('/job-posts/{slug}', [JobPostController::class, 'publicShow']);
+Route::post('/job-applications', [JobApplicationController::class, 'store'])
+    ->middleware('throttle:job-applications');
+Route::post('/career-growth-registrations', [CareerGrowthRegistrationController::class, 'store'])
+    ->middleware('throttle:career-growth-registrations');
+
+Route::prefix('admin')->group(function (): void {
+    Route::post('/login', [AdminAuthController::class, 'login'])->middleware('throttle:admin-login');
+
+    Route::middleware('auth:sanctum')->group(function (): void {
+        Route::post('/logout', [AdminAuthController::class, 'logout']);
+        Route::get('/me', [AdminAuthController::class, 'me']);
+        Route::post('/change-password', [AdminAuthController::class, 'changePassword']);
+        Route::get('/dashboard/stats', DashboardStatsController::class);
+        Route::get('/forms/summary', [AdminFormsController::class, 'summary']);
+        Route::get('/forms/submissions', [AdminFormsController::class, 'submissions']);
+        Route::get('/forms/submissions/export', [AdminFormsController::class, 'export']);
+        Route::post('/forms/submissions/export-selected', [AdminFormsController::class, 'exportSelected']);
+        Route::post('/forms/submissions/bulk-action', [AdminFormsController::class, 'bulkAction']);
+        Route::get('/forms/submissions/{type}/{id}', [AdminFormsController::class, 'show'])
+            ->whereIn('type', ['contact', 'newsletter', 'career_growth', 'job_application'])
+            ->whereNumber('id');
+
+        //Route::middleware('admin.role:super_admin,admin')->group(function (): void {
+            Route::get('/contact-submissions', [ContactSubmissionController::class, 'index']);
+            Route::get('/contact-submissions/export', [ContactSubmissionController::class, 'export']);
+            Route::get('/contact-submissions/import-template', [ContactSubmissionController::class, 'importTemplate']);
+            Route::post('/contact-submissions/import/preview', [ContactSubmissionController::class, 'previewImport'])->middleware('throttle:contact-imports');
+            Route::post('/contact-submissions/import', [ContactSubmissionController::class, 'import'])->middleware('throttle:contact-imports');
+            Route::get('/contact-imports', [ContactSubmissionController::class, 'imports']);
+            Route::get('/contact-imports/{importBatch}', [ContactSubmissionController::class, 'importShow']);
+            Route::get('/contact-imports/{importBatch}/errors', [ContactSubmissionController::class, 'importErrors']);
+            Route::get('/contact-submissions/{contactSubmission}', [ContactSubmissionController::class, 'show']);
+            Route::patch('/contact-submissions/{contactSubmission}/status', [ContactSubmissionController::class, 'updateStatus']);
+            Route::delete('/contact-submissions/{contactSubmission}', [ContactSubmissionController::class, 'destroy']);
+
+            Route::get('/newsletter-subscribers/export', [NewsletterSubscriberController::class, 'export']);
+            Route::get('/newsletter-subscribers/import-template', [NewsletterSubscriberController::class, 'importTemplate']);
+            Route::post('/newsletter-subscribers/import/preview', [NewsletterSubscriberController::class, 'previewImport'])->middleware('throttle:newsletter-imports');
+            Route::post('/newsletter-subscribers/import', [NewsletterSubscriberController::class, 'import'])->middleware('throttle:newsletter-imports');
+            Route::get('/newsletter-imports', [NewsletterSubscriberController::class, 'imports']);
+            Route::get('/newsletter-imports/{importBatch}', [NewsletterSubscriberController::class, 'importShow']);
+            Route::get('/newsletter-imports/{importBatch}/errors', [NewsletterSubscriberController::class, 'importErrors']);
+            Route::get('/newsletter-subscribers', [NewsletterSubscriberController::class, 'index']);
+            Route::get('/newsletter-subscribers/{newsletterSubscriber}', [NewsletterSubscriberController::class, 'show']);
+            Route::patch('/newsletter-subscribers/{newsletterSubscriber}/status', [NewsletterSubscriberController::class, 'updateStatus']);
+            Route::delete('/newsletter-subscribers/{newsletterSubscriber}', [NewsletterSubscriberController::class, 'destroy']);
+       // });
+
+        //Route::middleware('admin.role:super_admin,admin,editor')->group(function (): void {
+            Route::get('/blog-posts', [BlogPostController::class, 'index']);
+            Route::post('/blog-posts', [BlogPostController::class, 'store']);
+            Route::get('/blog-posts/{blogPost}', [BlogPostController::class, 'show']);
+            Route::post('/blog-posts/{blogPost}', [BlogPostController::class, 'update']);
+            Route::match(['put', 'patch'], '/blog-posts/{blogPost}', [BlogPostController::class, 'update']);
+            Route::patch('/blog-posts/{blogPost}/status', [BlogPostController::class, 'updateStatus']);
+            Route::delete('/blog-posts/{blogPost}', [BlogPostController::class, 'destroy']);
+
+            Route::get('/blog-categories', [BlogCategoryController::class, 'index']);
+            Route::post('/blog-categories', [BlogCategoryController::class, 'store']);
+            Route::get('/blog-categories/{blogCategory}', [BlogCategoryController::class, 'show']);
+            Route::put('/blog-categories/{blogCategory}', [BlogCategoryController::class, 'update']);
+            Route::delete('/blog-categories/{blogCategory}', [BlogCategoryController::class, 'destroy']);
+
+            Route::get('/jobs', [JobPostController::class, 'index']);
+            Route::post('/jobs', [JobPostController::class, 'store']);
+            Route::get('/jobs/{jobPost}', [JobPostController::class, 'show']);
+            Route::post('/jobs/{jobPost}', [JobPostController::class, 'update']);
+            Route::match(['put', 'patch'], '/jobs/{jobPost}', [JobPostController::class, 'update']);
+            Route::patch('/jobs/{jobPost}/status', [JobPostController::class, 'updateStatus']);
+            Route::delete('/jobs/{jobPost}', [JobPostController::class, 'destroy']);
+
+            Route::get('/job-posts', [JobPostController::class, 'index']);
+            Route::post('/job-posts', [JobPostController::class, 'store']);
+            Route::get('/job-posts/{jobPost}', [JobPostController::class, 'show']);
+            Route::post('/job-posts/{jobPost}', [JobPostController::class, 'update']);
+            Route::match(['put', 'patch'], '/job-posts/{jobPost}', [JobPostController::class, 'update']);
+            Route::patch('/job-posts/{jobPost}/status', [JobPostController::class, 'updateStatus']);
+            Route::delete('/job-posts/{jobPost}', [JobPostController::class, 'destroy']);
+      //  });
+
+        //Route::middleware('admin.role:super_admin')->group(function (): void {
+            Route::get('/users', [AdminUserController::class, 'index']);
+            Route::post('/users', [AdminUserController::class, 'store']);
+            Route::get('/users/{user}', [AdminUserController::class, 'show']);
+            Route::put('/users/{user}', [AdminUserController::class, 'update']);
+            Route::patch('/users/{user}/status', [AdminUserController::class, 'updateStatus']);
+            Route::post('/users/{user}/reset-password', [AdminUserController::class, 'resetPassword']);
+            Route::delete('/users/{user}', [AdminUserController::class, 'destroy']);
+        //});
+    });
 });
