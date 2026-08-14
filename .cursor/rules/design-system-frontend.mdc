@@ -1,0 +1,19 @@
+---
+description: Frontend / marketing UI—tokens, tone, files
+globs: saa-s-frontend-build/frontend/**/*,saa-s-frontend-build/app/(site)/**/*,saa-s-frontend-build/app/driver/**/*
+alwaysApply: false
+---
+
+# Frontend design system
+
+- **Files:** `saa-s-frontend-build/frontend/globals.css` is the single source for marketing/customer-facing semantic tokens and frontend-only utilities (patterns, diagonal/grid backgrounds).
+- **Tone:** High clarity, brand gold/primary, optional gradients and illustration-friendly spacing. Shadows may use `--shadow-md` / `--shadow-lg`.
+- **Do not** import `admin/globals.css` or reuse admin-only neutrals here.
+- When adding UI under `app/(site)/`, use token-mapped classes; extend `frontend/globals.css` if a new semantic is needed across many screens.
+
+## Typography and color (important)
+
+- Root layout uses `<html class="dark">`. Shadcn primitives (`Input`, `Select`, `Label`) use `text-foreground` / `text-popover-foreground`, which are **light** in dark mode.
+- **Light “form pages”** (white fields, gray page background): wrap the page shell in **`className="light"`** on `<main>` or a top-level div. `frontend/globals.css` defines `html.dark .light { … }` so semantic tokens match `:root` (dark body copy on light surfaces).
+- **Radix Select dropdowns** render in a **portal** (sibling of your wrapper), so they **do not** inherit `.light`. For any `SelectContent` on a light form under `html.dark`, add **`frontend-select-content-light`** to `className` so popover/accent tokens stay readable.
+- Prefer **`text-gray-900`** for primary field labels and values on white; use **`text-gray-600`** / **`text-gray-500`** for helper and secondary text. Reserve **`text-[#D4AF37]`** (or `text-primary`) for brand accents and CTAs.

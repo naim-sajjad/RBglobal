@@ -1,0 +1,26 @@
+---
+description: Two design systems (frontend vs admin)—tokens, architecture, AI efficiency
+alwaysApply: true
+---
+
+# Design system (monorepo)
+
+## Separation
+
+- **Frontend (marketing / CX):** `saa-s-frontend-build/frontend/globals.css` — modern, brand-rich; gradients/patterns allowed with restraint.
+- **Admin (productivity):** `saa-s-frontend-build/admin/globals.css` — neutral grays + one primary action; compact spacing; no heavy shadows, gradients, or decorative motion.
+- **Tailwind shell only:** `saa-s-frontend-build/app/globals.css` — `@import 'tailwindcss'` + `tw-animate-css` + `dark` variant; **no semantic color tokens** here.
+- Do **not** share CSS variables, utility classes, or “bridge” imports between frontend and admin files. Naming can match (`--primary`, `--radius-lg`); values must differ per file.
+- Route wiring: marketing uses `app/(site)/` layout (imports frontend tokens); `app/admin/layout.tsx` imports admin tokens; driver/dashboard layouts import frontend tokens.
+
+## Tokens & components
+
+- Use **CSS variables** from the correct `globals.css` only. Do not hardcode hex/rgb in TSX except rare one-offs explicitly requested.
+- Prefer **Tailwind** utilities that map to tokens (`bg-background`, `text-muted-foreground`, `rounded-lg`). Avoid inline `style={{}}` and one-off arbitrary colors unless necessary.
+- Components stay **reusable and prop-driven**; avoid extra wrappers for styling alone.
+
+## Cursor efficiency
+
+- Assume tokens already exist; **do not** redefine or duplicate globals unless asked.
+- Prefer **small, local diffs**; do not rewrite whole components for minor UI tweaks.
+- Match existing spacing scale (`p-4`, `gap-3`, etc.) and existing patterns in the same route group.

@@ -54,6 +54,8 @@ import {
   Loader2,
   PencilLine,
   PlusCircle,
+  Send,
+  Receipt,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import {
@@ -179,7 +181,7 @@ export default function AdminTimesheetDetailPage() {
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [actionLoading, setActionLoading] = useState<
-    'approve' | 'reject' | 'paid' | null
+    'approve' | 'reject' | 'paid' | 'submit' | null
   >(null);
 
   const [newTripEmployerId, setNewTripEmployerId] = useState('');
@@ -357,11 +359,31 @@ export default function AdminTimesheetDetailPage() {
     load();
   }, [newTripEmployerId, newTripDate, employerRateCards]);
 
-  const canEdit =
-    timesheet?.status === 'submitted' || timesheet?.status === 'under_review';
-  const canApprove = canEdit;
-  const canReject = canEdit;
-  const canMarkPaid = timesheet?.status === 'approved';
+  const status = timesheet?.status;
+  const canManageTrips =
+    status === 'draft' ||
+    status === 'submitted' ||
+    status === 'under_review';
+  const canAdjust =
+    status === 'draft' ||
+    status === 'submitted' ||
+    status === 'under_review' ||
+    status === 'approved' ||
+    status === 'paid';
+  const canSubmit = status === 'draft';
+  const canApprove =
+    status === 'submitted' ||
+    status === 'under_review' ||
+    status === 'draft';
+  const canReject =
+    status === 'submitted' || status === 'under_review';
+  const canMarkPaid = status === 'approved';
+  const canRecalculate = canManageTrips;
+  const canCreateInvoice = status === 'approved' || status === 'paid';
+
+  const invoicePrefillHref = timesheet
+    ? `/admin/billing/invoices/new?driver_id=${timesheet.driver_id}&start_date=${timesheet.week_start_date}&end_date=${timesheet.week_end_date}`
+    : '/admin/billing/invoices/new';
 
   const handleAddTrip = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -450,6 +472,20 @@ export default function AdminTimesheetDetailPage() {
       toast.error(getApiErrorMessage(err, 'Failed to recalculate'));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSubmitTimesheet = async () => {
+    if (!id) return;
+    setActionLoading('submit');
+    try {
+      await apiClient.submitTimesheet(id);
+      await fetchTimesheet();
+      toast.success('Timesheet submitted');
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Failed to submit'));
+    } finally {
+      setActionLoading(null);
     }
   };
 
@@ -559,7 +595,7 @@ export default function AdminTimesheetDetailPage() {
           <Badge className={STATUS_COLORS[timesheet.status]}>
             {timesheet.status.replace('_', ' ')}
           </Badge>
-          {canEdit && (
+          {canRecalculate && (
             <Button
               variant='outline'
               size='sm'
@@ -573,6 +609,22 @@ export default function AdminTimesheetDetailPage() {
                 <Calculator className='h-4 w-4 mr-1' />
               )}
               Recalculate
+            </Button>
+          )}
+          {canSubmit && (
+            <Button
+              size='sm'
+              variant='outline'
+              onClick={handleSubmitTimesheet}
+              disabled={!!actionLoading}
+              className='border-slate-600 bg-slate-700 text-white'
+            >
+              {actionLoading === 'submit' ? (
+                <Loader2 className='h-4 w-4 animate-spin' />
+              ) : (
+                <Send className='h-4 w-4 mr-1' />
+              )}
+              Submit
             </Button>
           )}
           {canApprove && (
@@ -621,6 +673,19 @@ export default function AdminTimesheetDetailPage() {
               Mark as paid
             </Button>
           )}
+          {canCreateInvoice && (
+            <Button
+              size='sm'
+              variant='outline'
+              asChild
+              className='border-emerald-700 bg-emerald-950/40 text-emerald-200 hover:text-white'
+            >
+              <Link href={invoicePrefillHref}>
+                <Receipt className='h-4 w-4 mr-1' />
+                Create invoice
+              </Link>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -655,7 +720,7 @@ export default function AdminTimesheetDetailPage() {
             </Alert>
           )}
 
-          {canEdit && (
+          {canManageTrips && (
             <div className='flex gap-2'>
               <Button
                 onClick={() => setAddTripOpen(true)}
@@ -685,7 +750,8 @@ export default function AdminTimesheetDetailPage() {
                       <AdminTripCard
                         key={trip.id}
                         trip={trip}
-                        canEdit={canEdit}
+                        canManageTrips={canManageTrips}
+                        canAdjust={canAdjust}
                         timesheetId={id}
                         updatingTripId={updatingTripId}
                         onUpdateTrip={handleUpdateTrip}
@@ -1204,7 +1270,8 @@ export default function AdminTimesheetDetailPage() {
 
 function AdminTripCard({
   trip,
-  canEdit,
+  canManageTrips,
+  canAdjust,
   timesheetId,
   updatingTripId,
   onUpdateTrip,
@@ -1212,7 +1279,8 @@ function AdminTripCard({
   onOpenAdjust,
 }: {
   trip: TimesheetTrip;
-  canEdit: boolean;
+  canManageTrips: boolean;
+  canAdjust: boolean;
   timesheetId: string;
   updatingTripId: number | null;
   onUpdateTrip: (
@@ -1268,26 +1336,30 @@ function AdminTripCard({
               </Badge>
             )}
           </div>
-          {canEdit && (
+          {(canManageTrips || canAdjust) && (
             <div className='flex items-center gap-1'>
-              <Button
-                variant='ghost'
-                size='sm'
-                className='text-slate-300 hover:text-white'
-                title='Manual adjust (invoice override)'
-                onClick={() => onOpenAdjust(trip)}
-              >
-                <PencilLine className='h-4 w-4' />
-              </Button>
-              <Button
-                variant='ghost'
-                size='sm'
-                className='text-destructive hover:text-destructive'
-                onClick={() => onDeleteTrip(trip.id)}
-                title='Delete trip'
-              >
-                <Trash2 className='h-4 w-4' />
-              </Button>
+              {canAdjust && (
+                <Button
+                  variant='ghost'
+                  size='sm'
+                  className='text-slate-300 hover:text-white'
+                  title='Manual adjust (invoice override)'
+                  onClick={() => onOpenAdjust(trip)}
+                >
+                  <PencilLine className='h-4 w-4' />
+                </Button>
+              )}
+              {canManageTrips && (
+                <Button
+                  variant='ghost'
+                  size='sm'
+                  className='text-destructive hover:text-destructive'
+                  onClick={() => onDeleteTrip(trip.id)}
+                  title='Delete trip'
+                >
+                  <Trash2 className='h-4 w-4' />
+                </Button>
+              )}
             </div>
           )}
         </div>
@@ -1296,7 +1368,7 @@ function AdminTripCard({
         <div className='grid grid-cols-2 sm:grid-cols-2 gap-2 text-sm'>
           <div>
             <span className='text-slate-400'>Distance</span>
-            {canEdit ? (
+            {canManageTrips ? (
               <Input
                 type='number'
                 min={0}
@@ -1311,7 +1383,7 @@ function AdminTripCard({
             )}
           </div>
         </div>
-        {canEdit && (
+        {canManageTrips && (
           <div>
             <span className='text-slate-400 text-sm'>Notes</span>
             <Input

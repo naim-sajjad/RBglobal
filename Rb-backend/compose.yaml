@@ -17,17 +17,21 @@ services:
             XDEBUG_MODE: '${SAIL_XDEBUG_MODE:-off}'
             XDEBUG_CONFIG: '${SAIL_XDEBUG_CONFIG:-client_host=host.docker.internal}'
             IGNITION_LOCAL_SITES_PATH: '${PWD}'
+            PHP_CLI_SERVER_WORKERS: '${PHP_CLI_SERVER_WORKERS:-4}'
+            COMPOSER_MEMORY_LIMIT: '-1'
+        entrypoint: ['/bin/bash', '/var/www/html/docker/start-container.sh']
         volumes:
             - '.:/var/www/html'
+            - 'sail-vendor:/var/www/html/vendor'
+            - 'sail-node-modules:/var/www/html/node_modules'
+            - 'sail-composer:/.composer'
+            - './docker/php.ini:/etc/php/8.5/cli/conf.d/99-opcache.ini:ro'
         networks:
             - sail
         depends_on:
             - mysql
             - redis
-            - meilisearch
             - mailpit
-            - soketi
-            - selenium
     mysql:
         image: 'mysql:8.4'
         ports:
@@ -68,8 +72,17 @@ services:
                 - ping
             retries: 3
             timeout: 5s
+    mailpit:
+        image: 'axllent/mailpit:latest'
+        ports:
+            - '${FORWARD_MAILPIT_PORT:-1025}:1025'
+            - '${FORWARD_MAILPIT_DASHBOARD_PORT:-8025}:8025'
+        networks:
+            - sail
     meilisearch:
         image: 'getmeili/meilisearch:latest'
+        profiles:
+            - search
         ports:
             - '${FORWARD_MEILISEARCH_PORT:-7700}:7700'
         environment:
@@ -87,15 +100,10 @@ services:
                 - 'http://127.0.0.1:7700/health'
             retries: 3
             timeout: 5s
-    mailpit:
-        image: 'axllent/mailpit:latest'
-        ports:
-            - '${FORWARD_MAILPIT_PORT:-1025}:1025'
-            - '${FORWARD_MAILPIT_DASHBOARD_PORT:-8025}:8025'
-        networks:
-            - sail
     soketi:
         image: 'quay.io/soketi/soketi:latest-16-alpine'
+        profiles:
+            - broadcast
         environment:
             SOKETI_DEBUG: '${SOKETI_DEBUG:-1}'
             SOKETI_METRICS_SERVER_PORT: '9601'
@@ -109,6 +117,8 @@ services:
             - sail
     selenium:
         image: selenium/standalone-chromium
+        profiles:
+            - testing
         extra_hosts:
             - 'host.docker.internal:host-gateway'
         volumes:
@@ -137,4 +147,10 @@ volumes:
     sail-redis:
         driver: local
     sail-meilisearch:
+        driver: local
+    sail-vendor:
+        driver: local
+    sail-node-modules:
+        driver: local
+    sail-composer:
         driver: local

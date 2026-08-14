@@ -22,6 +22,11 @@ class TimesheetController extends Controller
         return $driver?->id;
     }
 
+    protected function isStaff(): bool
+    {
+        return (bool) auth()->user()?->hasPermissionTo('drivers.view');
+    }
+
     public function index(Request $request)
     {
         $query = Timesheet::with(['driver.user', 'driver.driverClass', 'trips.employer']);
@@ -139,8 +144,9 @@ class TimesheetController extends Controller
             abort(403, 'Unauthorized');
         }
         $currentDriverId = $this->getCurrentDriverId();
-        $canEdit = $timesheet->status === 'draft' && $timesheet->driver_id == $currentDriverId;
-        $canReview = in_array($timesheet->status, ['submitted', 'under_review']) && auth()->user()?->hasPermissionTo('drivers.view');
+        $isStaff = $this->isStaff();
+        $canEdit = $timesheet->status === 'draft' && ($timesheet->driver_id == $currentDriverId || $isStaff);
+        $canReview = in_array($timesheet->status, ['submitted', 'under_review']) && $isStaff;
         if (! $canEdit && ! $canReview) {
             return response()->json(['message' => 'This timesheet cannot be edited.'], 422);
         }
@@ -169,7 +175,8 @@ class TimesheetController extends Controller
             return response()->json(['message' => 'Only draft timesheets can be deleted.'], 422);
         }
         $currentDriverId = $this->getCurrentDriverId();
-        if ($currentDriverId && $timesheet->driver_id != $currentDriverId) {
+        $isStaff = $this->isStaff();
+        if ($currentDriverId && $timesheet->driver_id != $currentDriverId && ! $isStaff) {
             abort(403, 'Unauthorized');
         }
         $timesheet->delete();
@@ -185,7 +192,8 @@ class TimesheetController extends Controller
             return response()->json(['message' => 'Only draft timesheets can be submitted.'], 422);
         }
         $currentDriverId = $this->getCurrentDriverId();
-        if ($timesheet->driver_id != $currentDriverId) {
+        $isStaff = $this->isStaff();
+        if ($timesheet->driver_id != $currentDriverId && ! $isStaff) {
             abort(403, 'Unauthorized');
         }
         $timesheet->update(['status' => 'submitted', 'submitted_at' => now()]);
@@ -197,8 +205,11 @@ class TimesheetController extends Controller
         if ($timesheet->tenant_id !== tenant('id')) {
             abort(403, 'Unauthorized');
         }
-        if (! in_array($timesheet->status, ['submitted', 'under_review'])) {
-            return response()->json(['message' => 'Only submitted or under-review timesheets can be approved.'], 422);
+        $isStaff = $this->isStaff();
+        $approvable = in_array($timesheet->status, ['submitted', 'under_review'])
+            || ($isStaff && $timesheet->status === 'draft');
+        if (! $approvable) {
+            return response()->json(['message' => 'Only submitted, under-review, or staff-managed draft timesheets can be approved.'], 422);
         }
         $timesheet->update([
             'status' => 'approved',

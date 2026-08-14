@@ -200,7 +200,7 @@ class ApiClient {
   }
 
   // Driver Management APIs
-  async getDrivers(params?: { sort_by?: string; sort_dir?: 'asc' | 'desc' }) {
+  async getDrivers(params?: { sort_by?: string; sort_dir?: 'asc' | 'desc'; search?: string }) {
     const response = await this.client.get('/tenant/drivers', { params });
     return response.data;
   }
@@ -455,6 +455,7 @@ class ApiClient {
     employer_id?: number;
     week_start_from?: string;
     week_start_to?: string;
+    per_page?: number;
   }) {
     const response = await this.client.get('/tenant/timesheets', {
       params,

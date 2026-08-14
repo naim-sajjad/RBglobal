@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,6 +23,7 @@ import { ArrowLeft } from 'lucide-react';
 
 export default function NewClientInvoicePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [employers, setEmployers] = useState<Employer[]>([]);
   const [drivers, setDrivers] = useState<DriverWithDetails[]>([]);
   const [employerId, setEmployerId] = useState<string>('');
@@ -36,6 +37,17 @@ export default function NewClientInvoicePage() {
   const [loadingDrivers, setLoadingDrivers] = useState(true);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
+
+  useEffect(() => {
+    const qpDriver = searchParams.get('driver_id');
+    const qpEmployer = searchParams.get('employer_id');
+    const qpStart = searchParams.get('start_date');
+    const qpEnd = searchParams.get('end_date');
+    if (qpDriver) setDriverId(qpDriver);
+    if (qpEmployer) setEmployerId(qpEmployer);
+    if (qpStart) setStartDate(qpStart);
+    if (qpEnd) setEndDate(qpEnd);
+  }, [searchParams]);
 
   useEffect(() => {
     (async () => {

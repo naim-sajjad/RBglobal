@@ -1,0 +1,12 @@
+---
+description: Admin panel UI—dense, neutral, functional
+globs: saa-s-frontend-build/admin/**/*,saa-s-frontend-build/app/admin/**/*
+alwaysApply: false
+---
+
+# Admin design system
+
+- **Files:** `saa-s-frontend-build/admin/globals.css` only for `/admin` routes (imported from `app/admin/layout.tsx`).
+- **Tone:** Neutral surfaces, **one** primary action color (`--primary`), compact type/spacing defaults. Prefer subtle borders over shadows; avoid marketing patterns, hero gradients, and decorative animation.
+- **Tables & forms:** Favor clear contrast (`border`, `muted-foreground`, focus `ring`) and tight vertical rhythm (`gap-2`, `py-2` where consistent with existing pages).
+- **Do not** import `frontend/globals.css` in admin pages or share marketing-only CSS classes.

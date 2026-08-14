@@ -62,6 +62,16 @@ class DriverController extends Controller
         ];
         $query->orderBy($allowedSortBy[$sortBy] ?? 'created_at', $sortDir);
 
+        if ($request->filled('search')) {
+            $term = $request->query('search');
+            $query->where(function ($qry) use ($term) {
+                $qry->whereHas('user', function ($userQuery) use ($term) {
+                    $userQuery->where('name', 'like', "%{$term}%")
+                        ->orWhere('email', 'like', "%{$term}%");
+                })->orWhere('license_number', 'like', "%{$term}%");
+            });
+        }
+
         $drivers = $query->get();
         return response()->json($drivers);
     }
