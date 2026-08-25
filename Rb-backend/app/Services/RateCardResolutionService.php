@@ -65,6 +65,7 @@ class RateCardResolutionService
         $rates = $rateCard->rates;
         $distance = (float) ($trip->distance ?? 0);
         $additionalQuantities = is_array($trip->additional_quantities) ? $trip->additional_quantities : [];
+        $rateOverrides = is_array($trip->rate_overrides) ? $trip->rate_overrides : [];
 
         $lines = [];
         $totalDriverPay = 0.0;
@@ -84,6 +85,15 @@ class RateCardResolutionService
                     $driverDistanceRate = (float) $band['driver_rates_by_class'][$driverClassCode];
                 }
                 break;
+            }
+        }
+        $distanceOverride = $rateOverrides['distance'] ?? $rateOverrides['__distance__'] ?? null;
+        if (is_array($distanceOverride)) {
+            if (array_key_exists('rate', $distanceOverride) || array_key_exists('driver_rate', $distanceOverride)) {
+                $driverDistanceRate = (float) ($distanceOverride['rate'] ?? $distanceOverride['driver_rate'] ?? $driverDistanceRate);
+            }
+            if (array_key_exists('agency_rate', $distanceOverride)) {
+                $agencyDistanceRate = (float) ($distanceOverride['agency_rate'] ?? $agencyDistanceRate);
             }
         }
         $driverDistancePay = round($distance * $driverDistanceRate, 2);
@@ -127,6 +137,17 @@ class RateCardResolutionService
             if (! empty($charge['driver_rates_by_class']) && $driverClassCode !== null && isset($charge['driver_rates_by_class'][$driverClassCode])) {
                 $driverRate = (float) $charge['driver_rates_by_class'][$driverClassCode];
             }
+            $override = ($key !== null && isset($rateOverrides[$key]) && is_array($rateOverrides[$key]))
+                ? $rateOverrides[$key]
+                : null;
+            if (is_array($override)) {
+                if (array_key_exists('rate', $override) || array_key_exists('driver_rate', $override)) {
+                    $driverRate = (float) ($override['rate'] ?? $override['driver_rate'] ?? $driverRate);
+                }
+                if (array_key_exists('agency_rate', $override)) {
+                    $agencyRate = (float) ($override['agency_rate'] ?? $agencyRate);
+                }
+            }
             $driverAmount = round($quantity * $driverRate, 2);
             $agencyAmount = round($quantity * $agencyRate, 2);
             $lines[] = [
@@ -134,6 +155,41 @@ class RateCardResolutionService
                 'label' => $chargeType,
                 'quantity' => $quantity,
                 'unit' => $unit,
+                'rate' => $driverRate,
+                'agency_rate' => $agencyRate,
+                'driver_amount' => $driverAmount,
+                'agency_amount' => $agencyAmount,
+                'is_payable' => $driverAmount != 0.0,
+                'is_billable' => $agencyAmount != 0.0,
+            ];
+            $totalDriverPay += $driverAmount;
+            $totalAgencyBilling += $agencyAmount;
+        }
+
+        // Runtime / ad-hoc pay items (not on Rate Card)
+        $customPayLines = is_array($trip->custom_pay_lines) ? $trip->custom_pay_lines : [];
+        foreach ($customPayLines as $custom) {
+            if (! is_array($custom)) {
+                continue;
+            }
+            $quantity = (float) ($custom['quantity'] ?? 0);
+            if ($quantity <= 0) {
+                continue;
+            }
+            $label = trim((string) ($custom['label'] ?? ''));
+            if ($label === '') {
+                $label = 'Custom pay item';
+            }
+            $unit = trim((string) ($custom['unit'] ?? ''));
+            $driverRate = (float) ($custom['rate'] ?? $custom['driver_rate'] ?? 0);
+            $agencyRate = (float) ($custom['agency_rate'] ?? 0);
+            $driverAmount = round($quantity * $driverRate, 2);
+            $agencyAmount = round($quantity * $agencyRate, 2);
+            $lines[] = [
+                'line_type' => 'custom',
+                'label' => $label,
+                'quantity' => $quantity,
+                'unit' => $unit !== '' ? $unit : null,
                 'rate' => $driverRate,
                 'agency_rate' => $agencyRate,
                 'driver_amount' => $driverAmount,

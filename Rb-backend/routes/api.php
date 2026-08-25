@@ -13,6 +13,9 @@ use App\Http\Controllers\Api\RateCardController;
 use App\Http\Controllers\Api\DriverClassController;
 use App\Http\Controllers\Api\PayItemTemplateController;
 use App\Http\Controllers\Api\TimesheetController;
+use App\Http\Controllers\Api\TimesheetDocumentController;
+use App\Http\Controllers\Api\TimesheetDocumentReviewController;
+use App\Http\Controllers\Api\EmailTemplateController;
 use App\Http\Controllers\Api\InvoiceFinancialController;
 use App\Http\Controllers\Api\PayrollFinancialController;
 use App\Http\Controllers\Api\TenantCompanyProfileController;
@@ -45,6 +48,12 @@ Route::prefix('v1')->group(function () {
     // Public reference check (referee form by link – no auth)
     Route::get('/reference-check/{token}', [ReferenceCheckController::class, 'getByToken']);
     Route::post('/reference-check/{token}/submit', [ReferenceCheckController::class, 'submitByToken']);
+
+    // Public timesheet document review (driver email link – no auth)
+    Route::get('/timesheet-document-review/{token}', [TimesheetDocumentReviewController::class, 'showByToken']);
+    Route::post('/timesheet-document-review/{token}/approve', [TimesheetDocumentReviewController::class, 'approveByToken']);
+    Route::post('/timesheet-document-review/{token}/request-adjustment', [TimesheetDocumentReviewController::class, 'requestAdjustmentByToken']);
+    Route::get('/timesheet-document-review/{token}/documents/{type}', [TimesheetDocumentReviewController::class, 'viewDocumentByToken']);
 
     // Protected routes (require authentication)
     Route::middleware(['auth:sanctum'])->group(function () {
@@ -134,6 +143,7 @@ Route::prefix('v1/tenant')->middleware([
     // Timesheets
     Route::get('/timesheets', [TimesheetController::class, 'index']);
     Route::post('/timesheets', [TimesheetController::class, 'store']);
+    Route::post('/timesheets/import', [TimesheetController::class, 'import']);
     Route::get('/timesheets/{timesheet}', [TimesheetController::class, 'show']);
     Route::put('/timesheets/{timesheet}', [TimesheetController::class, 'update']);
     Route::delete('/timesheets/{timesheet}', [TimesheetController::class, 'destroy']);
@@ -149,6 +159,16 @@ Route::prefix('v1/tenant')->middleware([
     Route::post('/timesheets/{timesheet}/trips/{trip}/pay-items', [TimesheetController::class, 'storePayItem']);
     Route::put('/timesheets/{timesheet}/trips/{trip}/pay-items/{payItem}', [TimesheetController::class, 'updatePayItem']);
     Route::delete('/timesheets/{timesheet}/trips/{trip}/pay-items/{payItem}', [TimesheetController::class, 'destroyPayItem']);
+    Route::get('/timesheets/{timesheet}/documents', [TimesheetDocumentController::class, 'index']);
+    Route::post('/timesheets/{timesheet}/documents/generate', [TimesheetDocumentController::class, 'generate']);
+    Route::post('/timesheets/{timesheet}/documents/upload', [TimesheetDocumentController::class, 'upload']);
+    Route::get('/timesheets/{timesheet}/documents/{document}/download', [TimesheetDocumentController::class, 'download']);
+    Route::get('/timesheets/{timesheet}/documents/{document}/view', [TimesheetDocumentController::class, 'view']);
+    Route::delete('/timesheets/{timesheet}/documents/{document}', [TimesheetDocumentController::class, 'destroy']);
+    Route::get('/timesheet-document-adjustment-requests', [TimesheetDocumentReviewController::class, 'listAdjustmentRequests']);
+    Route::put('/timesheet-document-reviews/{review}/adjustment', [TimesheetDocumentReviewController::class, 'updateAdjustment']);
+    Route::get('/timesheets/{timesheet}/document-reviews', [TimesheetDocumentReviewController::class, 'index']);
+    Route::post('/timesheets/{timesheet}/document-reviews/send', [TimesheetDocumentReviewController::class, 'send']);
 
     // Client billing (invoices from approved timesheet trips — billable lines only)
     Route::post('/billing/invoice-preview', [InvoiceFinancialController::class, 'preview']);
@@ -163,6 +183,10 @@ Route::prefix('v1/tenant')->middleware([
     // Tenant company profile (invoice client / billing identity)
     Route::get('/company-profile', [TenantCompanyProfileController::class, 'show']);
     Route::put('/company-profile', [TenantCompanyProfileController::class, 'update']);
+
+    Route::get('/email-templates', [EmailTemplateController::class, 'index']);
+    Route::put('/email-templates/{key}', [EmailTemplateController::class, 'update']);
+    Route::post('/email-templates/{key}/reset', [EmailTemplateController::class, 'reset']);
 
     // Driver payroll (payslips from approved trips — payable lines only)
     Route::get('/payroll/billing-tax-settings', [PayrollFinancialController::class, 'getBillingTaxSettings']);

@@ -14,6 +14,8 @@ class Driver extends Model
     protected $fillable = [
         'user_id',
         'tenant_id',
+        'name',
+        'email',
         'driver_class_id',
         'driver_class_effective_date',
         // License Information
@@ -147,6 +149,26 @@ class Driver extends Model
     public function getSafetyCertificateUrlAttribute(): ?string
     {
         return $this->publicDiskUrl($this->safety_certificate_path);
+    }
+
+    /**
+     * API payloads should expose identity from drivers.name / drivers.email.
+     * Nested user.name / user.email are aligned so older clients stay correct.
+     */
+    public function toArray(): array
+    {
+        $array = parent::toArray();
+
+        if (isset($array['user']) && is_array($array['user'])) {
+            if (filled($this->name)) {
+                $array['user']['name'] = $this->name;
+            }
+            if (filled($this->email)) {
+                $array['user']['email'] = $this->email;
+            }
+        }
+
+        return $array;
     }
 
     /**

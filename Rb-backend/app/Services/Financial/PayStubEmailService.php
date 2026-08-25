@@ -73,30 +73,49 @@ class PayStubEmailService
         return array_values($merged);
     }
 
-    public static function buildBody(Payslip $payslip): string
-    {
-        $period = FinancialPdfService::payslipPeriodLabelText($payslip);
-
-        return <<<TXT
-Please find your pay stub for the pay period of {$period}, attached. You will receive your pay over the weekend. Kindly forward the calculation sheet and invoice to us in a new email with the same subject line.
-
-Adjustments:
-Kindly send all adjustment requests to adjustments@randbservicesplug.ca to ensure they are not missed.
-
-Document request:
-Requests for experience letters and other documents will be processed within 3–5 business days. Requests should be sent to asita@randbservicesplus.ca.
-
-Kind regards,
-R&B Finance
-TXT;
-    }
-
     public static function buildSubject(Payslip $payslip): string
     {
+        return self::rendered($payslip)['subject'];
+    }
+
+    public static function buildBody(Payslip $payslip): string
+    {
+        return self::rendered($payslip)['body_text'];
+    }
+
+    /**
+     * @return array{subject: string, body_html: string, body_text: string}
+     */
+    public static function rendered(Payslip $payslip): array
+    {
         $period = FinancialPdfService::payslipPeriodLabelText($payslip);
+        $company = EmailTemplateService::companyName($payslip->tenant_id);
+        $driverName = trim((string) ($payslip->driver?->user?->name ?? 'Driver'));
+        $vars = [
+            'company_name' => $company,
+            'period' => $period,
+            'driver_name' => $driverName !== '' ? $driverName : 'Driver',
+            'week_start' => $payslip->period_start?->format('M j, Y') ?? '',
+            'week_end' => $payslip->period_end?->format('M j, Y') ?? '',
+            ...EmailTemplateService::legacyContactEmails($payslip->tenant_id),
+        ];
+
+        $template = EmailTemplateService::findActive(
+            $payslip->tenant_id,
+            \App\Models\EmailTemplate::KEY_PAY_STUB
+        );
+
+        if ($template) {
+            return EmailTemplateService::renderTemplate($template, $vars);
+        }
+
         $ndash = "\u{2013}";
 
-        return 'Pay stub '.$ndash.' '.$period;
+        return [
+            'subject' => 'Pay stub '.$ndash.' '.$period,
+            'body_html' => '<p>'.e("Please find your pay stub for the pay period of {$period}, attached.").'</p>',
+            'body_text' => "Please find your pay stub for the pay period of {$period}, attached.",
+        ];
     }
 
     public static function send(Payslip $payslip): void
@@ -117,15 +136,17 @@ TXT;
 
         $pdf = FinancialPdfService::payslipPdfBinary($payslip);
         $cc = self::resolveCcAddresses($payslip->tenant_id, $to);
+        $rendered = self::rendered($payslip);
 
         $fromName = (string) config('financial.pay_stub_email.from_name', config('mail.from.name', 'Finance'));
 
         $mailable = new DriverPayStubMail(
-            self::buildSubject($payslip),
-            self::buildBody($payslip),
+            $rendered['subject'],
+            $rendered['body_text'],
             $pdf['filename'],
             $pdf['content'],
             $fromName,
+            $rendered['body_html'],
         );
 
         $mail = Mail::to([new Address($to, $recipientName)]);

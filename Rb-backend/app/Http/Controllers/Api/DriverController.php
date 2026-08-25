@@ -63,12 +63,16 @@ class DriverController extends Controller
         $query->orderBy($allowedSortBy[$sortBy] ?? 'created_at', $sortDir);
 
         if ($request->filled('search')) {
-            $term = $request->query('search');
-            $query->where(function ($qry) use ($term) {
-                $qry->whereHas('user', function ($userQuery) use ($term) {
-                    $userQuery->where('name', 'like', "%{$term}%")
-                        ->orWhere('email', 'like', "%{$term}%");
-                })->orWhere('license_number', 'like', "%{$term}%");
+            $term = mb_strtolower(trim((string) $request->query('search')));
+            $like = '%' . addcslashes($term, '%_\\') . '%';
+            $query->where(function ($qry) use ($like) {
+                $qry->whereRaw('LOWER(name) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(email) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(license_number) LIKE ?', [$like])
+                    ->orWhereHas('user', function ($userQuery) use ($like) {
+                        $userQuery->whereRaw('LOWER(name) LIKE ?', [$like])
+                            ->orWhereRaw('LOWER(email) LIKE ?', [$like]);
+                    });
             });
         }
 
@@ -164,7 +168,7 @@ class DriverController extends Controller
             // Create new user
             $user = User::create([
                 'name' => $validated['name'],
-                'email' => $validated['email'],
+                'email' => strtolower(trim((string) $validated['email'])),
                 'password' => Hash::make($validated['password'] ?? 'temporary_password_123'),
                 'is_global_admin' => false,
             ]);
@@ -181,6 +185,8 @@ class DriverController extends Controller
         $driverAttributes = $this->filterToDriverTableColumns([
             'user_id' => $user->id,
             'tenant_id' => $tenantId,
+            'name' => $validated['name'],
+            'email' => strtolower(trim((string) $validated['email'])),
             'license_number' => $validated['license_number'] ?? null,
             'license_type' => $validated['license_type'] ?? null,
             'license_other' => $validated['license_other'] ?? null,
@@ -307,6 +313,8 @@ class DriverController extends Controller
                 $driverAttributes = $this->filterToDriverTableColumns([
                     'user_id' => $user->id,
                     'tenant_id' => $driver?->tenant_id ?? $tenantId,
+                    'name' => $name,
+                    'email' => $email,
                     'license_number' => $this->blankToNull($data['license_number'] ?? null),
                     'license_type' => $this->normalizeLicenseType($data['license_type'] ?? null),
                     'license_other' => $this->blankToNull($data['license_other'] ?? null),
@@ -373,7 +381,7 @@ class DriverController extends Controller
         // Create user account
         $user = User::create([
             'name' => $validated['name'],
-            'email' => $validated['email'],
+            'email' => strtolower(trim((string) $validated['email'])),
             'password' => Hash::make($validated['password']),
             'is_global_admin' => false,
         ]);
@@ -389,6 +397,8 @@ class DriverController extends Controller
         $driverAttributes = $this->filterToDriverTableColumns([
             'user_id' => $user->id,
             'tenant_id' => $tenantId,
+            'name' => $validated['name'],
+            'email' => strtolower(trim((string) $validated['email'])),
             'license_number' => $validated['license_number'] ?? null,
             'license_type' => $validated['license_type'] ?? null,
             'license_other' => $validated['license_other'] ?? null,
@@ -454,12 +464,12 @@ class DriverController extends Controller
         }
 
         $nameForUser = $validated['name'] ?? null;
-        $emailForUser = $validated['email'] ?? null;
+        $emailForUser = isset($validated['email'])
+            ? strtolower(trim((string) $validated['email']))
+            : null;
         $passwordPlain = isset($validated['password']) ? $validated['password'] : null;
 
         $stripKeys = [
-            'name',
-            'email',
             'password',
             'pcc_document',
             'license_document',
@@ -471,6 +481,10 @@ class DriverController extends Controller
         ];
         foreach ($stripKeys as $stripKey) {
             unset($validated[$stripKey]);
+        }
+
+        if ($emailForUser !== null && $emailForUser !== '') {
+            $validated['email'] = $emailForUser;
         }
 
         // Drivers can only update their own profile, not status or HR verification flags

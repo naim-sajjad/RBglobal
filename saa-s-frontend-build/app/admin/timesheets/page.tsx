@@ -56,6 +56,7 @@ import {
   Check,
   Circle,
   AlertTriangle,
+  Upload,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import {
@@ -66,6 +67,7 @@ import {
 } from '@/lib/types';
 import { toast } from 'sonner';
 import { cn, formatApiDate, getApiErrorMessage } from '@/lib/utils';
+import { TimesheetImportDialog } from '@/components/admin/timesheet-import-dialog';
 
 const STATUS_OPTIONS: TimesheetStatus[] = [
   'draft',
@@ -128,8 +130,7 @@ function formatCompactWeek(start: string, end: string) {
 function timesheetEmployerNames(ts: Timesheet) {
   const names = [
     ...new Set(
-      (ts.trips ?? [])
-        .map((trip) => trip.employer?.name)
+      [ts.employer?.name, ...(ts.trips ?? []).map((trip) => trip.employer?.name)]
         .filter((name): name is string => Boolean(name)),
     ),
   ];
@@ -137,14 +138,14 @@ function timesheetEmployerNames(ts: Timesheet) {
 }
 
 function driverName(ts: Timesheet) {
-  return ts.driver?.user?.name ?? `Driver #${ts.driver_id}`;
+  return ts.driver?.name ?? ts.driver?.user?.name ?? `Driver #${ts.driver_id}`;
 }
 
 function driverToOption(driver: DriverWithDetails): SearchableFilterOption {
   return {
     value: String(driver.id),
-    label: driver.user?.name ?? `Driver #${driver.id}`,
-    sublabel: driver.user?.email ?? undefined,
+    label: driver.name ?? driver.user?.name ?? `Driver #${driver.id}`,
+    sublabel: driver.email ?? driver.user?.email ?? undefined,
   };
 }
 
@@ -159,9 +160,13 @@ function employerToOption(employer: Employer): SearchableFilterOption {
 function StatusBadge({
   status,
   adjusted,
+  driverReviewStatus,
+  driverReviewLabel,
 }: {
   status: TimesheetStatus;
   adjusted?: boolean;
+  driverReviewStatus?: string | null;
+  driverReviewLabel?: string | null;
 }) {
   const styles: Record<TimesheetStatus, string> = {
     draft: 'bg-slate-600 text-slate-100',
@@ -180,6 +185,24 @@ function StatusBadge({
       <Circle className='h-2.5 w-2.5 fill-current' aria-hidden />
     );
 
+  const reviewHint =
+    driverReviewStatus === 'approved'
+      ? {
+          text: driverReviewLabel || 'Confirmed',
+          className: 'text-emerald-300',
+        }
+      : driverReviewStatus === 'adjustment_requested'
+        ? {
+            text: driverReviewLabel || 'Adjustment Requested',
+            className: 'text-amber-300',
+          }
+        : driverReviewStatus === 'pending'
+          ? {
+              text: driverReviewLabel || 'Pending Review',
+              className: 'text-sky-300',
+            }
+          : null;
+
   return (
     <div className='flex flex-col items-start gap-0.5'>
       <Badge className={cn('gap-1 font-medium capitalize', styles[status])}>
@@ -190,6 +213,14 @@ function StatusBadge({
         <span className='inline-flex items-center gap-1 text-xs text-violet-300'>
           <PencilLine className='h-3 w-3' aria-hidden />
           Adjusted
+        </span>
+      ) : null}
+      {reviewHint ? (
+        <span
+          className={cn('text-xs', reviewHint.className)}
+          title='Invoice / calculation sheet review by driver'
+        >
+          {reviewHint.text}
         </span>
       ) : null}
     </div>
@@ -406,6 +437,7 @@ export default function AdminTimesheetsPage() {
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   const hasActiveFilters =
     driverId !== 'all' ||
@@ -623,13 +655,30 @@ export default function AdminTimesheetsPage() {
             </div>
           </dl>
         </div>
-        <Button asChild className='bg-emerald-600 hover:bg-emerald-500 shrink-0'>
-          <Link href='/admin/timesheets/new'>
-            <Plus className='h-4 w-4 mr-2' />
-            Create timesheet
-          </Link>
-        </Button>
+        <div className='flex items-center gap-2 shrink-0'>
+          <Button
+            type='button'
+            variant='outline'
+            className='border-slate-600 bg-slate-700 text-white hover:bg-slate-600'
+            onClick={() => setImportOpen(true)}
+          >
+            <Upload className='h-4 w-4 mr-2' />
+            Import Excel
+          </Button>
+          <Button asChild className='bg-emerald-600 hover:bg-emerald-500'>
+            <Link href='/admin/timesheets/new'>
+              <Plus className='h-4 w-4 mr-2' />
+              Create timesheet
+            </Link>
+          </Button>
+        </div>
       </div>
+
+      <TimesheetImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        onImported={() => void fetchTimesheets()}
+      />
 
       {error && (
         <Alert variant='destructive'>
@@ -894,6 +943,12 @@ export default function AdminTimesheetsPage() {
                         <StatusBadge
                           status={ts.status}
                           adjusted={Boolean(ts.adjusted_at)}
+                          driverReviewStatus={
+                            ts.latest_document_review?.status ?? null
+                          }
+                          driverReviewLabel={
+                            ts.latest_document_review?.status_label ?? null
+                          }
                         />
                       </TableCell>
                       <TableCell className='text-right text-white font-semibold tabular-nums'>

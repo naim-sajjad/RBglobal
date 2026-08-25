@@ -9,12 +9,21 @@ use App\Models\TimesheetTrip;
  */
 class TimesheetTripLineService
 {
+    public static function effectiveSnapshot(TimesheetTrip $trip): ?array
+    {
+        if (! empty($trip->is_adjusted) && is_array($trip->manual_rate_snapshot) && $trip->manual_rate_snapshot !== []) {
+            return $trip->manual_rate_snapshot;
+        }
+
+        return is_array($trip->rate_snapshot) ? $trip->rate_snapshot : null;
+    }
+
     /**
      * @return list<array{line_index:int,line:array}>
      */
     public static function allLines(TimesheetTrip $trip): array
     {
-        $snapshot = $trip->rate_snapshot;
+        $snapshot = self::effectiveSnapshot($trip);
         if (! is_array($snapshot) || empty($snapshot['lines']) || ! is_array($snapshot['lines'])) {
             return [];
         }
@@ -57,6 +66,18 @@ class TimesheetTripLineService
     {
         return array_values(array_filter(self::allLines($trip), function (array $row) {
             return ! empty($row['line']['is_billable']) && (float) ($row['line']['agency_amount'] ?? 0) != 0.0;
+        }));
+    }
+
+    /**
+     * Payable lines for display (includes zero-amount rows such as Actual Hours).
+     *
+     * @return list<array{line_index:int,line:array}>
+     */
+    public static function payableDisplayLines(TimesheetTrip $trip): array
+    {
+        return array_values(array_filter(self::allLines($trip), function (array $row) {
+            return ! empty($row['line']['is_payable']);
         }));
     }
 

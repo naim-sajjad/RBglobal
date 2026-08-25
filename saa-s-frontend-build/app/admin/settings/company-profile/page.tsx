@@ -21,6 +21,8 @@ export default function CompanyProfileSettingsPage() {
   const [companyPhone, setCompanyPhone] = useState('');
   const [companyEmail, setCompanyEmail] = useState('');
   const [payStubCcEmails, setPayStubCcEmails] = useState('');
+  const [adjustmentsEmail, setAdjustmentsEmail] = useState('');
+  const [clearanceEmail, setClearanceEmail] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -37,12 +39,16 @@ export default function CompanyProfileSettingsPage() {
       setCompanyPhone(res.company_phone ?? '');
       setCompanyEmail(res.company_email ?? '');
       setPayStubCcEmails(res.pay_stub_cc_emails ?? '');
+      setAdjustmentsEmail(res.adjustments_email ?? '');
+      setClearanceEmail(res.clearance_email ?? '');
     } catch {
       setCompanyLegalName('');
       setCompanyAddress('');
       setCompanyPhone('');
       setCompanyEmail('');
       setPayStubCcEmails('');
+      setAdjustmentsEmail('');
+      setClearanceEmail('');
     } finally {
       setLoading(false);
     }
@@ -61,6 +67,8 @@ export default function CompanyProfileSettingsPage() {
         company_phone: companyPhone.trim(),
         company_email: companyEmail.trim(),
         pay_stub_cc_emails: payStubCcEmails.trim(),
+        adjustments_email: adjustmentsEmail.trim(),
+        clearance_email: clearanceEmail.trim(),
       });
       toast.success('Company profile saved');
       await load();
@@ -193,6 +201,42 @@ export default function CompanyProfileSettingsPage() {
                 <p className="text-slate-500 text-xs">
                   These addresses are CC’d when sending the pay stub PDF to a driver. You can also set global CC in{' '}
                   <code className="text-slate-400">PAY_STUB_EMAIL_CC</code> in the API <code className="text-slate-400">.env</code>.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="adjustments_email" className="text-slate-300">
+                  Adjustments email (legacy)
+                </Label>
+                <Input
+                  id="adjustments_email"
+                  type="email"
+                  value={adjustmentsEmail}
+                  onChange={(e) => setAdjustmentsEmail(e.target.value)}
+                  placeholder="adjustments@randbservicesplus.ca"
+                  className="bg-slate-700 border-slate-600 text-white"
+                  disabled={!hasTenantContext}
+                />
+                <p className="text-slate-500 text-xs">
+                  Shown on the driver review page and in emails. Leave blank to use the default
+                  adjustments@randbservicesplus.ca.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="clearance_email" className="text-slate-300">
+                  Clearance / documents email (legacy)
+                </Label>
+                <Input
+                  id="clearance_email"
+                  type="email"
+                  value={clearanceEmail}
+                  onChange={(e) => setClearanceEmail(e.target.value)}
+                  placeholder="asifa@randbservicesplus.ca"
+                  className="bg-slate-700 border-slate-600 text-white"
+                  disabled={!hasTenantContext}
+                />
+                <p className="text-slate-500 text-xs">
+                  For experience letters and other clearance requests. Leave blank to use the default
+                  asifa@randbservicesplus.ca.
                 </p>
               </div>
               <Button

@@ -20,6 +20,7 @@ class DriverPayStubMail extends Mailable
         public string $pdfFilename,
         public string $pdfBinary,
         public string $fromName,
+        public ?string $htmlBody = null,
     ) {}
 
     public function envelope(): Envelope
@@ -37,8 +38,22 @@ class DriverPayStubMail extends Mailable
 
     public function content(): Content
     {
+        if ($this->htmlBody !== null && trim($this->htmlBody) !== '') {
+            return new Content(
+                html: 'emails.driver-pay-stub-html',
+                text: 'emails.driver-pay-stub',
+                with: [
+                    'htmlBody' => $this->htmlBody,
+                    'plainBody' => $this->plainBody,
+                ],
+            );
+        }
+
         return new Content(
             text: 'emails.driver-pay-stub',
+            with: [
+                'plainBody' => $this->plainBody,
+            ],
         );
     }
 

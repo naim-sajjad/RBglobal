@@ -148,6 +148,10 @@ export interface Driver {
   id: number;
   user_id: number;
   tenant_id?: string;
+  /** Stored on drivers table (source of truth for display) */
+  name?: string | null;
+  /** Stored on drivers table (source of truth for display) */
+  email?: string | null;
   driver_class_id?: number | null;
   driver_class_effective_date?: string | null;
   // License Information
@@ -467,6 +471,21 @@ export interface TimesheetTrip {
   adjusted_at?: string | null;
   adjusted_reason?: string | null;
   total_agency_billing?: number;
+  additional_quantities?: Record<string, number> | null;
+  /** Ad-hoc pay lines stored on the trip and merged during Rate Card resolution. */
+  custom_pay_lines?: Array<{
+    label: string;
+    quantity: number;
+    unit?: string | null;
+    rate?: number;
+    driver_rate?: number;
+    agency_rate?: number;
+  }> | null;
+  /** Runtime rate overrides for distance / Rate Card charge keys. */
+  rate_overrides?: Record<
+    string,
+    { rate?: number; driver_rate?: number; agency_rate?: number }
+  > | null;
   employer?: Employer;
   pay_items?: TimesheetTripPayItem[];
   created_at: string;
@@ -476,6 +495,7 @@ export interface TimesheetTrip {
 export interface Timesheet {
   id: number;
   driver_id: number;
+  employer_id?: number | null;
   tenant_id: string | null;
   week_start_date: string;
   week_end_date: string;
@@ -491,7 +511,85 @@ export interface Timesheet {
   notes: string | null;
   weekly_total: number;
   driver?: DriverWithDetails;
+  employer?: Employer;
   trips?: TimesheetTrip[];
+  documents?: TimesheetDocument[];
+  document_reviews?: TimesheetDocumentReview[];
+  latest_document_review?: TimesheetDocumentReview | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type TimesheetDocumentType = 'invoice' | 'calculation_sheet';
+export type TimesheetDocumentSource = 'generated' | 'uploaded';
+
+export type TimesheetDocumentReviewStatus =
+  | 'pending'
+  | 'approved'
+  | 'adjustment_requested'
+  | 'superseded'
+  | 'expired';
+
+export type TimesheetAdjustmentHandlingStatus =
+  | 'open'
+  | 'in_progress'
+  | 'resolved'
+  | 'dismissed';
+
+export interface TimesheetDocumentReviewEvent {
+  id: number;
+  timesheet_document_review_id: number;
+  event_type: string;
+  actor_type: string | null;
+  actor_id: number | null;
+  meta?: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TimesheetDocumentReview {
+  id: number;
+  tenant_id: string | null;
+  timesheet_id: number;
+  invoice_document_id: number;
+  calculation_document_id: number;
+  driver_id: number;
+  status: TimesheetDocumentReviewStatus;
+  status_label?: string;
+  token_expires_at: string | null;
+  sent_at: string | null;
+  sent_by: number | null;
+  driver_name: string | null;
+  driver_email: string | null;
+  reviewed_at: string | null;
+  adjustment_comment: string | null;
+  adjustment_status?: TimesheetAdjustmentHandlingStatus | null;
+  admin_notes: string | null;
+  resolved_at: string | null;
+  resolved_by: number | null;
+  sender?: { id: number; name: string } | null;
+  resolver?: { id: number; name: string } | null;
+  driver?: DriverWithDetails | null;
+  timesheet?: Timesheet | null;
+  events?: TimesheetDocumentReviewEvent[];
+  invoice_document?: TimesheetDocument | null;
+  calculation_document?: TimesheetDocument | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TimesheetDocument {
+  id: number;
+  timesheet_id: number;
+  tenant_id: string | null;
+  document_type: TimesheetDocumentType;
+  source: TimesheetDocumentSource;
+  file_path: string;
+  original_filename: string;
+  file_size: number | null;
+  file_url?: string | null;
+  created_by: number | null;
+  creator?: { id: number; name: string } | null;
   created_at: string;
   updated_at: string;
 }
@@ -637,6 +735,23 @@ export interface TenantCompanyProfile {
   company_email?: string;
   /** Comma or newline separated; CC’d on pay stub emails to drivers. */
   pay_stub_cc_emails?: string;
+  /** Legacy adjustments mailbox (defaults to adjustments@randbservicesplus.ca). */
+  adjustments_email?: string;
+  /** Legacy clearance / documents mailbox (defaults to asifa@randbservicesplus.ca). */
+  clearance_email?: string;
+}
+
+export interface EmailTemplate {
+  id: number;
+  key: string;
+  name: string;
+  subject: string;
+  body_html: string;
+  body_text: string | null;
+  is_active: boolean;
+  placeholders: string[];
+  updated_at?: string;
+  message?: string;
 }
 
 export interface Payslip {

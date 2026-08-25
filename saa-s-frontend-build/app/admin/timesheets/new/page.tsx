@@ -22,7 +22,7 @@ import {
   SearchableFilterOption,
 } from '@/components/admin/searchable-filter-combobox';
 import { apiClient } from '@/lib/api';
-import { DriverWithDetails } from '@/lib/types';
+import { DriverWithDetails, Employer } from '@/lib/types';
 import { toast } from 'sonner';
 import { getApiErrorMessage } from '@/lib/utils';
 
@@ -39,6 +39,8 @@ export default function AdminNewTimesheetPage() {
   const week = currentWeekBounds();
   const [driverId, setDriverId] = useState('');
   const [driverLabel, setDriverLabel] = useState('');
+  const [employerId, setEmployerId] = useState('');
+  const [employerLabel, setEmployerLabel] = useState('');
   const [weekStartDate, setWeekStartDate] = useState(week.start);
   const [weekEndDate, setWeekEndDate] = useState(week.end);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -51,8 +53,22 @@ export default function AdminNewTimesheetPage() {
       const list = Array.isArray(data) ? (data as DriverWithDetails[]) : [];
       return list.map((driver) => ({
         value: String(driver.id),
-        label: driver.user?.name ?? `Driver #${driver.id}`,
-        sublabel: driver.user?.email ?? undefined,
+        label: driver.name ?? driver.user?.name ?? `Driver #${driver.id}`,
+        sublabel: driver.email ?? driver.user?.email ?? undefined,
+      }));
+    },
+    [],
+  );
+
+  const searchEmployers = useCallback(
+    async (query: string, signal: AbortSignal) => {
+      const data = await apiClient.getEmployers({ search: query });
+      if (signal.aborted) return [];
+      const list = Array.isArray(data) ? (data as Employer[]) : [];
+      return list.map((employer) => ({
+        value: String(employer.id),
+        label: employer.name,
+        sublabel: employer.company_code ?? employer.service_location ?? undefined,
       }));
     },
     [],
@@ -69,8 +85,8 @@ export default function AdminNewTimesheetPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!driverId || !weekStartDate || !weekEndDate) {
-      setError('Select a driver and week dates.');
+    if (!driverId || !employerId || !weekStartDate || !weekEndDate) {
+      setError('Select a driver, employer, and week dates.');
       return;
     }
     setIsSubmitting(true);
@@ -78,6 +94,7 @@ export default function AdminNewTimesheetPage() {
     try {
       const created = await apiClient.createTimesheet({
         driver_id: parseInt(driverId, 10),
+        employer_id: parseInt(employerId, 10),
         week_start_date: weekStartDate,
         week_end_date: weekEndDate,
       });
@@ -108,8 +125,9 @@ export default function AdminNewTimesheetPage() {
             Create timesheet
           </CardTitle>
           <CardDescription className='text-slate-400'>
-            Create a weekly timesheet for a driver. You can add trips, adjust rates,
-            approve, and generate client invoices from the detail screen.
+            Create a weekly timesheet for a driver and employer. You can add trips,
+            adjust rates, approve, and generate client invoices from the detail
+            screen.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -138,6 +156,27 @@ export default function AdminNewTimesheetPage() {
                   setDriverLabel(value === 'all' ? '' : option?.label ?? '');
                 }}
                 onSearch={searchDrivers}
+                className='w-full'
+              />
+            </div>
+
+            <div className='space-y-2'>
+              <Label htmlFor='create-timesheet-employer' className='text-slate-300'>
+                Employer
+              </Label>
+              <SearchableFilterCombobox
+                id='create-timesheet-employer'
+                allLabel='Select employer'
+                searchPlaceholder='Search employers…'
+                loadingMessage='Searching employers…'
+                emptyMessage='No employers found'
+                value={employerId || 'all'}
+                selectedLabel={employerLabel}
+                onValueChange={(value, option?: SearchableFilterOption) => {
+                  setEmployerId(value === 'all' ? '' : value);
+                  setEmployerLabel(value === 'all' ? '' : option?.label ?? '');
+                }}
+                onSearch={searchEmployers}
                 className='w-full'
               />
             </div>
@@ -181,8 +220,19 @@ export default function AdminNewTimesheetPage() {
               >
                 <Link href='/admin/timesheets'>Cancel</Link>
               </Button>
-              <Button type='submit' disabled={isSubmitting || !driverId}>
-                {isSubmitting ? <Spinner className='h-4 w-4' /> : 'Create timesheet'}
+              <Button
+                type='submit'
+                disabled={isSubmitting || !driverId || !employerId}
+                className='bg-emerald-600 hover:bg-emerald-500 text-white'
+              >
+                {isSubmitting ? (
+                  <>
+                    <Spinner className='h-4 w-4' />
+                    Creating…
+                  </>
+                ) : (
+                  'Create'
+                )}
               </Button>
             </div>
           </form>

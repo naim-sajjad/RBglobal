@@ -148,9 +148,15 @@ export default function EmployerDetailPage() {
           ? Number(formData.minimum_trip_guarantee)
           : null,
       };
-      await apiClient.updateEmployer(employer.id, payload);
-      toast.success('Employer updated successfully');
-      setEmployer({ ...employer, ...payload });
+      const updated = await apiClient.updateEmployer(employer.id, payload);
+      const next = updated && typeof updated === 'object' ? updated : null;
+      setEmployer({
+        ...employer,
+        ...(next ?? payload),
+      } as typeof employer);
+      toast.success(
+        `Employer “${formData.name || employer.name}” updated successfully`,
+      );
     } catch (err: unknown) {
       const message =
         err && typeof err === 'object' && 'response' in err

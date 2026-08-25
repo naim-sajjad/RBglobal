@@ -23,6 +23,7 @@ import {
   Banknote,
   Percent,
   Building2,
+  Mail,
   UserPlus,
   Globe2,
   ChevronDown,
@@ -115,6 +116,11 @@ export function Sidebar() {
           icon: <Calendar className='w-5 h-5' />,
         },
         {
+          label: 'Adjustment requests',
+          href: '/admin/timesheets/adjustment-requests',
+          icon: <ClipboardList className='w-5 h-5' />,
+        },
+        {
           label: 'Client billing',
           href: '/admin/billing/invoices',
           icon: <Receipt className='w-5 h-5' />,
@@ -133,6 +139,11 @@ export function Sidebar() {
           label: 'Company profile',
           href: '/admin/settings/company-profile',
           icon: <Building2 className='w-5 h-5' />,
+        },
+        {
+          label: 'Email templates',
+          href: '/admin/settings/email-templates',
+          icon: <Mail className='w-5 h-5' />,
         },
         ...(isSuperAdmin
           ? [

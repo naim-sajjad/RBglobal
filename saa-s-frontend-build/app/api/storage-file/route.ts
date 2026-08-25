@@ -15,7 +15,7 @@ function isAllowedPublicStoragePath(path: string): boolean {
   if (!path || path.includes('..') || path.startsWith('/')) {
     return false;
   }
-  if (!/^drivers\/[a-zA-Z0-9_\-.\/]+$/.test(path)) {
+  if (!/^drivers\/[a-zA-Z0-9_\-.\/]+$/.test(path) && !/^timesheets\/[a-zA-Z0-9_\-.\/]+$/.test(path)) {
     return false;
   }
   const ext = (path.match(/\.([^.]+)$/)?.[1] || '').toLowerCase();

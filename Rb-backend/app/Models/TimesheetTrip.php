@@ -26,6 +26,8 @@ class TimesheetTrip extends Model
         'manual_rate_snapshot',
         'total_agency_billing',
         'additional_quantities',
+        'custom_pay_lines',
+        'rate_overrides',
         'is_adjusted',
         'adjusted_at',
         'adjusted_reason',
@@ -40,6 +42,8 @@ class TimesheetTrip extends Model
         'rate_snapshot' => 'array',
         'manual_rate_snapshot' => 'array',
         'additional_quantities' => 'array',
+        'custom_pay_lines' => 'array',
+        'rate_overrides' => 'array',
         'is_adjusted' => 'boolean',
         'adjusted_at' => 'datetime',
     ];

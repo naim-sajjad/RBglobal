@@ -1,7 +1,7 @@
 'use client';
 
 import '@/frontend/globals.css';
-import React from "react"
+import React, { useEffect } from "react"
 import { Sidebar } from '@/components/Sidebar';
 import {Header} from '@/components/Header';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
@@ -11,6 +11,14 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.add('dark');
+    return () => {
+      root.classList.remove('dark');
+    };
+  }, []);
+
   return (
     <ProtectedRoute>
       <div className="flex h-screen overflow-hidden bg-slate-900 dark">

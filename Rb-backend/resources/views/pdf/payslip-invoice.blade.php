@@ -6,76 +6,92 @@
     <style>
         body {
             font-family: DejaVu Sans, sans-serif;
-            font-size: 10pt;
+            font-size: 8.5pt;
             color: #111;
-            margin: 28px 36px;
+            margin: 24px 32px;
+            line-height: 1.15;
         }
         .inv-title {
             text-align: center;
-            font-size: 22pt;
+            font-size: 16pt;
             font-weight: bold;
             color: #4a2c7a;
-            margin: 0 0 18px 0;
+            margin: 0 0 8px 0;
             letter-spacing: 0.02em;
+            line-height: 1.1;
         }
         .meta-top { width: 100%; border-collapse: collapse; margin-bottom: 0; }
-        .meta-top td { vertical-align: top; padding: 0; }
-        .issuer-name { font-size: 11pt; font-weight: bold; color: #111; }
+        .meta-top td { vertical-align: top; padding: 0; line-height: 1.15; }
+        .issuer-name { font-size: 9.5pt; font-weight: bold; color: #111; line-height: 1.15; }
         .issuer-addr {
-            margin-top: 4px;
-            font-size: 9.5pt;
+            margin-top: 1px;
+            font-size: 8pt;
             color: #333;
-            line-height: 1.4;
+            line-height: 1.15;
             white-space: pre-wrap;
         }
-        .meta-right { text-align: right; font-size: 10pt; color: #111; }
+        .meta-right { text-align: right; font-size: 8.5pt; color: #111; line-height: 1.15; }
         .meta-right strong { font-weight: bold; }
-        .meta-right-row { margin-bottom: 6px; }
+        .meta-right-row { margin-bottom: 1px; line-height: 1.15; }
         .hrule {
             border: none;
-            border-top: 3px solid #d4d4d8;
-            margin: 14px 0;
+            border-top: 2px solid #d4d4d8;
+            margin: 6px 0;
         }
         .row-driver { width: 100%; border-collapse: collapse; }
-        .row-driver td { vertical-align: top; padding: 2px 0; }
-        .driver-name { font-weight: bold; font-size: 10.5pt; }
-        .driver-id { text-align: right; white-space: nowrap; font-size: 10.5pt; }
-        .client-name { font-weight: bold; font-size: 10.5pt; margin-bottom: 4px; }
-        .client-addr { font-size: 9.5pt; color: #333; line-height: 1.4; white-space: pre-wrap; }
-        .lines { width: 100%; border-collapse: collapse; margin-top: 4px; }
+        .row-driver td { vertical-align: top; padding: 0; line-height: 1.15; }
+        .driver-name { font-weight: bold; font-size: 9pt; line-height: 1.15; }
+        .driver-id { text-align: right; white-space: nowrap; font-size: 8.5pt; line-height: 1.15; }
+        .client-name { font-weight: bold; font-size: 9pt; margin-bottom: 1px; line-height: 1.15; }
+        .client-addr { font-size: 8pt; color: #333; line-height: 1.15; white-space: pre-wrap; }
+        .lines { width: 100%; border-collapse: collapse; margin-top: 2px; }
         .lines thead th {
             background: #4a2c7a;
             color: #fff;
             font-weight: bold;
-            font-size: 9pt;
+            font-size: 7.5pt;
             text-transform: uppercase;
-            letter-spacing: 0.04em;
-            padding: 10px 10px;
+            letter-spacing: 0.03em;
+            padding: 4px 8px;
             text-align: left;
+            line-height: 1.1;
             border-left: 1px solid rgba(255, 255, 255, 0.35);
         }
         .lines thead th:first-child { border-left: none; }
         .lines thead th.hours { text-align: center; width: 22%; }
         .lines thead th.amount { text-align: right; width: 24%; }
         .lines tbody td {
-            padding: 10px 10px;
+            padding: 4px 8px;
+            font-size: 8pt;
+            line-height: 1.15;
             border-bottom: 1px solid #e4e4e7;
             border-left: 1px solid #fff;
-            vertical-align: top;
+            vertical-align: middle;
         }
         .lines tbody td:first-child { border-left: none; }
         .lines tbody tr:nth-child(odd) { background: #eef2ff; }
         .lines tbody tr:nth-child(even) { background: #fff; }
-        .lines tbody td.hours { text-align: center; font-weight: bold; }
-        .lines tbody td.amount { text-align: right; white-space: nowrap; font-weight: bold; }
-        .pay-period-label { font-weight: bold; }
-        .totals-wrap { width: 100%; margin-top: 18px; border-collapse: collapse; }
+        .lines tbody td.hours { text-align: center; font-weight: normal; }
+        .lines tbody td.amount { text-align: right; white-space: nowrap; font-weight: normal; }
+        .pay-period-label { font-weight: bold; font-size: 8pt; }
+        .totals-wrap { width: 100%; margin-top: 10px; border-collapse: collapse; }
         .totals-wrap td { vertical-align: top; }
-        .totals-inner { width: 100%; max-width: 280px; margin-left: auto; border-collapse: collapse; }
-        .totals-inner td { padding: 6px 4px; font-size: 10pt; border-bottom: 1px solid #e4e4e7; }
-        .totals-inner td.lbl { text-align: right; padding-right: 16px; color: #333; }
+        .totals-inner { width: 100%; max-width: 260px; margin-left: auto; border-collapse: collapse; }
+        .totals-inner td {
+            padding: 2px 3px;
+            font-size: 8.5pt;
+            line-height: 1.15;
+            border-bottom: 1px solid #e4e4e7;
+        }
+        .totals-inner td.lbl { text-align: right; padding-right: 12px; color: #333; }
         .totals-inner td.val { text-align: right; white-space: nowrap; font-weight: bold; }
-        .totals-inner tr.grand td { border-bottom: 2px solid #4a2c7a; padding-top: 10px; font-size: 11pt; color: #111; }
+        .totals-inner tr.grand td {
+            border-bottom: 2px solid #4a2c7a;
+            padding-top: 6px;
+            font-size: 9.5pt;
+            line-height: 1.15;
+            color: #111;
+        }
     </style>
 </head>
 <body>
@@ -85,14 +101,21 @@
 <table class="meta-top">
     <tr>
         <td style="width: 55%;">
-            <div class="issuer-name">{{ $issuerName }}</div>
-            @if($issuerAddress !== '')
+            @php
+                $headerName = trim((string) ($customerName ?? $issuerName ?? ''));
+                $headerUnder = trim((string) ($websiteName ?? ''));
+            @endphp
+            <div class="issuer-name">{{ $headerName }}</div>
+            @if($headerUnder !== '')
+                <div class="issuer-addr">{{ $headerUnder }}</div>
+            @elseif(!empty($issuerAddress))
                 <div class="issuer-addr">{{ $issuerAddress }}</div>
             @endif
         </td>
         <td class="meta-right" style="width: 45%;">
             <div class="meta-right-row"><strong>Date:</strong> {{ $invoiceDate }}</div>
-            <div><strong>Invoice No.:</strong> {{ $invoiceNumber }}</div>
+            <div class="meta-right-row"><strong>Invoice No.:</strong> {{ $invoiceNumber }}</div>
+            <div><strong>Driver ID:</strong> {{ $driverRef }}</div>
         </td>
     </tr>
 </table>
@@ -102,17 +125,22 @@
 <table class="row-driver">
     <tr>
         <td class="driver-name">{{ $driverName }}</td>
-        <td class="driver-id">Driver ID: {{ $driverRef }}</td>
+        <td class="driver-id"></td>
     </tr>
 </table>
 
 <hr class="hrule"/>
 
-@if($billToName !== '' || $billToAddress !== '')
-    @if($billToName !== '')
+@php
+    $showBillToName = trim((string) ($billToName ?? '')) !== ''
+        && trim((string) ($billToName ?? '')) !== $headerName;
+    $showBillToAddr = trim((string) ($billToAddress ?? '')) !== '';
+@endphp
+@if($showBillToName || $showBillToAddr)
+    @if($showBillToName)
         <div class="client-name">{{ $billToName }}</div>
     @endif
-    @if($billToAddress !== '')
+    @if($showBillToAddr)
         <div class="client-addr">{{ $billToAddress }}</div>
     @endif
     <hr class="hrule"/>

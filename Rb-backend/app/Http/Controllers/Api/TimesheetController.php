@@ -9,6 +9,7 @@ use App\Models\Timesheet;
 use App\Models\TimesheetAdjustmentLog;
 use App\Models\TimesheetTrip;
 use App\Services\TimesheetCalculationService;
+use App\Services\Financial\TimesheetImportService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Mail;
@@ -29,7 +30,13 @@ class TimesheetController extends Controller
 
     public function index(Request $request)
     {
-        $query = Timesheet::with(['driver.user', 'driver.driverClass', 'trips.employer']);
+        $query = Timesheet::with([
+            'driver.user',
+            'driver.driverClass',
+            'employer',
+            'trips.employer',
+            'latestDocumentReview',
+        ]);
 
         $driverId = $request->input('driver_id');
         $currentDriverId = $this->getCurrentDriverId();
@@ -51,7 +58,11 @@ class TimesheetController extends Controller
             $query->where('status', $request->status);
         }
         if ($request->filled('employer_id')) {
-            $query->whereHas('trips', fn ($q) => $q->where('employer_id', $request->employer_id));
+            $employerId = $request->employer_id;
+            $query->where(function ($q) use ($employerId) {
+                $q->where('employer_id', $employerId)
+                    ->orWhereHas('trips', fn ($trips) => $trips->where('employer_id', $employerId));
+            });
         }
 
         if ($request->filled('week_start_from') || $request->filled('week_start_to')) {
@@ -88,8 +99,10 @@ class TimesheetController extends Controller
 
     public function store(Request $request)
     {
+        $isStaff = $this->isStaff();
         $validated = $request->validate([
             'driver_id' => 'nullable|integer|exists:drivers,id',
+            'employer_id' => ($isStaff ? 'required' : 'nullable').'|integer|exists:employers,id',
             'week_start_date' => 'required|date',
             'week_end_date' => 'required|date|after_or_equal:week_start_date',
         ]);
@@ -99,7 +112,7 @@ class TimesheetController extends Controller
         if (! $driverId) {
             return response()->json(['message' => 'Driver context required.'], 422);
         }
-        if ($currentDriverId && $driverId != $currentDriverId && ! auth()->user()?->hasPermissionTo('drivers.view')) {
+        if ($currentDriverId && $driverId != $currentDriverId && ! $isStaff) {
             abort(403, 'You can only create timesheets for yourself.');
         }
 
@@ -108,21 +121,74 @@ class TimesheetController extends Controller
             abort(403, 'Unauthorized');
         }
 
-        $exists = Timesheet::where('driver_id', $driverId)
-            ->where('week_start_date', $validated['week_start_date'])
-            ->exists();
-        if ($exists) {
-            return response()->json(['message' => 'A timesheet for this week already exists.'], 422);
+        $employerId = $validated['employer_id'] ?? null;
+        if ($employerId) {
+            $employer = Employer::findOrFail($employerId);
+            if ($employer->tenant_id !== tenant('id')) {
+                abort(403, 'Unauthorized');
+            }
+        }
+
+        $existsQuery = Timesheet::where('driver_id', $driverId)
+            ->where('week_start_date', $validated['week_start_date']);
+        if ($employerId) {
+            $existsQuery->where('employer_id', $employerId);
+        } else {
+            $existsQuery->whereNull('employer_id');
+        }
+        if ($existsQuery->exists()) {
+            return response()->json([
+                'message' => $employerId
+                    ? 'A timesheet for this driver, employer, and week already exists.'
+                    : 'A timesheet for this week already exists.',
+            ], 422);
         }
 
         $timesheet = Timesheet::create([
             'driver_id' => $driverId,
+            'employer_id' => $employerId,
             'tenant_id' => tenant('id'),
             'week_start_date' => $validated['week_start_date'],
             'week_end_date' => $validated['week_end_date'],
             'status' => 'draft',
         ]);
-        return response()->json($timesheet->load(['driver.user', 'trips']), 201);
+        return response()->json($timesheet->load(['driver.user', 'employer', 'trips']), 201);
+    }
+
+    public function import(Request $request)
+    {
+        if (! $this->isStaff()) {
+            abort(403, 'Unauthorized');
+        }
+
+        $request->validate([
+            'file' => 'required|file|max:10240',
+        ]);
+
+        $file = $request->file('file');
+        $ext = strtolower($file->getClientOriginalExtension() ?: '');
+        if (! in_array($ext, ['csv', 'xlsx', 'txt'], true)) {
+            return response()->json([
+                'message' => 'Unsupported file type. Upload a .csv or .xlsx customer timesheet.',
+            ], 422);
+        }
+
+        try {
+            $result = TimesheetImportService::import(
+                $file,
+                tenant('id'),
+                auth()->id()
+            );
+        } catch (\InvalidArgumentException $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+                'errors' => preg_split("/\r\n|\n|\r/", $e->getMessage()) ?: [$e->getMessage()],
+            ], 422);
+        }
+
+        return response()->json(array_merge([
+            'message' => 'Import completed.',
+        ], $result), 201);
     }
 
     public function show(Timesheet $timesheet)
@@ -134,7 +200,15 @@ class TimesheetController extends Controller
         if ($currentDriverId && $timesheet->driver_id != $currentDriverId && ! auth()->user()?->hasPermissionTo('drivers.view')) {
             abort(403, 'You can only view your own timesheets.');
         }
-        $timesheet->load(['driver.user', 'driver.driverClass', 'trips.employer']);
+        $timesheet->load([
+            'driver.user',
+            'driver.driverClass',
+            'employer',
+            'trips.employer',
+            'documents.creator:id,name',
+            'documentReviews.sender:id,name',
+            'documentReviews.events',
+        ]);
         return response()->json($timesheet);
     }
 
@@ -259,25 +333,41 @@ class TimesheetController extends Controller
         $weekStart = $timesheet->week_start_date->format('Y-m-d');
         $weekEnd = $timesheet->week_end_date->format('Y-m-d');
         $validated = $request->validate([
-            'employer_id' => 'required|integer|exists:employers,id',
+            'employer_id' => 'nullable|integer|exists:employers,id',
             'trip_date' => "required|date|after_or_equal:{$weekStart}|before_or_equal:{$weekEnd}",
             'trip_number' => 'nullable|string|max:50',
             'distance' => 'required|numeric|min:0',
             'notes' => 'nullable|string|max:1000',
             'additional_quantities' => 'nullable|array',
             'additional_quantities.*' => 'nullable|numeric|min:0',
+            'custom_pay_lines' => 'nullable|array',
+            'custom_pay_lines.*.label' => 'required_with:custom_pay_lines|string|max:255',
+            'custom_pay_lines.*.quantity' => 'required_with:custom_pay_lines|numeric|min:0',
+            'custom_pay_lines.*.unit' => 'nullable|string|max:50',
+            'custom_pay_lines.*.rate' => 'nullable|numeric|min:0',
+            'custom_pay_lines.*.driver_rate' => 'nullable|numeric|min:0',
+            'custom_pay_lines.*.agency_rate' => 'nullable|numeric|min:0',
+            'rate_overrides' => 'nullable|array',
         ]);
-        $employer = Employer::findOrFail($validated['employer_id']);
+        $employerId = $validated['employer_id'] ?? $timesheet->employer_id;
+        if (! $employerId) {
+            return response()->json(['message' => 'Employer is required.'], 422);
+        }
+        $employer = Employer::findOrFail($employerId);
         if ($employer->tenant_id !== tenant('id')) {
             abort(403, 'Unauthorized');
         }
+        $customPayLines = self::normalizeCustomPayLines($validated['custom_pay_lines'] ?? null);
+        $rateOverrides = self::normalizeRateOverrides($validated['rate_overrides'] ?? null);
         $trip = $timesheet->trips()->create([
-            'employer_id' => $validated['employer_id'],
+            'employer_id' => $employerId,
             'trip_date' => $validated['trip_date'],
             'trip_number' => $validated['trip_number'] ?? null,
             'distance' => $validated['distance'],
             'notes' => $validated['notes'] ?? null,
             'additional_quantities' => $validated['additional_quantities'] ?? null,
+            'custom_pay_lines' => $customPayLines,
+            'rate_overrides' => $rateOverrides,
         ]);
         TimesheetCalculationService::recalculateTrip($trip);
         TimesheetCalculationService::recalculateTimesheet($timesheet);
@@ -300,12 +390,26 @@ class TimesheetController extends Controller
             'notes' => 'nullable|string|max:1000',
             'additional_quantities' => 'nullable|array',
             'additional_quantities.*' => 'nullable|numeric|min:0',
+            'custom_pay_lines' => 'nullable|array',
+            'custom_pay_lines.*.label' => 'required_with:custom_pay_lines|string|max:255',
+            'custom_pay_lines.*.quantity' => 'required_with:custom_pay_lines|numeric|min:0',
+            'custom_pay_lines.*.unit' => 'nullable|string|max:50',
+            'custom_pay_lines.*.rate' => 'nullable|numeric|min:0',
+            'custom_pay_lines.*.driver_rate' => 'nullable|numeric|min:0',
+            'custom_pay_lines.*.agency_rate' => 'nullable|numeric|min:0',
+            'rate_overrides' => 'nullable|array',
         ]);
         if (isset($validated['employer_id'])) {
             $employer = Employer::findOrFail($validated['employer_id']);
             if ($employer->tenant_id !== tenant('id')) {
                 abort(403, 'Unauthorized');
             }
+        }
+        if (array_key_exists('custom_pay_lines', $validated)) {
+            $validated['custom_pay_lines'] = self::normalizeCustomPayLines($validated['custom_pay_lines']);
+        }
+        if (array_key_exists('rate_overrides', $validated)) {
+            $validated['rate_overrides'] = self::normalizeRateOverrides($validated['rate_overrides']);
         }
         $trip->update($validated);
         // If admin manually adjusted the trip, avoid overwriting the manual snapshot unless explicitly forced.
@@ -466,5 +570,62 @@ class TimesheetController extends Controller
         }
         TimesheetCalculationService::recalculateTimesheet($timesheet->fresh());
         return response()->json($timesheet->fresh()->load(['driver.user', 'driver.driverClass', 'trips.employer']));
+    }
+
+    /**
+     * @param  array<int, mixed>|null  $lines
+     * @return array<int, array{label: string, quantity: float, unit: ?string, rate: float, agency_rate: float}>|null
+     */
+    private static function normalizeCustomPayLines(?array $lines): ?array
+    {
+        if ($lines === null) {
+            return null;
+        }
+        $normalized = [];
+        foreach ($lines as $line) {
+            if (! is_array($line)) {
+                continue;
+            }
+            $label = trim((string) ($line['label'] ?? ''));
+            $quantity = (float) ($line['quantity'] ?? 0);
+            if ($label === '' || $quantity <= 0) {
+                continue;
+            }
+            $unit = trim((string) ($line['unit'] ?? ''));
+            $rate = (float) ($line['rate'] ?? $line['driver_rate'] ?? 0);
+            $agencyRate = (float) ($line['agency_rate'] ?? 0);
+            $normalized[] = [
+                'label' => $label,
+                'quantity' => $quantity,
+                'unit' => $unit !== '' ? $unit : null,
+                'rate' => $rate,
+                'agency_rate' => $agencyRate,
+            ];
+        }
+
+        return $normalized === [] ? null : $normalized;
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $overrides
+     * @return array<string, array{rate: float, agency_rate: float}>|null
+     */
+    private static function normalizeRateOverrides(?array $overrides): ?array
+    {
+        if ($overrides === null) {
+            return null;
+        }
+        $normalized = [];
+        foreach ($overrides as $key => $value) {
+            if (! is_string($key) || $key === '' || ! is_array($value)) {
+                continue;
+            }
+            $normalized[$key] = [
+                'rate' => (float) ($value['rate'] ?? $value['driver_rate'] ?? 0),
+                'agency_rate' => (float) ($value['agency_rate'] ?? 0),
+            ];
+        }
+
+        return $normalized === [] ? null : $normalized;
     }
 }

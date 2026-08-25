@@ -23,6 +23,8 @@ class TenantCompanyProfileController extends Controller
                 'company_phone' => '',
                 'company_email' => '',
                 'pay_stub_cc_emails' => '',
+                'adjustments_email' => '',
+                'clearance_email' => '',
             ]);
         }
 
@@ -34,6 +36,8 @@ class TenantCompanyProfileController extends Controller
                 'company_phone' => '',
                 'company_email' => '',
                 'pay_stub_cc_emails' => '',
+                'adjustments_email' => '',
+                'clearance_email' => '',
             ]);
         }
 
@@ -44,6 +48,8 @@ class TenantCompanyProfileController extends Controller
             'company_phone' => (string) ($tenant->company_phone ?? ''),
             'company_email' => (string) ($tenant->company_email ?? ''),
             'pay_stub_cc_emails' => (string) ($tenant->pay_stub_cc_emails ?? ''),
+            'adjustments_email' => (string) ($tenant->adjustments_email ?? ''),
+            'clearance_email' => (string) ($tenant->clearance_email ?? ''),
         ]);
     }
 
@@ -60,6 +66,8 @@ class TenantCompanyProfileController extends Controller
             'company_phone' => 'nullable|string|max:64',
             'company_email' => 'nullable|email|max:255',
             'pay_stub_cc_emails' => 'nullable|string|max:4000',
+            'adjustments_email' => 'nullable|email|max:255',
+            'clearance_email' => 'nullable|email|max:255',
         ]);
 
         $tenant = Tenant::query()->findOrFail($tid);
@@ -68,6 +76,8 @@ class TenantCompanyProfileController extends Controller
         $tenant->company_phone = (string) ($validated['company_phone'] ?? '');
         $tenant->company_email = (string) ($validated['company_email'] ?? '');
         $tenant->pay_stub_cc_emails = (string) ($validated['pay_stub_cc_emails'] ?? '');
+        $tenant->adjustments_email = (string) ($validated['adjustments_email'] ?? '');
+        $tenant->clearance_email = (string) ($validated['clearance_email'] ?? '');
         $tenant->save();
 
         return $this->show();

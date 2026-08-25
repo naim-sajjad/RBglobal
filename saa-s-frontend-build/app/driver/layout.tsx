@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import { Sidebar } from '@/components/Sidebar';
 import { Header } from '@/components/Header';
@@ -22,6 +22,15 @@ export default function DriverLayout({
 }) {
   const pathname = usePathname();
   const isPublicRoute = isDriverPublicPath(pathname);
+
+  useEffect(() => {
+    if (isPublicRoute) return;
+    const root = document.documentElement;
+    root.classList.add('dark');
+    return () => {
+      root.classList.remove('dark');
+    };
+  }, [isPublicRoute]);
 
   if (isPublicRoute) {
     return <>{children}</>;

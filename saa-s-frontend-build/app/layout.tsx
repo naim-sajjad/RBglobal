@@ -2,6 +2,7 @@ import { Analytics } from '@vercel/analytics/next'
 import type { Metadata } from 'next'
 import { AuthProvider } from '@/context/AuthContext'
 import { Plus_Jakarta_Sans, Geist_Mono } from 'next/font/google'
+import { Toaster } from '@/components/ui/sonner'
 import '@/app/globals.css'
 
 const jakarta = Plus_Jakarta_Sans({
@@ -35,6 +36,7 @@ export default function RootLayout({
       <body className="font-sans antialiased bg-background">
         <AuthProvider>
           {children}
+          <Toaster />
         </AuthProvider>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>

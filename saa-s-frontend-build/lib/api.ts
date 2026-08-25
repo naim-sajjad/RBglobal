@@ -467,9 +467,29 @@ class ApiClient {
     return response.data;
   }
 
-  async createTimesheet(data: { driver_id?: number; week_start_date: string; week_end_date: string }) {
+  async createTimesheet(data: {
+    driver_id?: number;
+    employer_id?: number;
+    week_start_date: string;
+    week_end_date: string;
+  }) {
     const response = await this.client.post('/tenant/timesheets', data);
     return response.data;
+  }
+
+  async importTimesheets(file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await this.client.post('/tenant/timesheets/import', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data as {
+      message: string;
+      timesheets: Array<{ id: number; driver_id: number; week_start_date: string }>;
+      trips_created: number;
+      lines_imported: number;
+      warnings?: string[];
+    };
   }
 
   async getTimesheet(id: string | number) {
@@ -521,6 +541,18 @@ class ApiClient {
       distance: number;
       notes?: string;
       additional_quantities?: Record<string, number>;
+      custom_pay_lines?: Array<{
+        label: string;
+        quantity: number;
+        unit?: string;
+        rate?: number;
+        driver_rate?: number;
+        agency_rate?: number;
+      }>;
+      rate_overrides?: Record<
+        string,
+        { rate?: number; driver_rate?: number; agency_rate?: number }
+      >;
     }
   ) {
     const response = await this.client.post(`/tenant/timesheets/${timesheetId}/trips`, data);
@@ -537,6 +569,18 @@ class ApiClient {
       distance: number;
       notes: string;
       additional_quantities: Record<string, number>;
+      custom_pay_lines: Array<{
+        label: string;
+        quantity: number;
+        unit?: string;
+        rate?: number;
+        driver_rate?: number;
+        agency_rate?: number;
+      }>;
+      rate_overrides: Record<
+        string,
+        { rate?: number; driver_rate?: number; agency_rate?: number }
+      >;
     }>
   ) {
     const response = await this.client.put(`/tenant/timesheets/${timesheetId}/trips/${tripId}`, data);
@@ -584,6 +628,117 @@ class ApiClient {
   async deleteTimesheetPayItem(timesheetId: string | number, tripId: string | number, payItemId: string | number) {
     const response = await this.client.delete(`/tenant/timesheets/${timesheetId}/trips/${tripId}/pay-items/${payItemId}`);
     return response.data;
+  }
+
+  async getTimesheetDocuments(timesheetId: string | number) {
+    const response = await this.client.get(`/tenant/timesheets/${timesheetId}/documents`);
+    return response.data;
+  }
+
+  async generateTimesheetDocument(
+    timesheetId: string | number,
+    data: { document_type: 'invoice' | 'calculation_sheet'; confirm_regenerate?: boolean }
+  ) {
+    const response = await this.client.post(`/tenant/timesheets/${timesheetId}/documents/generate`, data);
+    return response.data;
+  }
+
+  async uploadTimesheetDocument(
+    timesheetId: string | number,
+    documentType: 'invoice' | 'calculation_sheet',
+    file: File
+  ) {
+    const formData = new FormData();
+    formData.append('document_type', documentType);
+    formData.append('file', file);
+    const response = await this.client.post(
+      `/tenant/timesheets/${timesheetId}/documents/upload`,
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    );
+    return response.data;
+  }
+
+  async deleteTimesheetDocument(timesheetId: string | number, documentId: string | number) {
+    const response = await this.client.delete(
+      `/tenant/timesheets/${timesheetId}/documents/${documentId}`
+    );
+    return response.data;
+  }
+
+  async downloadTimesheetDocument(
+    timesheetId: string | number,
+    documentId: string | number,
+    fallbackFilename: string
+  ) {
+    await this.downloadPdf(
+      `/tenant/timesheets/${timesheetId}/documents/${documentId}/download`,
+      fallbackFilename
+    );
+  }
+
+  async openTimesheetDocument(timesheetId: string | number, documentId: string | number) {
+    const response = await this.client.get(
+      `/tenant/timesheets/${timesheetId}/documents/${documentId}/view`,
+      { responseType: 'blob', headers: { Accept: 'application/pdf' } },
+    );
+    const blob = response.data as Blob;
+    const url = window.URL.createObjectURL(blob);
+    window.open(url, '_blank', 'noopener,noreferrer');
+    window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
+  }
+
+  async getTimesheetDocumentReviews(timesheetId: string | number) {
+    const response = await this.client.get(
+      `/tenant/timesheets/${timesheetId}/document-reviews`,
+    );
+    return response.data as import('./types').TimesheetDocumentReview[];
+  }
+
+  async sendTimesheetDocumentReview(timesheetId: string | number) {
+    const response = await this.client.post(
+      `/tenant/timesheets/${timesheetId}/document-reviews/send`,
+    );
+    return response.data as {
+      message: string;
+      review: import('./types').TimesheetDocumentReview;
+    };
+  }
+
+  async getDocumentAdjustmentRequests(params?: {
+    adjustment_status?: string;
+    driver_id?: number;
+    per_page?: number;
+    page?: number;
+  }) {
+    const response = await this.client.get(
+      '/tenant/timesheet-document-adjustment-requests',
+      { params },
+    );
+    return response.data as {
+      data: import('./types').TimesheetDocumentReview[];
+      current_page: number;
+      last_page: number;
+      total: number;
+      per_page: number;
+    };
+  }
+
+  async updateDocumentAdjustmentRequest(
+    reviewId: string | number,
+    data: {
+      adjustment_status: import('./types').TimesheetAdjustmentHandlingStatus;
+      admin_notes?: string | null;
+    },
+  ) {
+    const response = await this.client.put(
+      `/tenant/timesheet-document-reviews/${reviewId}/adjustment`,
+      data,
+    );
+    return response.data as {
+      message: string;
+      review: import('./types').TimesheetDocumentReview;
+    };
   }
 
   // Client billing (employer invoices)
@@ -729,9 +884,35 @@ class ApiClient {
     company_phone?: string;
     company_email?: string;
     pay_stub_cc_emails?: string;
+    adjustments_email?: string;
+    clearance_email?: string;
   }) {
     const response = await this.client.put('/tenant/company-profile', data);
     return response.data;
+  }
+
+  async getEmailTemplates() {
+    const response = await this.client.get('/tenant/email-templates');
+    return response.data as import('./types').EmailTemplate[];
+  }
+
+  async updateEmailTemplate(
+    key: string,
+    data: {
+      name?: string;
+      subject: string;
+      body_html: string;
+      body_text?: string | null;
+      is_active?: boolean;
+    },
+  ) {
+    const response = await this.client.put(`/tenant/email-templates/${key}`, data);
+    return response.data as import('./types').EmailTemplate;
+  }
+
+  async resetEmailTemplate(key: string) {
+    const response = await this.client.post(`/tenant/email-templates/${key}/reset`);
+    return response.data as import('./types').EmailTemplate;
   }
 
   async getPayrollBillingTaxSettings() {
@@ -810,4 +991,56 @@ export async function submitReferenceCheckByToken(token: string, formData: impor
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost/api/v1';
   const { data } = await axios.post(`${baseUrl}/reference-check/${token}/submit`, { form_data: formData });
   return data;
+}
+
+/** Public timesheet document review (driver email link; no auth) */
+export async function getTimesheetDocumentReviewByToken(token: string) {
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost/api/v1';
+  const { data } = await axios.get(`${baseUrl}/timesheet-document-review/${token}`);
+  return data as {
+    status: import('./types').TimesheetDocumentReviewStatus;
+    status_label?: string;
+    can_respond: boolean;
+    outdated: boolean;
+    message: string | null;
+    reviewed_at: string | null;
+    adjustment_comment: string | null;
+    driver_name: string | null;
+    period_start: string | null;
+    period_end: string | null;
+    employer_name: string | null;
+    weekly_total: number | string | null;
+    legacy_emails?: {
+      adjustments: string;
+      clearance: string;
+    };
+    documents: {
+      invoice: { id: number; filename: string | null; view_url: string };
+      calculation_sheet: { id: number; filename: string | null; view_url: string };
+    };
+    token_expires_at: string | null;
+  };
+}
+
+export async function approveTimesheetDocumentReviewByToken(token: string) {
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost/api/v1';
+  const { data } = await axios.post(`${baseUrl}/timesheet-document-review/${token}/approve`);
+  return data as { message: string; status: string; reviewed_at: string | null };
+}
+
+export async function requestTimesheetDocumentAdjustmentByToken(
+  token: string,
+  comment: string,
+) {
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost/api/v1';
+  const { data } = await axios.post(
+    `${baseUrl}/timesheet-document-review/${token}/request-adjustment`,
+    { comment },
+  );
+  return data as {
+    message: string;
+    status: string;
+    reviewed_at: string | null;
+    adjustment_comment: string | null;
+  };
 }

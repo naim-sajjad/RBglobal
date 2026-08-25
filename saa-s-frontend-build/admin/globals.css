@@ -2,42 +2,46 @@
  * Admin panel design system — minimal, dense, low distraction.
  * Tailwind engine lives in app/globals.css. Do not @import tailwindcss here.
  * Do not import into public/marketing routes; those use ../frontend/globals.css only.
+ *
+ * Color tokens are full CSS colors (hsl(...)) so they work with app/globals.css
+ * `@theme` mappings of `var(--token)`. Do not use bare HSL triplets here.
  */
 
 :root {
-  --background: 222 47% 11%;
-  --foreground: 210 40% 98%;
-  --card: 222 47% 13%;
-  --card-foreground: 210 40% 98%;
-  --popover: 222 47% 12%;
-  --popover-foreground: 210 40% 98%;
-  --primary: 217 91% 60%;
-  --primary-foreground: 222 47% 11%;
-  --secondary: 217 19% 22%;
-  --secondary-foreground: 210 40% 98%;
-  --muted: 217 19% 20%;
-  --muted-foreground: 215 16% 65%;
-  --accent: 217 19% 24%;
-  --accent-foreground: 210 40% 98%;
-  --destructive: 0 72% 51%;
-  --destructive-foreground: 210 40% 98%;
-  --border: 217 19% 24%;
-  --input: 217 19% 24%;
-  --ring: 217 91% 60%;
-  --chart-1: 217 91% 60%;
-  --chart-2: 160 55% 45%;
-  --chart-3: 35 90% 55%;
-  --chart-4: 280 55% 58%;
-  --chart-5: 340 65% 55%;
+  --background: hsl(222 47% 11%);
+  --foreground: hsl(210 40% 98%);
+  --card: hsl(222 47% 13%);
+  --card-foreground: hsl(210 40% 98%);
+  --popover: hsl(222 47% 12%);
+  --popover-foreground: hsl(210 40% 98%);
+  --primary: hsl(217 91% 60%);
+  --primary-foreground: hsl(210 40% 98%);
+  /* Lighter than slate-800 dialogs so secondary/Cancel stays visible */
+  --secondary: hsl(215 16% 34%);
+  --secondary-foreground: hsl(210 40% 98%);
+  --muted: hsl(217 19% 20%);
+  --muted-foreground: hsl(215 16% 65%);
+  --accent: hsl(217 19% 24%);
+  --accent-foreground: hsl(210 40% 98%);
+  --destructive: hsl(0 72% 51%);
+  --destructive-foreground: hsl(210 40% 98%);
+  --border: hsl(217 19% 32%);
+  --input: hsl(217 19% 32%);
+  --ring: hsl(217 91% 60%);
+  --chart-1: hsl(217 91% 60%);
+  --chart-2: hsl(160 55% 45%);
+  --chart-3: hsl(35 90% 55%);
+  --chart-4: hsl(280 55% 58%);
+  --chart-5: hsl(340 65% 55%);
   --radius: 0.375rem;
-  --sidebar-background: 222 47% 9%;
-  --sidebar-foreground: 210 40% 96%;
-  --sidebar-primary: 217 91% 60%;
-  --sidebar-primary-foreground: 222 47% 11%;
-  --sidebar-accent: 217 19% 17%;
-  --sidebar-accent-foreground: 210 40% 98%;
-  --sidebar-border: 217 19% 20%;
-  --sidebar-ring: 217 91% 60%;
+  --sidebar-background: hsl(222 47% 9%);
+  --sidebar-foreground: hsl(210 40% 96%);
+  --sidebar-primary: hsl(217 91% 60%);
+  --sidebar-primary-foreground: hsl(210 40% 98%);
+  --sidebar-accent: hsl(217 19% 17%);
+  --sidebar-accent-foreground: hsl(210 40% 98%);
+  --sidebar-border: hsl(217 19% 20%);
+  --sidebar-ring: hsl(217 91% 60%);
 
   --text-xs: 0.75rem;
   --text-sm: 0.8125rem;
@@ -62,74 +66,74 @@
 }
 
 .dark {
-  --background: 222 47% 9%;
-  --foreground: 210 40% 98%;
-  --card: 222 47% 11%;
-  --card-foreground: 210 40% 98%;
-  --popover: 222 47% 10%;
-  --popover-foreground: 210 40% 98%;
-  --primary: 217 91% 60%;
-  --primary-foreground: 222 47% 11%;
-  --secondary: 217 19% 18%;
-  --secondary-foreground: 210 40% 98%;
-  --muted: 217 19% 16%;
-  --muted-foreground: 215 16% 60%;
-  --accent: 217 19% 20%;
-  --accent-foreground: 210 40% 98%;
-  --destructive: 0 72% 51%;
-  --destructive-foreground: 210 40% 98%;
-  --border: 217 19% 20%;
-  --input: 217 19% 20%;
-  --ring: 217 91% 60%;
-  --sidebar-background: 222 47% 7%;
-  --sidebar-foreground: 210 40% 96%;
-  --sidebar-primary: 217 91% 60%;
-  --sidebar-primary-foreground: 222 47% 11%;
-  --sidebar-accent: 217 19% 15%;
-  --sidebar-accent-foreground: 210 40% 98%;
-  --sidebar-border: 217 19% 18%;
-  --sidebar-ring: 217 91% 60%;
+  --background: hsl(222 47% 9%);
+  --foreground: hsl(210 40% 98%);
+  --card: hsl(222 47% 11%);
+  --card-foreground: hsl(210 40% 98%);
+  --popover: hsl(222 47% 10%);
+  --popover-foreground: hsl(210 40% 98%);
+  --primary: hsl(217 91% 60%);
+  --primary-foreground: hsl(210 40% 98%);
+  --secondary: hsl(215 16% 34%);
+  --secondary-foreground: hsl(210 40% 98%);
+  --muted: hsl(217 19% 16%);
+  --muted-foreground: hsl(215 16% 60%);
+  --accent: hsl(217 19% 22%);
+  --accent-foreground: hsl(210 40% 98%);
+  --destructive: hsl(0 72% 51%);
+  --destructive-foreground: hsl(210 40% 98%);
+  --border: hsl(217 19% 28%);
+  --input: hsl(217 19% 28%);
+  --ring: hsl(217 91% 60%);
+  --sidebar-background: hsl(222 47% 7%);
+  --sidebar-foreground: hsl(210 40% 96%);
+  --sidebar-primary: hsl(217 91% 60%);
+  --sidebar-primary-foreground: hsl(210 40% 98%);
+  --sidebar-accent: hsl(217 19% 15%);
+  --sidebar-accent-foreground: hsl(210 40% 98%);
+  --sidebar-border: hsl(217 19% 18%);
+  --sidebar-ring: hsl(217 91% 60%);
 }
 
 @theme inline {
   --font-sans: 'Geist', 'Geist Fallback';
   --font-mono: 'Geist Mono', 'Geist Mono Fallback';
-  --color-background: hsl(var(--background));
-  --color-foreground: hsl(var(--foreground));
-  --color-card: hsl(var(--card));
-  --color-card-foreground: hsl(var(--card-foreground));
-  --color-popover: hsl(var(--popover));
-  --color-popover-foreground: hsl(var(--popover-foreground));
-  --color-primary: hsl(var(--primary));
-  --color-primary-foreground: hsl(var(--primary-foreground));
-  --color-secondary: hsl(var(--secondary));
-  --color-secondary-foreground: hsl(var(--secondary-foreground));
-  --color-muted: hsl(var(--muted));
-  --color-muted-foreground: hsl(var(--muted-foreground));
-  --color-accent: hsl(var(--accent));
-  --color-accent-foreground: hsl(var(--accent-foreground));
-  --color-destructive: hsl(var(--destructive));
-  --color-destructive-foreground: hsl(var(--destructive-foreground));
-  --color-border: hsl(var(--border));
-  --color-input: hsl(var(--input));
-  --color-ring: hsl(var(--ring));
-  --color-chart-1: hsl(var(--chart-1));
-  --color-chart-2: hsl(var(--chart-2));
-  --color-chart-3: hsl(var(--chart-3));
-  --color-chart-4: hsl(var(--chart-4));
-  --color-chart-5: hsl(var(--chart-5));
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
   --radius-sm: var(--radius-sm);
   --radius-md: var(--radius-md);
   --radius-lg: var(--radius-lg);
   --radius-xl: var(--radius-xl);
-  --color-sidebar: hsl(var(--sidebar-background));
-  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
-  --color-sidebar-primary: hsl(var(--sidebar-primary));
-  --color-sidebar-primary-foreground: hsl(var(--sidebar-primary-foreground));
-  --color-sidebar-accent: hsl(var(--sidebar-accent));
-  --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
-  --color-sidebar-border: hsl(var(--sidebar-border));
-  --color-sidebar-ring: hsl(var(--sidebar-ring));
+  --color-sidebar: var(--sidebar-background);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
 }
 
 @layer base {
@@ -148,5 +152,31 @@
   button:disabled,
   [role='button'][aria-disabled='true'] {
     @apply cursor-not-allowed;
+  }
+}
+
+/*
+ * Solid action fills often omit text-* classes; force light labels for contrast.
+ * Scoped to controls so badges/icons keep intentional colors when needed.
+ */
+@layer components {
+  :is(button, a, [role='button']):is(
+      .bg-primary,
+      .bg-blue-500,
+      .bg-blue-600,
+      .bg-blue-700,
+      .bg-emerald-500,
+      .bg-emerald-600,
+      .bg-emerald-700,
+      .bg-green-600,
+      .bg-green-700,
+      .bg-violet-600,
+      .bg-violet-700,
+      .bg-indigo-600,
+      .bg-indigo-700,
+      .bg-sky-600,
+      .bg-sky-700
+    ) {
+    color: #fff;
   }
 }

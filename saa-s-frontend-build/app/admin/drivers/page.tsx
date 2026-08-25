@@ -96,13 +96,15 @@ export default function DriversPage() {
     if (currentUser?.is_global_admin) fetchTenants();
   }, [currentUser?.is_global_admin]);
 
-  const fetchDrivers = async () => {
+  const fetchDrivers = async (search?: string) => {
     setIsLoading(true);
     setError('');
     try {
+      const term = (search ?? searchQuery).trim();
       const response = await apiClient.getDrivers({
         sort_by: sortBy,
         sort_dir: sortDir,
+        ...(term ? { search: term } : {}),
       });
       setDrivers(Array.isArray(response) ? response : []);
     } catch (err: any) {
@@ -127,8 +129,8 @@ export default function DriversPage() {
     if (driver) {
       setEditingDriver(driver);
       setFormData({
-        name: driver.user?.name || '',
-        email: driver.user?.email || '',
+        name: driver.name || driver.user?.name || '',
+        email: driver.email || driver.user?.email || '',
         password: '',
         tenant_id: driver.tenant_id || '',
       });
@@ -187,7 +189,7 @@ export default function DriversPage() {
   const handleDelete = async (driver: DriverWithDetails) => {
     if (
       !confirm(
-        `Are you sure you want to delete ${driver.user?.name || 'this driver'}?`,
+        `Are you sure you want to delete ${driver.name || driver.user?.name || 'this driver'}?`,
       )
     ) {
       return;
@@ -250,7 +252,7 @@ export default function DriversPage() {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    fetchDrivers();
+    void fetchDrivers(searchQuery);
   };
 
   const handleUploadFileSelect = (file?: File | null) => {
@@ -309,14 +311,17 @@ export default function DriversPage() {
   }, [sortBy, sortDir]);
 
   const filteredDrivers = React.useMemo(() => {
-    if (!searchQuery) return drivers;
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return drivers;
 
-    const query = searchQuery.toLowerCase();
     return drivers.filter((driver) => {
+      const name = (driver.name ?? driver.user?.name ?? '').toLowerCase();
+      const email = (driver.email ?? driver.user?.email ?? '').toLowerCase();
+      const license = String(driver.license_number ?? '').toLowerCase();
       return (
-        driver.user?.name?.toLowerCase().includes(query) ||
-        driver.user?.email?.toLowerCase().includes(query) ||
-        driver.license_number?.toLowerCase().includes(query)
+        name.includes(query) ||
+        email.includes(query) ||
+        license.includes(query)
       );
     });
   }, [drivers, searchQuery]);
@@ -380,7 +385,13 @@ export default function DriversPage() {
                 type='text'
                 placeholder='Search drivers by name, email, or license number...'
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setSearchQuery(next);
+                  if (!next.trim()) {
+                    void fetchDrivers('');
+                  }
+                }}
                 className='text-white bg-slate-700 border-slate-600 pl-10'
               />
             </div>
@@ -419,7 +430,11 @@ export default function DriversPage() {
             </div>
           ) : filteredDrivers.length === 0 ? (
             <div className='text-center py-8 text-slate-400'>
-              <p>No drivers found. Create one to get started.</p>
+              <p>
+                {searchQuery.trim()
+                  ? 'No drivers match your search.'
+                  : 'No drivers found. Create one to get started.'}
+              </p>
             </div>
           ) : (
             <div className='overflow-x-auto'>
@@ -468,11 +483,11 @@ export default function DriversPage() {
                           }}
                           className='hover:text-blue-400 transition-colors'
                         >
-                          {driver.user?.name || 'N/A'}
+                          {driver.name || driver.user?.name || 'N/A'}
                         </button>
                       </TableCell>
                       <TableCell className='text-slate-300'>
-                        {driver.user?.email || 'N/A'}
+                        {driver.email || driver.user?.email || 'N/A'}
                       </TableCell>
                       <TableCell className='text-slate-300 text-sm'>
                         {new Date(driver.created_at).toLocaleDateString()}

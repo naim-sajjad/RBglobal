@@ -5,6 +5,7 @@ namespace App\Services\Financial;
 use App\Models\DriverCalculation;
 use App\Models\Invoice;
 use App\Models\Payslip;
+use App\Models\Timesheet;
 use App\Models\TimesheetTrip;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
@@ -390,6 +391,10 @@ class FinancialPdfService
         $pdf = Pdf::loadView('pdf.payslip-invoice', [
             'issuerName' => $issuerName,
             'issuerAddress' => $issuerAddress,
+            'customerName' => $issuerName,
+            'websiteName' => (function_exists('tenant') && tenant())
+                ? trim((string) (tenant()->name ?? ''))
+                : '',
             'invoiceDate' => $invoiceDate,
             'invoiceNumber' => $invoiceNumber,
             'driverName' => $driverName,
@@ -495,6 +500,261 @@ class FinancialPdfService
     }
 
     /**
+     * @return array{content: string, filename: string}
+     */
+    public static function timesheetInvoicePdfBinary(Timesheet $timesheet): array
+    {
+        [$pdf, $filename] = self::renderTimesheetInvoicePdf($timesheet);
+
+        return [
+            'content' => $pdf->output(),
+            'filename' => $filename,
+        ];
+    }
+
+    /**
+     * @return array{content: string, filename: string}
+     */
+    public static function timesheetCalculationPdfBinary(Timesheet $timesheet): array
+    {
+        [$pdf, $filename] = self::renderTimesheetCalculationPdf($timesheet);
+
+        return [
+            'content' => $pdf->output(),
+            'filename' => $filename,
+        ];
+    }
+
+    /**
+     * @return array{0: mixed, 1: string}
+     */
+    private static function renderTimesheetInvoicePdf(Timesheet $timesheet): array
+    {
+        $timesheet->load(['driver.user', 'employer', 'trips.employer']);
+        $driver = $timesheet->driver;
+        $driverRef = $driver && $driver->license_number
+            ? (string) $driver->license_number
+            : (string) $timesheet->driver_id;
+        $driverName = $driver?->user?->name ?? ('Driver #'.$timesheet->driver_id);
+
+        $trips = $timesheet->trips ?? collect();
+        // Match timesheet UI + calculation sheet: driver pay amounts, not agency billing.
+        $hourRows = self::aggregatePayableAmountsByLabel($trips);
+        $subtotal = 0.0;
+        foreach ($hourRows as $row) {
+            $subtotal += round((float) ($row['amount'] ?? 0), 2);
+        }
+        $subtotal = round($subtotal, 2);
+        if ($hourRows === [] && $subtotal > 0.0001) {
+            $hourRows[] = ['description' => 'Trip billing', 'amount' => $subtotal];
+        }
+
+        $billToName = '';
+        $billToAddress = '';
+        if ($timesheet->employer) {
+            $billToName = (string) ($timesheet->employer->name ?? '');
+            $billToAddress = trim((string) ($timesheet->employer->billing_address ?? ''));
+        } else {
+            $byEmployerId = [];
+            foreach ($trips as $t) {
+                $e = $t->employer;
+                if ($e) {
+                    $byEmployerId[(int) $e->id] = $e;
+                }
+            }
+            $employers = collect(array_values($byEmployerId));
+            if ($employers->count() === 1) {
+                $e = $employers->first();
+                $billToName = (string) ($e->name ?? '');
+                $billToAddress = trim((string) ($e->billing_address ?? ''));
+            } elseif ($employers->count() > 1) {
+                $billToName = $employers->pluck('name')->filter()->unique()->implode(', ');
+                $billToAddress = $employers->pluck('billing_address')->filter()->unique()->values()->implode("\n\n");
+            }
+        }
+
+        [$issuerName, $issuerAddress] = self::resolveIssuerBlockForDocuments();
+        $tenantId = $timesheet->tenant_id ?? (function_exists('tenant') ? tenant('id') : null);
+        $taxParts = PayrollFinancialService::applyBillingTaxRules(
+            $subtotal,
+            PayrollFinancialService::resolveBillingTaxRules($tenantId)
+        );
+        $taxRows = self::taxPartsToInvoiceRows($taxParts);
+        $grandTotal = $taxParts['agencyTotal'];
+
+        $invoiceDate = Carbon::now()->format('M j, Y');
+        $invoiceNumber = $timesheet->id.'-'.$timesheet->driver_id;
+        $payPeriodLabel = self::timesheetPeriodLabelText($timesheet);
+        $filename = self::timesheetDocumentFilename($timesheet, $driverName, $driverRef, 'Invoice');
+
+        $websiteName = '';
+        if (function_exists('tenant') && tenant()) {
+            $websiteName = trim((string) (tenant()->name ?? ''));
+        }
+
+        // Header: customer (employer) on top, website / tenant brand under it.
+        $customerName = $billToName !== '' ? $billToName : $issuerName;
+
+        $pdf = Pdf::loadView('pdf.payslip-invoice', [
+            'issuerName' => $issuerName,
+            'issuerAddress' => $issuerAddress,
+            'customerName' => $customerName,
+            'websiteName' => $websiteName,
+            'invoiceDate' => $invoiceDate,
+            'invoiceNumber' => $invoiceNumber,
+            'driverName' => $driverName,
+            'driverRef' => $driverRef,
+            'billToName' => $issuerName,
+            'billToAddress' => $issuerAddress,
+            'hourRows' => $hourRows,
+            'subtotal' => $subtotal,
+            'taxRows' => $taxRows,
+            'grandTotal' => $grandTotal,
+            'payPeriodLabel' => $payPeriodLabel,
+        ])->setPaper('letter', 'portrait');
+
+        return [$pdf, $filename];
+    }
+
+    /**
+     * @return array{0: mixed, 1: string}
+     */
+    private static function renderTimesheetCalculationPdf(Timesheet $timesheet): array
+    {
+        $timesheet->load(['driver.user', 'employer', 'trips.employer']);
+        $driver = $timesheet->driver;
+        $driverRef = $driver && $driver->license_number
+            ? (string) $driver->license_number
+            : (string) $timesheet->driver_id;
+        $driverName = $driver?->user?->name ?? ('Driver #'.$timesheet->driver_id);
+
+        $trips = $timesheet->trips ?? collect();
+        $payrollRows = [];
+        foreach ($trips as $trip) {
+            $employerName = $trip->employer?->name ?? ($timesheet->employer?->name ?? '—');
+            $tripNum = $trip->trip_number ? (string) $trip->trip_number : '—';
+            $tripDateStr = $trip->trip_date?->format('n-j-Y') ?? '—';
+            foreach (TimesheetTripLineService::allLines($trip) as $row) {
+                $line = $row['line'];
+                $pay = round((float) ($line['driver_amount'] ?? 0), 2);
+                $payrollRows[] = [
+                    'driver_ref' => $driverRef,
+                    'driver_name' => $driverName,
+                    'employer' => $employerName,
+                    'trip_number' => $tripNum,
+                    'trip_date' => $tripDateStr,
+                    'pay_item' => (string) ($line['label'] ?? $line['line_type'] ?? 'Line'),
+                    'qty' => (float) ($line['quantity'] ?? 0),
+                    'rate' => (float) ($line['rate'] ?? 0),
+                    'pay' => $pay,
+                ];
+            }
+        }
+
+        $tenantId = $timesheet->tenant_id ?? (function_exists('tenant') ? tenant('id') : null);
+        $subtotal = 0.0;
+        foreach ($payrollRows as $r) {
+            $pay = round((float) ($r['pay'] ?? 0), 2);
+            if ($pay != 0.0) {
+                $subtotal += $pay;
+            }
+        }
+        $subtotal = round($subtotal, 2);
+        $taxParts = PayrollFinancialService::applyBillingTaxRules(
+            $subtotal,
+            PayrollFinancialService::resolveBillingTaxRules($tenantId)
+        );
+        $taxRows = self::taxPartsToInvoiceRows($taxParts);
+        $grandTotal = $taxParts['agencyTotal'];
+
+        $tenantLabel = null;
+        if (function_exists('tenant') && tenant()) {
+            $t = tenant();
+            $tenantLabel = $t->name ?? $t->id ?? null;
+        }
+
+        $periodStart = $timesheet->week_start_date
+            ? Carbon::parse($timesheet->week_start_date)->format('m-d-Y')
+            : '';
+        $periodEnd = $timesheet->week_end_date
+            ? Carbon::parse($timesheet->week_end_date)->format('m-d-Y')
+            : '';
+        $headline = 'TIMESHEET - '.$periodStart.' to '.$periodEnd;
+        if ($tenantLabel) {
+            $headline .= ' - '.$tenantLabel;
+        }
+
+        $filename = self::timesheetDocumentFilename($timesheet, $driverName, $driverRef, 'Calculation');
+
+        $pdf = Pdf::loadView('pdf.timesheet-calculation', [
+            'headline' => $headline,
+            'driverRef' => $driverRef,
+            'driverName' => $driverName,
+            'payrollRows' => $payrollRows,
+            'subtotal' => $subtotal,
+            'taxRows' => $taxRows,
+            'grandTotal' => $grandTotal,
+        ])->setPaper('a4', 'landscape');
+
+        return [$pdf, $filename];
+    }
+
+    public static function timesheetPeriodLabelText(Timesheet $timesheet): string
+    {
+        if (! $timesheet->week_start_date || ! $timesheet->week_end_date) {
+            return '—';
+        }
+        $start = Carbon::parse($timesheet->week_start_date);
+        $end = Carbon::parse($timesheet->week_end_date);
+        $ndash = "\u{2013}";
+        if ($start->format('Y-m') === $end->format('Y-m')) {
+            return $start->format('M j').$ndash.$end->format('j, Y');
+        }
+        if ($start->format('Y') === $end->format('Y')) {
+            return $start->format('M j').' '.$ndash.' '.$end->format('M j, Y');
+        }
+
+        return $start->format('M j, Y').' '.$ndash.' '.$end->format('M j, Y');
+    }
+
+    private static function timesheetDocumentFilename(
+        Timesheet $timesheet,
+        string $driverDisplayName,
+        string $driverRefToken,
+        string $documentLabel
+    ): string {
+        $ref = preg_replace('/[^\w-]+/u', '', $driverRefToken) ?: (string) $timesheet->driver_id;
+        $period = self::timesheetPeriodLabelText($timesheet);
+        $base = $driverDisplayName.' ('.$ref.') - '.$period.' '.$documentLabel;
+        $base = preg_replace('/[\\\\\\/:\\*\\?\"<>\\|]+/u', '', $base);
+        $base = trim(preg_replace('/\s+/u', ' ', $base));
+
+        return $base.'.pdf';
+    }
+
+    /**
+     * @param  array{lines: list<array{name: string, type: string, value: float, amount: float}>, sumFromPercent: float, sumFixed: float, taxAmount: float, agencyTotal: float}  $taxParts
+     * @return list<array{label: string, amount: float}>
+     */
+    private static function taxPartsToInvoiceRows(array $taxParts): array
+    {
+        $rows = [];
+        foreach ($taxParts['lines'] as $tl) {
+            $name = (string) ($tl['name'] ?? 'Tax');
+            $tt = (string) ($tl['type'] ?? '');
+            $tval = (float) ($tl['value'] ?? 0);
+            $tamt = (float) ($tl['amount'] ?? 0);
+            $suffix = $tt === 'percentage' ? ' ('.number_format($tval, 2).'%)' : ($tt === 'fixed' ? ' (fixed)' : '');
+            $rows[] = ['label' => $name.$suffix, 'amount' => $tamt];
+        }
+        if ($rows === [] && ($taxParts['taxAmount'] ?? 0) > 0.0001) {
+            $rows[] = ['label' => 'Tax', 'amount' => (float) $taxParts['taxAmount']];
+        }
+
+        return $rows;
+    }
+
+    /**
      * Human-readable download name, e.g. "Walters, Dasilver (A25832) - Feb 15–21, 2026 Calculation.pdf"
      */
     private static function driverCalculationDownloadFilename(
@@ -544,6 +804,40 @@ class FinancialPdfService
                 $amt = round((float) ($line['agency_amount'] ?? 0), 2);
                 if ($amt == 0.0) {
                     continue;
+                }
+                $sums[$key] = round(($sums[$key] ?? 0) + $amt, 2);
+            }
+        }
+        $out = [];
+        foreach ($sums as $desc => $amt) {
+            $out[] = ['description' => $desc, 'amount' => $amt];
+        }
+        usort($out, fn ($a, $b) => strcmp($a['description'], $b['description']));
+
+        return $out;
+    }
+
+    /**
+     * Aggregate driver-pay amounts by label (same basis as timesheet UI / calculation sheet).
+     *
+     * @return list<array{description: string, amount: float}>
+     */
+    private static function aggregatePayableAmountsByLabel(Collection $trips): array
+    {
+        $sums = [];
+        foreach ($trips as $trip) {
+            foreach (TimesheetTripLineService::allLines($trip) as $row) {
+                $line = $row['line'];
+                $amt = round((float) ($line['driver_amount'] ?? 0), 2);
+                if ($amt == 0.0) {
+                    continue;
+                }
+                $key = trim((string) ($line['label'] ?? ''));
+                if ($key === '') {
+                    $key = trim((string) ($line['line_type'] ?? ''));
+                }
+                if ($key === '') {
+                    $key = 'Line';
                 }
                 $sums[$key] = round(($sums[$key] ?? 0) + $amt, 2);
             }

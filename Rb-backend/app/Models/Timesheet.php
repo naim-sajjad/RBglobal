@@ -13,6 +13,7 @@ class Timesheet extends Model
 
     protected $fillable = [
         'driver_id',
+        'employer_id',
         'tenant_id',
         'week_start_date',
         'week_end_date',
@@ -44,6 +45,11 @@ class Timesheet extends Model
         return $this->belongsTo(Driver::class);
     }
 
+    public function employer(): BelongsTo
+    {
+        return $this->belongsTo(Employer::class);
+    }
+
     public function tenant(): BelongsTo
     {
         return $this->belongsTo(\Stancl\Tenancy\Database\Models\Tenant::class, 'tenant_id');
@@ -57,6 +63,21 @@ class Timesheet extends Model
     public function trips(): HasMany
     {
         return $this->hasMany(TimesheetTrip::class)->orderBy('trip_date')->orderBy('id');
+    }
+
+    public function documents(): HasMany
+    {
+        return $this->hasMany(TimesheetDocument::class)->orderByDesc('created_at');
+    }
+
+    public function documentReviews(): HasMany
+    {
+        return $this->hasMany(TimesheetDocumentReview::class)->orderByDesc('id');
+    }
+
+    public function latestDocumentReview(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(TimesheetDocumentReview::class)->latestOfMany();
     }
 
     public function adjustmentLogs(): HasMany

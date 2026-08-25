@@ -1,7 +1,7 @@
 'use client';
 
 import '@/admin/globals.css';
-import React from "react"
+import React, { useEffect } from "react"
 import { Sidebar } from '@/components/Sidebar';
 import { Header } from '@/components/Header';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
@@ -19,6 +19,15 @@ export default function AdminLayout({
   
   // Check if current route requires super-admin
   const requiresSuperAdmin = superAdminRoutes.some(route => pathname?.startsWith(route));
+
+  // Portaled dialogs/menus render under body; keep html.dark so tokens & dark: utilities apply.
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.add('dark');
+    return () => {
+      root.classList.remove('dark');
+    };
+  }, []);
   
   return (
     <ProtectedRoute requiredRole={requiresSuperAdmin ? 'super-admin' : undefined}>
