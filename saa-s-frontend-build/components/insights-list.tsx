@@ -76,7 +76,7 @@ export function InsightsList() {
           >
             <div className="relative h-64 overflow-hidden lg:h-auto">
                 <img src={featured.featuredImage || "/placeholder.svg"} alt={featured.title} className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" />
-              <span className="absolute left-5 top-5 rounded-full bg-[var(--accent-glow)] px-3 py-1 text-xs font-semibold text-brand">Featured</span>
+              <span className="absolute left-5 top-5 rounded-full bg-[var(--accent-glow)] px-3 py-1 text-xs font-semibold text-white">Featured</span>
             </div>
             <div className="flex flex-col justify-center bg-brand p-8 text-white lg:p-12">
               <div className="flex items-center gap-3 text-xs font-medium uppercase tracking-wide text-white/60">
@@ -86,7 +86,7 @@ export function InsightsList() {
               </div>
               <h2 className="mt-3 text-2xl font-bold lg:text-3xl">{featured.title}</h2>
               <p className="mt-4 text-sm leading-relaxed text-white/70">{featured.excerpt}</p>
-              <a href={`/post/${featured.slug}`} className="group/btn mt-6 inline-flex w-fit items-center gap-2 rounded-full bg-[var(--accent-glow)] px-6 py-3 text-sm font-semibold text-brand transition-transform hover:scale-105">
+              <a href={`/post/${featured.slug}`} className="group/btn mt-6 inline-flex w-fit items-center gap-2 rounded-full bg-[var(--accent-glow)] px-6 py-3 text-sm font-semibold text-white transition-transform hover:scale-105">
                 Read Article
                 <ArrowUpRight className="h-4 w-4 transition-transform group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5" />
               </a>

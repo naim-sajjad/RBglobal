@@ -50,7 +50,7 @@ export function CourseHero() {
         >
           <a
             href="/career-growth-form/"
-            className="group inline-flex items-center gap-2 rounded-full bg-[var(--accent-glow)] px-7 py-3.5 text-sm font-semibold text-brand shadow-lg shadow-orange-500/20 transition-transform hover:scale-105"
+            className="group inline-flex items-center gap-2 rounded-full bg-[var(--accent-glow)] px-7 py-3.5 text-sm font-semibold text-white shadow-lg shadow-sky-500/25 transition-transform hover:scale-105"
           >
             Sign Up Today
             <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />

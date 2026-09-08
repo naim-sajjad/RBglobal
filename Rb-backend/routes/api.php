@@ -208,26 +208,34 @@ Route::prefix('v1/tenant')->middleware([
 
 
 /**
+ * Public website forms, jobs, and blogs.
+ * Registered at /api and /api/v1 so both frontend API URL shapes work.
+ */
+$registerWebsitePublicRoutes = function (): void {
+    Route::post('/contact-submissions', [ContactSubmissionController::class, 'store'])
+        ->middleware('throttle:contact-submissions');
+    Route::post('/newsletter-subscriptions', [NewsletterSubscriberController::class, 'store'])
+        ->middleware('throttle:newsletter-subscriptions');
+    Route::get('/newsletter/unsubscribe/{token}', [NewsletterSubscriberController::class, 'unsubscribe']);
+    Route::get('/blog-posts', [BlogPostController::class, 'publicIndex']);
+    Route::get('/blog-posts/{slug}', [BlogPostController::class, 'publicShow']);
+    Route::get('/blog-categories', [BlogCategoryController::class, 'publicIndex']);
+    Route::get('/jobs', [JobPostController::class, 'publicIndex']);
+    Route::get('/jobs/{slug}', [JobPostController::class, 'publicShow']);
+    Route::get('/job-posts', [JobPostController::class, 'publicIndex']);
+    Route::get('/job-posts/{slug}', [JobPostController::class, 'publicShow']);
+    Route::post('/job-applications', [JobApplicationController::class, 'store'])
+        ->middleware('throttle:job-applications');
+    Route::post('/career-growth-registrations', [CareerGrowthRegistrationController::class, 'store'])
+        ->middleware('throttle:career-growth-registrations');
+};
+
+$registerWebsitePublicRoutes();
+Route::prefix('v1')->group($registerWebsitePublicRoutes);
+
+/**
  * Website Admin Routes
  */
-
-Route::post('/contact-submissions', [ContactSubmissionController::class, 'store'])
-    ->middleware('throttle:contact-submissions');
-Route::post('/newsletter-subscriptions', [NewsletterSubscriberController::class, 'store'])
-    ->middleware('throttle:newsletter-subscriptions');
-Route::get('/newsletter/unsubscribe/{token}', [NewsletterSubscriberController::class, 'unsubscribe']);
-Route::get('/blog-posts', [BlogPostController::class, 'publicIndex']);
-Route::get('/blog-posts/{slug}', [BlogPostController::class, 'publicShow']);
-Route::get('/blog-categories', [BlogCategoryController::class, 'publicIndex']);
-Route::get('/jobs', [JobPostController::class, 'publicIndex']);
-Route::get('/jobs/{slug}', [JobPostController::class, 'publicShow']);
-Route::get('/job-posts', [JobPostController::class, 'publicIndex']);
-Route::get('/job-posts/{slug}', [JobPostController::class, 'publicShow']);
-Route::post('/job-applications', [JobApplicationController::class, 'store'])
-    ->middleware('throttle:job-applications');
-Route::post('/career-growth-registrations', [CareerGrowthRegistrationController::class, 'store'])
-    ->middleware('throttle:career-growth-registrations');
-
 Route::prefix('admin')->group(function (): void {
     Route::post('/login', [AdminAuthController::class, 'login'])->middleware('throttle:admin-login');
 

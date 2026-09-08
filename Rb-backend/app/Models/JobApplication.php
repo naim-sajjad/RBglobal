@@ -2,11 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\AssignsMissingIntegerId;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class JobApplication extends Model
 {
+    use AssignsMissingIntegerId;
     use SoftDeletes;
     protected $fillable = [
         'job_title',

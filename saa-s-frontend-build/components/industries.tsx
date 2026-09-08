@@ -1,7 +1,7 @@
 "use client"
 
 import { motion } from "motion/react"
-import { Calculator, Boxes, Truck, HardHat, Cpu } from "lucide-react"
+import { Calculator, Boxes, Truck, HardHat, Cpu, UserCog } from "lucide-react"
 
 const industries = [
   { icon: Calculator, name: "Office & Accounting", desc: "Finance, admin and clerical professionals ready to contribute." },
@@ -9,6 +9,7 @@ const industries = [
   { icon: Truck, name: "Trucking", desc: "Licensed drivers and logistics staff that keep freight moving." },
   { icon: HardHat, name: "General Labour", desc: "Hard-working, dependable labour matched to your shift needs." },
   { icon: Cpu, name: "Information Technology", desc: "Technical talent to support and scale your operations." },
+  { icon: UserCog, name: "Customized Roles", desc: "Tailored staffing solutions built around your unique hiring needs." },
 ]
 
 export function Industries() {
@@ -20,11 +21,11 @@ export function Industries() {
             Industries
           </span>
           <h2 className="mt-3 text-balance text-3xl font-extrabold tracking-tight text-foreground lg:text-5xl">
-            We staff the roles that keep business moving
+            We Staff the Roles That Keep Business Moving
           </h2>
         </div>
 
-        <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {industries.map((item, i) => (
             <motion.div
               key={item.name}
@@ -32,14 +33,15 @@ export function Industries() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: "-60px" }}
               transition={{ duration: 0.5, delay: i * 0.08 }}
-              className="group relative overflow-hidden rounded-2xl border border-border bg-card p-7 transition-all hover:-translate-y-1 hover:border-brand/30 hover:shadow-xl hover:shadow-brand/5"
+              className="group relative flex items-start gap-3.5 overflow-hidden rounded-xl border border-border bg-card p-4 transition-all hover:-translate-y-0.5 hover:border-brand/30 hover:shadow-lg hover:shadow-brand/5"
             >
-              <div className="mb-5 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-brand text-brand-foreground transition-transform group-hover:scale-110">
-                <item.icon className="h-6 w-6" />
+              <div className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand text-brand-foreground transition-transform group-hover:scale-110">
+                <item.icon className="h-5 w-5" />
               </div>
-              <h3 className="text-lg font-bold text-foreground">{item.name}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{item.desc}</p>
-              <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-brand/5 transition-transform group-hover:scale-150" />
+              <div className="min-w-0">
+                <h3 className="text-base font-bold leading-snug text-foreground">{item.name}</h3>
+                <p className="mt-1 text-sm leading-snug text-muted-foreground">{item.desc}</p>
+              </div>
             </motion.div>
           ))}
         </div>

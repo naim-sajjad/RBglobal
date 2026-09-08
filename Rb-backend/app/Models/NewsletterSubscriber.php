@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\AssignsMissingIntegerId;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -10,6 +11,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class NewsletterSubscriber extends Model
 {
+    use AssignsMissingIntegerId;
     use SoftDeletes;
     public const STATUS_ACTIVE = 'active';
     public const STATUS_UNSUBSCRIBED = 'unsubscribed';

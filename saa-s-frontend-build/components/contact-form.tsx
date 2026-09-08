@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { motion, AnimatePresence } from "motion/react"
 import { Mail, Phone, MapPin, Send, CheckCircle2 } from "lucide-react"
 import { getErrorMessage } from "@/app/dashboard/services/api"
@@ -22,6 +22,14 @@ export function ContactForm() {
   const [role, setRole] = useState<ContactRole | "">("")
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState("")
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const requestedRole = params.get("role")
+    if (requestedRole === "employer" || requestedRole === "seeker") {
+      setRole(requestedRole)
+    }
+  }, [])
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()

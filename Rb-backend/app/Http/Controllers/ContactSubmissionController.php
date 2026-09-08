@@ -6,6 +6,7 @@ use App\Http\Requests\StoreContactSubmissionRequest;
 use App\Http\Requests\UpdateContactSubmissionStatusRequest;
 use App\Models\ContactSubmission;
 use App\Models\ImportBatch;
+use App\Services\WebsiteFormNotificationService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -61,6 +62,8 @@ class ContactSubmissionController extends Controller
             'source' => 'Form Submission',
             'language' => $language,
         ]);
+
+        WebsiteFormNotificationService::notifyContact($submission);
 
         return response()->json([
             'success' => true,

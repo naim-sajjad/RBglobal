@@ -95,16 +95,52 @@ const configuredApiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:80
 const normalizedApiUrl = configuredApiUrl.replace(/\/$/, "").replace(/\/api\/v1$/, "/api")
 const apiBaseUrl = normalizedApiUrl.endsWith("/api") ? normalizedApiUrl : `${normalizedApiUrl}/api`
 
+const PUBLIC_WEBSITE_FORM_PATHS = [
+  "/contact-submissions",
+  "/newsletter-subscriptions",
+  "/job-applications",
+  "/career-growth-registrations",
+]
+
+function isPublicWebsiteFormRequest(url?: string) {
+  if (!url) return false
+  return PUBLIC_WEBSITE_FORM_PATHS.some((path) => url.includes(path))
+}
+
+function withJsonHeaders() {
+  return {
+    Accept: "application/json",
+  }
+}
+
+function attachFormDataHeaders(config: { data?: unknown; headers?: { delete?: (name: string) => void } & Record<string, unknown> }) {
+  if (!(config.data instanceof FormData) || !config.headers) {
+    return
+  }
+  if (typeof config.headers.delete === "function") {
+    config.headers.delete("Content-Type")
+  }
+  delete config.headers["Content-Type"]
+}
+
 export const api = axios.create({
   baseURL: apiBaseUrl,
   withCredentials: false,
-  headers: {
-    Accept: "application/json",
-  },
+  headers: withJsonHeaders(),
+})
+
+/**
+ * Anonymous website forms must not send dashboard tokens or bounce visitors to /login.
+ */
+export const publicWebsiteApi = axios.create({
+  baseURL: apiBaseUrl,
+  withCredentials: false,
+  headers: withJsonHeaders(),
 })
 
 api.interceptors.request.use((config) => {
-  if (typeof window !== "undefined") {
+  attachFormDataHeaders(config)
+  if (typeof window !== "undefined" && !isPublicWebsiteFormRequest(config.url)) {
     // Website management is part of the main dashboard, so use its Sanctum token.
     const token = localStorage.getItem("auth_token") ?? localStorage.getItem("admin_token")
     if (token) {
@@ -115,10 +151,20 @@ api.interceptors.request.use((config) => {
   return config
 })
 
+publicWebsiteApi.interceptors.request.use((config) => {
+  attachFormDataHeaders(config)
+  return config
+})
+
 api.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
-    if (error.response?.status === 401 && typeof window !== "undefined") {
+    const requestUrl = String(error.config?.url ?? "")
+    if (
+      error.response?.status === 401 &&
+      typeof window !== "undefined" &&
+      !isPublicWebsiteFormRequest(requestUrl)
+    ) {
       localStorage.removeItem("auth_token")
       localStorage.removeItem("auth_user")
       window.location.href = "/login"

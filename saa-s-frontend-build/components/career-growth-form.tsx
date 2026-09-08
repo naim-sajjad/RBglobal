@@ -3,7 +3,7 @@
 import { useRef, useState } from "react"
 import Image from "next/image"
 import { CheckCircle2, GraduationCap, Loader2, Send } from "lucide-react"
-import { api, getErrorMessage } from "@/app/dashboard/services/api"
+import { getErrorMessage, publicWebsiteApi } from "@/app/dashboard/services/api"
 
 const inputClass = "mt-1.5 w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-3.5 text-sm text-gray-950 outline-none transition-all focus:border-[var(--accent-glow)] focus:bg-white focus:ring-4 focus:ring-[var(--accent-glow)]/10"
 const labelClass = "block text-sm font-semibold text-gray-800"
@@ -17,7 +17,7 @@ export function CareerGrowthForm() {
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); setSubmitting(true); setError("")
     try {
-      await api.post("/career-growth-registrations", Object.fromEntries(new FormData(event.currentTarget)))
+      await publicWebsiteApi.post("/career-growth-registrations", Object.fromEntries(new FormData(event.currentTarget)))
       form.current?.reset()
       setSuccess(true)
     } catch (submitError) {

@@ -70,6 +70,12 @@ return [
             'path' => env('MAIL_SENDMAIL_PATH', '/usr/sbin/sendmail -bs -i'),
         ],
 
+        // cPanel / LiteSpeed mailbox delivery when MAIL_MAILER is still "log".
+        'cpanel' => [
+            'transport' => 'sendmail',
+            'path' => env('MAIL_CPANEL_SENDMAIL_PATH', '/usr/sbin/sendmail -t -i'),
+        ],
+
         'log' => [
             'transport' => 'log',
             'channel' => env('MAIL_LOG_CHANNEL'),

@@ -22,9 +22,17 @@ return Application::configure(basePath: dirname(__DIR__))
             \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
         ]);
 
-        // Enable CORS for all routes
+        // Public website forms are bearer/token API posts from the Next.js site,
+        // not cookie-authenticated Sanctum SPA requests.
         $middleware->validateCsrfTokens(except: [
-            // CSRF validation is handled by Sanctum for stateful requests
+            'api/contact-submissions',
+            'api/newsletter-subscriptions',
+            'api/job-applications',
+            'api/career-growth-registrations',
+            'api/v1/contact-submissions',
+            'api/v1/newsletter-subscriptions',
+            'api/v1/job-applications',
+            'api/v1/career-growth-registrations',
         ]);
 
         // Register Spatie Permission middleware aliases

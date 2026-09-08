@@ -185,6 +185,7 @@
  * Solid colored CTAs often set bg-* without text-*; dark inherited labels
  * disappear on blue/green fills across admin, driver, and dashboard.
  * Do not target .bg-primary here — marketing gold primary uses dark labels.
+ * Accent-glow marketing CTAs must stay white for contrast on the bright blue.
  */
 @layer components {
   :is(button, a, [role='button']):is(
@@ -203,6 +204,13 @@
       .bg-sky-600,
       .bg-sky-700
     ) {
+    color: #fff;
+  }
+
+  :is(button, a, [role='button'], span, div):is(
+      .bg-\[var\(--accent-glow\)\]
+    ),
+  :is(button, a, [role='button']):hover:is(.hover\:bg-\[var\(--accent-glow\)\]) {
     color: #fff;
   }
 }

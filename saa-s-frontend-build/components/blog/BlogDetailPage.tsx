@@ -142,15 +142,15 @@ export function BlogDetailPage({ post, currentUrl }: BlogDetailPageProps) {
             <h2 className="text-2xl font-bold text-gray-950">{cta.title}</h2>
             <p className="mt-4 leading-relaxed text-gray-700">{cta.description}</p>
             <div className="mt-8 flex justify-center">
-              <a href={cta.buttonUrl} className="inline-flex items-center gap-2 rounded-full bg-[var(--accent-glow)] px-7 py-3.5 text-sm font-semibold text-brand shadow-lg shadow-orange-500/20 transition-transform hover:scale-105">{cta.buttonLabel}<ArrowUpRight className="h-4 w-4" /></a>
+              <a href={cta.buttonUrl} className="inline-flex items-center gap-2 rounded-full bg-[var(--accent-glow)] px-7 py-3.5 text-sm font-semibold text-white shadow-lg shadow-sky-500/25 transition-transform hover:scale-105">{cta.buttonLabel}<ArrowUpRight className="h-4 w-4" /></a>
             </div>
           </section>
 
           <div className="mt-12 flex items-center gap-3 border-t border-gray-300 pt-6">
             <span className="text-sm font-semibold text-gray-600">Share</span>
-            <a href={shareUrl} aria-label="Share" className="flex h-10 w-10 items-center justify-center rounded-full border border-gray-300 bg-white text-gray-700 transition-colors hover:border-[var(--accent-glow)] hover:bg-[var(--accent-glow)] hover:text-brand"><Share2 className="h-4 w-4" /></a>
-            <a href={linkedInHref} aria-label="LinkedIn" className="flex h-10 w-10 items-center justify-center rounded-full border border-gray-300 bg-white text-gray-700 transition-colors hover:border-[var(--accent-glow)] hover:bg-[var(--accent-glow)] hover:text-brand"><IconLinkedin className="h-4 w-4" /></a>
-            <a href={shareUrl} aria-label="Copy link" className="flex h-10 w-10 items-center justify-center rounded-full border border-gray-300 bg-white text-gray-700 transition-colors hover:border-[var(--accent-glow)] hover:bg-[var(--accent-glow)] hover:text-brand"><LinkIcon className="h-4 w-4" /></a>
+            <a href={shareUrl} aria-label="Share" className="flex h-10 w-10 items-center justify-center rounded-full border border-gray-300 bg-white text-gray-700 transition-colors hover:border-[var(--accent-glow)] hover:bg-[var(--accent-glow)] hover:text-white"><Share2 className="h-4 w-4" /></a>
+            <a href={linkedInHref} aria-label="LinkedIn" className="flex h-10 w-10 items-center justify-center rounded-full border border-gray-300 bg-white text-gray-700 transition-colors hover:border-[var(--accent-glow)] hover:bg-[var(--accent-glow)] hover:text-white"><IconLinkedin className="h-4 w-4" /></a>
+            <a href={shareUrl} aria-label="Copy link" className="flex h-10 w-10 items-center justify-center rounded-full border border-gray-300 bg-white text-gray-700 transition-colors hover:border-[var(--accent-glow)] hover:bg-[var(--accent-glow)] hover:text-white"><LinkIcon className="h-4 w-4" /></a>
           </div>
 
           {post.relatedPosts?.length ? (

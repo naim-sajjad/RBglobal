@@ -12,7 +12,7 @@ export function Insights() {
             Insights
           </span>
           <h2 className="mt-3 text-balance text-3xl font-extrabold tracking-tight text-foreground lg:text-5xl">
-            Stay ahead with expert knowledge
+            Stay Ahead With Expert Knowledge
           </h2>
           <p className="mt-4 text-pretty leading-relaxed text-muted-foreground">
             From resume building to essential interview tips, we share the tools and
@@ -48,7 +48,7 @@ export function Insights() {
             </p>
             <a
               href="/post/professionally-planning-for-your-future"
-              className="group mt-6 inline-flex w-fit items-center gap-2 rounded-full bg-[var(--accent-glow)] px-6 py-3 text-sm font-semibold text-brand transition-transform hover:scale-105"
+              className="group mt-6 inline-flex w-fit items-center gap-2 rounded-full bg-[var(--accent-glow)] px-6 py-3 text-sm font-semibold text-white transition-transform hover:scale-105"
             >
               Read Article
               <ArrowUpRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />

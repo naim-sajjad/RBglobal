@@ -115,8 +115,8 @@ export function SiteFooter() {
           className="grid gap-12 lg:grid-cols-[1.2fr_1fr]"
         >
           {/* Left: contact info */}
-          <div>
-            <Logo variant="light" />
+          <div className="min-w-0">
+            <Logo variant="light" imageClassName="h-28 w-auto object-contain object-left sm:h-32" />
             <p className="mt-5 max-w-md text-pretty leading-relaxed text-gray-700">
               Your Human Resources Partner — connecting Toronto and the GTA with the
               talent and opportunities that matter.
@@ -143,7 +143,7 @@ export function SiteFooter() {
                   aria-label={s.label}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex h-10 w-10 items-center justify-center rounded-full border border-gray-300 bg-white text-gray-700 transition-colors hover:border-[var(--accent-glow)] hover:bg-[var(--accent-glow)] hover:text-brand"
+                  className="flex h-10 w-10 items-center justify-center rounded-full border border-gray-300 bg-white text-gray-700 transition-colors hover:border-[var(--accent-glow)] hover:bg-[var(--accent-glow)] hover:text-white"
                 >
                   <s.icon className="h-5 w-5" />
                 </a>
@@ -194,7 +194,7 @@ export function SiteFooter() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full rounded-xl bg-[var(--accent-glow)] px-6 py-3.5 text-sm font-semibold text-brand transition-transform hover:scale-[1.02] disabled:pointer-events-none disabled:opacity-60"
+                className="w-full rounded-xl bg-[var(--accent-glow)] px-6 py-3.5 text-sm font-semibold text-white transition-transform hover:scale-[1.02] disabled:pointer-events-none disabled:opacity-60"
               >
                 {submitting ? "Submitting..." : submitted ? "Thanks for subscribing!" : "Submit"}
               </button>
