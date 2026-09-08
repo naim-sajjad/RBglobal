@@ -8,6 +8,7 @@ use App\Models\Timesheet;
 use App\Models\TimesheetDocument;
 use App\Models\TimesheetDocumentReview;
 use App\Models\TimesheetDocumentReviewEvent;
+use App\Services\AdminNotificationService;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -253,6 +254,8 @@ class TimesheetDocumentReviewService
             ],
             'created_by_user_id' => null,
         ]);
+
+        AdminNotificationService::notifyAdjustmentRequested($review->fresh());
 
         return $review->fresh([
             'invoiceDocument',

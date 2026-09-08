@@ -1,6 +1,7 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata } from 'next'
 import { AuthProvider } from '@/context/AuthContext'
+import { AdminNotificationProvider } from '@/context/AdminNotificationContext'
 import { Plus_Jakarta_Sans, Geist_Mono } from 'next/font/google'
 import { Toaster } from '@/components/ui/sonner'
 import '@/app/globals.css'
@@ -35,7 +36,9 @@ export default function RootLayout({
     <html lang="en" className={`${jakarta.variable} ${geistMono.variable}`}>
       <body className="font-sans antialiased bg-background">
         <AuthProvider>
-          {children}
+          <AdminNotificationProvider>
+            {children}
+          </AdminNotificationProvider>
           <Toaster />
         </AuthProvider>
         {process.env.NODE_ENV === 'production' && <Analytics />}

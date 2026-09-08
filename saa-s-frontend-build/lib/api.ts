@@ -724,6 +724,13 @@ class ApiClient {
     };
   }
 
+  async getDocumentAdjustmentRequest(reviewId: string | number) {
+    const response = await this.client.get(
+      `/tenant/timesheet-document-adjustment-requests/${reviewId}`,
+    );
+    return response.data as import('./types').TimesheetDocumentReview;
+  }
+
   async updateDocumentAdjustmentRequest(
     reviewId: string | number,
     data: {
@@ -913,6 +920,40 @@ class ApiClient {
   async resetEmailTemplate(key: string) {
     const response = await this.client.post(`/tenant/email-templates/${key}/reset`);
     return response.data as import('./types').EmailTemplate;
+  }
+
+  async getAdminNotifications(params?: { unread_only?: boolean; per_page?: number }) {
+    const response = await this.client.get('/tenant/admin-notifications', { params });
+    return response.data as {
+      data: import('./types').AdminNotification[];
+      current_page: number;
+      last_page: number;
+      total: number;
+    };
+  }
+
+  async getAdminNotificationUnreadCount() {
+    const response = await this.client.get('/tenant/admin-notifications/unread-count');
+    return response.data as { count: number };
+  }
+
+  async getRecentAdminNotifications(afterId = 0) {
+    const response = await this.client.get('/tenant/admin-notifications/recent', {
+      params: { after_id: afterId || undefined },
+    });
+    return response.data as { data: import('./types').AdminNotification[] };
+  }
+
+  async markAdminNotificationRead(notificationId: string | number) {
+    const response = await this.client.post(
+      `/tenant/admin-notifications/${notificationId}/read`,
+    );
+    return response.data as import('./types').AdminNotification;
+  }
+
+  async markAllAdminNotificationsRead() {
+    const response = await this.client.post('/tenant/admin-notifications/read-all');
+    return response.data as { message: string; updated: number };
   }
 
   async getPayrollBillingTaxSettings() {

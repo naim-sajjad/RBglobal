@@ -76,6 +76,34 @@ class TimesheetDocumentReviewController extends Controller
     }
 
     /**
+     * Admin: single adjustment request detail (e.g. from notification deep link).
+     */
+    public function showAdjustmentRequest(TimesheetDocumentReview $review)
+    {
+        if (! auth()->user()?->hasPermissionTo('drivers.view')) {
+            abort(403, 'Unauthorized');
+        }
+        if ($review->tenant_id !== tenant('id')) {
+            abort(403, 'Unauthorized');
+        }
+        if ($review->status !== TimesheetDocumentReview::STATUS_ADJUSTMENT_REQUESTED) {
+            abort(404, 'Adjustment request not found.');
+        }
+
+        $review->load([
+            'timesheet.employer',
+            'driver.user',
+            'sender:id,name',
+            'resolver:id,name',
+            'invoiceDocument',
+            'calculationDocument',
+            'events',
+        ]);
+
+        return response()->json($review);
+    }
+
+    /**
      * Admin: update adjustment handling status + notes.
      */
     public function updateAdjustment(Request $request, TimesheetDocumentReview $review)

@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -60,16 +61,56 @@ function handlingStatus(
   return review.adjustment_status || 'open';
 }
 
+function driverLabel(review: TimesheetDocumentReview): string {
+  return (
+    review.driver_name ||
+    review.driver?.user?.name ||
+    `Driver #${review.driver_id}`
+  );
+}
+
+function weekLabel(review: TimesheetDocumentReview): string {
+  if (!review.timesheet?.week_start_date || !review.timesheet?.week_end_date) {
+    return '—';
+  }
+  return `${formatApiDate(review.timesheet.week_start_date)} – ${formatApiDate(review.timesheet.week_end_date)}`;
+}
+
 export default function AdjustmentRequestsPage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const detailId = searchParams.get('id');
+
   const [filter, setFilter] = useState<string>('all_open');
   const [items, setItems] = useState<TimesheetDocumentReview[]>([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
   const [editing, setEditing] = useState<TimesheetDocumentReview | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [editStatus, setEditStatus] =
     useState<TimesheetAdjustmentHandlingStatus>('open');
   const [editNotes, setEditNotes] = useState('');
   const [saving, setSaving] = useState(false);
+
+  const clearDetailParam = useCallback(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('id');
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname);
+  }, [pathname, router, searchParams]);
+
+  const openDetail = useCallback((review: TimesheetDocumentReview) => {
+    setEditing(review);
+    setEditStatus(handlingStatus(review));
+    setEditNotes(review.admin_notes || '');
+    router.replace(`${pathname}?id=${review.id}`);
+  }, [pathname, router]);
+
+  const closeDetail = useCallback(() => {
+    setEditing(null);
+    clearDetailParam();
+  }, [clearDetailParam]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -93,11 +134,46 @@ export default function AdjustmentRequestsPage() {
     void load();
   }, [load]);
 
-  const openEdit = (review: TimesheetDocumentReview) => {
-    setEditing(review);
-    setEditStatus(handlingStatus(review));
-    setEditNotes(review.admin_notes || '');
-  };
+  useEffect(() => {
+    if (!detailId) {
+      return;
+    }
+
+    const fromList = items.find((item) => String(item.id) === detailId);
+    if (fromList) {
+      setEditing(fromList);
+      setEditStatus(handlingStatus(fromList));
+      setEditNotes(fromList.admin_notes || '');
+      return;
+    }
+
+    if (editing && String(editing.id) === detailId) {
+      return;
+    }
+
+    let cancelled = false;
+    setDetailLoading(true);
+    void apiClient
+      .getDocumentAdjustmentRequest(detailId)
+      .then((review) => {
+        if (cancelled) return;
+        setEditing(review);
+        setEditStatus(handlingStatus(review));
+        setEditNotes(review.admin_notes || '');
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        toast.error(getApiErrorMessage(err, 'Adjustment request not found'));
+        clearDetailParam();
+      })
+      .finally(() => {
+        if (!cancelled) setDetailLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [detailId, items, editing, clearDetailParam]);
 
   const saveEdit = async () => {
     if (!editing) return;
@@ -108,7 +184,7 @@ export default function AdjustmentRequestsPage() {
         admin_notes: editNotes.trim() || null,
       });
       toast.success('Adjustment request updated');
-      setEditing(null);
+      closeDetail();
       await load();
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'Failed to update request'));
@@ -116,6 +192,10 @@ export default function AdjustmentRequestsPage() {
       setSaving(false);
     }
   };
+
+  const timesheetHref = editing
+    ? `/admin/timesheets/${editing.timesheet_id}`
+    : '#';
 
   return (
     <div className='space-y-6'>
@@ -133,9 +213,9 @@ export default function AdjustmentRequestsPage() {
             Adjustment requests
           </h1>
           <p className='text-slate-400 mt-1'>
-            Driver-submitted correction requests from document review. Update
-            status as you work them, then regenerate docs and send for review
-            again.
+            Driver-submitted correction requests from document review. Click a
+            row to view details, open the timesheet to fix trips, then mark
+            resolved and resend documents.
           </p>
         </div>
         <div className='space-y-1.5 w-full sm:w-56'>
@@ -188,22 +268,16 @@ export default function AdjustmentRequestsPage() {
               <TableBody>
                 {items.map((review) => {
                   const handling = handlingStatus(review);
-                  const week =
-                    review.timesheet?.week_start_date &&
-                    review.timesheet?.week_end_date
-                      ? `${formatApiDate(review.timesheet.week_start_date)} – ${formatApiDate(review.timesheet.week_end_date)}`
-                      : '—';
                   return (
                     <TableRow
                       key={review.id}
-                      className='border-slate-700 hover:bg-slate-700/40'
+                      className='border-slate-700 hover:bg-slate-700/40 cursor-pointer'
+                      onClick={() => openDetail(review)}
                     >
                       <TableCell>
                         <div className='min-w-0'>
                           <p className='text-sm text-white font-medium truncate'>
-                            {review.driver_name ||
-                              review.driver?.user?.name ||
-                              `Driver #${review.driver_id}`}
+                            {driverLabel(review)}
                           </p>
                           <p className='text-xs text-slate-400 truncate'>
                             {review.timesheet?.employer?.name ||
@@ -213,7 +287,7 @@ export default function AdjustmentRequestsPage() {
                         </div>
                       </TableCell>
                       <TableCell className='text-slate-300 text-sm whitespace-nowrap'>
-                        {week}
+                        {weekLabel(review)}
                       </TableCell>
                       <TableCell className='text-slate-400 text-xs whitespace-nowrap'>
                         {review.reviewed_at
@@ -241,15 +315,18 @@ export default function AdjustmentRequestsPage() {
                         </Badge>
                       </TableCell>
                       <TableCell className='text-right'>
-                        <div className='flex items-center justify-end gap-1'>
+                        <div
+                          className='flex items-center justify-end gap-1'
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           <Button
                             type='button'
                             size='sm'
                             variant='outline'
                             className='border-slate-600 text-slate-200 h-8'
-                            onClick={() => openEdit(review)}
+                            onClick={() => openDetail(review)}
                           >
-                            Update
+                            View
                           </Button>
                           <Button
                             type='button'
@@ -276,29 +353,87 @@ export default function AdjustmentRequestsPage() {
       </Card>
 
       <Dialog
-        open={!!editing}
+        open={!!editing || detailLoading}
         onOpenChange={(open) => {
-          if (!open) setEditing(null);
+          if (!open) closeDetail();
         }}
       >
-        <DialogContent className='bg-slate-800 border-slate-700 sm:max-w-lg'>
+        <DialogContent className='bg-slate-800 border-slate-700 sm:max-w-xl'>
           <DialogHeader>
-            <DialogTitle className='text-white'>
-              Update adjustment request
+            <DialogTitle className='text-white flex items-center gap-2 flex-wrap'>
+              Adjustment request
+              {editing ? (
+                <Badge
+                  className={cn(
+                    'font-medium',
+                    HANDLING_STYLES[handlingStatus(editing)],
+                  )}
+                >
+                  {HANDLING_LABELS[handlingStatus(editing)]}
+                </Badge>
+              ) : null}
             </DialogTitle>
             <DialogDescription className='text-slate-400'>
-              {editing?.driver_name || 'Driver'} — track progress, then mark
-              resolved after you fix the timesheet and resend documents.
+              Review the driver&apos;s comment, open the timesheet to make
+              changes, then update status when done.
             </DialogDescription>
           </DialogHeader>
 
-          {editing ? (
+          {detailLoading && !editing ? (
+            <div className='flex justify-center py-10'>
+              <Spinner className='h-8 w-8 text-white' />
+            </div>
+          ) : editing ? (
             <div className='space-y-4 py-1'>
-              <div className='rounded-md border border-slate-700 bg-slate-900/50 px-3 py-2 text-sm text-slate-300 whitespace-pre-wrap'>
-                {editing.adjustment_comment}
+              <div className='grid gap-3 sm:grid-cols-2 text-sm'>
+                <div>
+                  <p className='text-xs text-slate-500 uppercase tracking-wide'>
+                    Driver
+                  </p>
+                  <p className='text-slate-200 font-medium'>
+                    {driverLabel(editing)}
+                  </p>
+                  {editing.driver_email ? (
+                    <p className='text-xs text-slate-400'>
+                      {editing.driver_email}
+                    </p>
+                  ) : null}
+                </div>
+                <div>
+                  <p className='text-xs text-slate-500 uppercase tracking-wide'>
+                    Employer
+                  </p>
+                  <p className='text-slate-200'>
+                    {editing.timesheet?.employer?.name || '—'}
+                  </p>
+                </div>
+                <div>
+                  <p className='text-xs text-slate-500 uppercase tracking-wide'>
+                    Pay week
+                  </p>
+                  <p className='text-slate-200'>{weekLabel(editing)}</p>
+                </div>
+                <div>
+                  <p className='text-xs text-slate-500 uppercase tracking-wide'>
+                    Requested
+                  </p>
+                  <p className='text-slate-200'>
+                    {editing.reviewed_at
+                      ? formatApiDate(editing.reviewed_at)
+                      : '—'}
+                  </p>
+                </div>
               </div>
+
+              <div className='space-y-1.5'>
+                <Label className='text-slate-300'>Driver comment</Label>
+                <div className='rounded-md border border-slate-700 bg-slate-900/50 px-3 py-2.5 text-sm text-slate-200 whitespace-pre-wrap min-h-[4rem]'>
+                  {editing.adjustment_comment || '—'}
+                </div>
+              </div>
+
               <div className='space-y-2'>
-                <Label className='text-slate-300'>Status</Label>
+                <Label className='text-slate-300'>Handling status</Label>
                 <Select
                   value={editStatus}
                   onValueChange={(v) =>
@@ -316,6 +451,7 @@ export default function AdjustmentRequestsPage() {
                   </SelectContent>
                 </Select>
               </div>
+
               <div className='space-y-2'>
                 <Label className='text-slate-300'>Admin notes</Label>
                 <Textarea
@@ -329,24 +465,42 @@ export default function AdjustmentRequestsPage() {
             </div>
           ) : null}
 
-          <DialogFooter>
+          <DialogFooter className='gap-2 sm:gap-0 flex-col sm:flex-row sm:justify-between'>
             <Button
               type='button'
               variant='outline'
-              className='border-slate-600 text-slate-300'
-              disabled={saving}
-              onClick={() => setEditing(null)}
+              className='border-slate-600 text-slate-200 w-full sm:w-auto'
+              disabled={!editing}
+              asChild={!!editing}
             >
-              Cancel
+              {editing ? (
+                <Link href={timesheetHref}>
+                  <ExternalLink className='h-4 w-4 mr-2' />
+                  Open timesheet
+                </Link>
+              ) : (
+                <span>Open timesheet</span>
+              )}
             </Button>
-            <Button
-              type='button'
-              className='bg-emerald-600 hover:bg-emerald-500 text-white'
-              disabled={saving}
-              onClick={() => void saveEdit()}
-            >
-              {saving ? <Spinner className='h-4 w-4' /> : 'Save'}
-            </Button>
+            <div className='flex gap-2 w-full sm:w-auto'>
+              <Button
+                type='button'
+                variant='outline'
+                className='border-slate-600 text-slate-300 flex-1 sm:flex-none'
+                disabled={saving}
+                onClick={closeDetail}
+              >
+                Close
+              </Button>
+              <Button
+                type='button'
+                className='bg-emerald-600 hover:bg-emerald-500 text-white flex-1 sm:flex-none'
+                disabled={saving || !editing}
+                onClick={() => void saveEdit()}
+              >
+                {saving ? <Spinner className='h-4 w-4' /> : 'Save'}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -274,7 +274,7 @@ export type CustomPayLineDraft = {
   quantity: string;
 };
 
-/** Key used in rate_overrides for the Distance Pay row. */
+/** Key used in rate_overrides for the Distance row. */
 export const DISTANCE_RATE_OVERRIDE_KEY = 'distance';
 
 export type PayRateDraft = {

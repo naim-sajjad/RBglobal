@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\PayItemTemplateController;
 use App\Http\Controllers\Api\TimesheetController;
 use App\Http\Controllers\Api\TimesheetDocumentController;
 use App\Http\Controllers\Api\TimesheetDocumentReviewController;
+use App\Http\Controllers\Api\AdminNotificationController;
 use App\Http\Controllers\Api\EmailTemplateController;
 use App\Http\Controllers\Api\InvoiceFinancialController;
 use App\Http\Controllers\Api\PayrollFinancialController;
@@ -166,6 +167,7 @@ Route::prefix('v1/tenant')->middleware([
     Route::get('/timesheets/{timesheet}/documents/{document}/view', [TimesheetDocumentController::class, 'view']);
     Route::delete('/timesheets/{timesheet}/documents/{document}', [TimesheetDocumentController::class, 'destroy']);
     Route::get('/timesheet-document-adjustment-requests', [TimesheetDocumentReviewController::class, 'listAdjustmentRequests']);
+    Route::get('/timesheet-document-adjustment-requests/{review}', [TimesheetDocumentReviewController::class, 'showAdjustmentRequest']);
     Route::put('/timesheet-document-reviews/{review}/adjustment', [TimesheetDocumentReviewController::class, 'updateAdjustment']);
     Route::get('/timesheets/{timesheet}/document-reviews', [TimesheetDocumentReviewController::class, 'index']);
     Route::post('/timesheets/{timesheet}/document-reviews/send', [TimesheetDocumentReviewController::class, 'send']);
@@ -187,6 +189,12 @@ Route::prefix('v1/tenant')->middleware([
     Route::get('/email-templates', [EmailTemplateController::class, 'index']);
     Route::put('/email-templates/{key}', [EmailTemplateController::class, 'update']);
     Route::post('/email-templates/{key}/reset', [EmailTemplateController::class, 'reset']);
+
+    Route::get('/admin-notifications', [AdminNotificationController::class, 'index']);
+    Route::get('/admin-notifications/recent', [AdminNotificationController::class, 'recent']);
+    Route::get('/admin-notifications/unread-count', [AdminNotificationController::class, 'unreadCount']);
+    Route::post('/admin-notifications/read-all', [AdminNotificationController::class, 'markAllRead']);
+    Route::post('/admin-notifications/{notification}/read', [AdminNotificationController::class, 'markRead']);
 
     // Driver payroll (payslips from approved trips — payable lines only)
     Route::get('/payroll/billing-tax-settings', [PayrollFinancialController::class, 'getBillingTaxSettings']);

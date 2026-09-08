@@ -632,7 +632,7 @@ export default function DriverTimesheetDetailPage() {
                         <>
                           <tr className='border-b border-slate-700/80'>
                             <td className='px-2 py-1.5 align-middle font-medium text-white'>
-                              Distance Pay
+                              Distance
                             </td>
                             <td className='px-2 py-1.5 align-middle text-slate-300'>
                               {distanceUnit}

@@ -100,7 +100,7 @@ class RateCardResolutionService
         $agencyDistancePay = round($distance * $agencyDistanceRate, 2);
         $lines[] = [
             'line_type' => 'distance',
-            'label' => 'Distance Pay',
+            'label' => 'Distance',
             'quantity' => $distance,
             'unit' => $rates['measurement_unit'] ?? 'km',
             'rate' => $driverDistanceRate,

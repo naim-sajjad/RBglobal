@@ -754,6 +754,26 @@ export interface EmailTemplate {
   message?: string;
 }
 
+export interface AdminNotification {
+  id: number;
+  tenant_id: string | null;
+  user_id: number;
+  type: string;
+  title: string;
+  message: string;
+  meta?: {
+    timesheet_id?: number;
+    review_id?: number;
+    driver_id?: number;
+    driver_name?: string;
+    adjustment_comment?: string;
+    href?: string;
+  } | null;
+  read_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Payslip {
   id: number;
   tenant_id: string | null;

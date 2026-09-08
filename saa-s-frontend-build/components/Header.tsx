@@ -4,6 +4,7 @@ import React from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import { TenantSwitcher } from './TenantSwitcher';
+import { AdminNotificationBell } from '@/components/admin/AdminNotificationBell';
 import { User, ChevronDown, Pencil, LogOut } from 'lucide-react';
 import {
   DropdownMenu,
@@ -43,6 +44,7 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-4">
+          {!isDriver ? <AdminNotificationBell /> : null}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
