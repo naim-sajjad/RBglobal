@@ -13,7 +13,7 @@ final class JobApplicationFormMapper
         'AZ Driver | Whitby, ON' => ['slug' => 'az-driver-whitby-on', 'job_type' => 'az_driver', 'form_key' => 'az_driver_application', 'form_name' => 'AZ Driver Application'],
         'Deep Reach Operator | Mississauga, ON' => ['slug' => 'deep-reach-operator-mississauga-on', 'job_type' => 'deep_reach_operator', 'form_key' => 'forklift_application', 'form_name' => 'Forklift Application'],
         'General Labour | Mississauga, ON' => ['slug' => 'general-labour-mississauga-on', 'job_type' => 'general_labour', 'form_key' => 'general_labour_application', 'form_name' => 'General Labour Application'],
-        'Experienced Accountant | Mississauga, ON' => ['slug' => 'experienced-accountant-mississauga-on', 'job_type' => 'accountant', 'form_key' => null, 'form_name' => null],
+        'Experienced Accountant | Mississauga, ON' => ['slug' => 'experienced-accountant-mississauga-on', 'job_type' => 'accountant', 'form_key' => 'accountant_application', 'form_name' => 'Accountant Application'],
     ];
 
     public static function resolve(?int $jobId, ?string $jobSlug, string $jobTitle): array

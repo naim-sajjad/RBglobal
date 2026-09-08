@@ -129,7 +129,7 @@ export function JobsGrid() {
           </p>
           <a
             href="/contact#contact-form"
-            className="mt-7 inline-flex items-center gap-2 rounded-full bg-[var(--accent-glow)] px-7 py-3 text-sm font-semibold text-brand shadow-lg transition-transform hover:scale-105"
+            className="mt-7 inline-flex items-center gap-2 rounded-full bg-[var(--accent-glow)] px-7 py-3 text-sm font-semibold text-white shadow-lg transition-transform hover:scale-105"
           >
             Submit Your Resume
             <ArrowRight className="h-4 w-4" />

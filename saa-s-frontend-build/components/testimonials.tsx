@@ -33,7 +33,7 @@ export function Testimonials() {
             Reviews
           </span>
           <h2 className="mt-3 text-balance text-3xl font-extrabold tracking-tight text-foreground lg:text-5xl">
-            The perfect customer experience
+            The Perfect Customer Experience
           </h2>
         </div>
 

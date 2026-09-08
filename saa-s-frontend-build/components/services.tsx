@@ -33,7 +33,7 @@ export function Services() {
               Explore Our Services
             </span>
             <h2 className="mt-3 text-balance text-3xl font-extrabold tracking-tight lg:text-5xl">
-              A smarter way to build your team
+              A Smarter Way to Build Your Team
             </h2>
           </div>
           <p className="max-w-xl text-pretty leading-relaxed text-gray-700">
@@ -56,7 +56,7 @@ export function Services() {
               <span className="absolute right-6 top-6 font-mono text-sm text-gray-300">
                 0{i + 1}
               </span>
-              <div className="mb-5 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--accent-glow)] text-brand">
+              <div className="mb-5 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--accent-glow)] text-white">
                 <s.icon className="h-6 w-6" />
               </div>
               <h3 className="text-xl font-bold">{s.title}</h3>
@@ -67,10 +67,10 @@ export function Services() {
 
         <div className="mt-12 flex justify-center">
           <a
-            href="/contact#contact-form"
-            className="group inline-flex items-center gap-2 rounded-full bg-[var(--accent-glow)] px-8 py-4 text-sm font-semibold text-brand shadow-lg shadow-orange-500/25 transition-transform hover:scale-105"
+            href="/employers/"
+            className="group inline-flex items-center gap-2 rounded-full bg-[var(--accent-glow)] px-8 py-4 text-sm font-semibold text-white shadow-lg shadow-sky-500/30 transition-transform hover:scale-105"
           >
-            Contact Us Today
+            Explore staffing services
             <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
           </a>
         </div>

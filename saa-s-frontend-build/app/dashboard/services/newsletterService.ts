@@ -1,6 +1,6 @@
 "use client"
 
-import { api } from "./api"
+import { api, publicWebsiteApi } from "./api"
 
 export type NewsletterSubscriberStatus = "active" | "unsubscribed" | "blocked"
 export type NewsletterRole = "seeker" | "employer"
@@ -131,7 +131,7 @@ export type ApiErrorResponse = {
 }
 
 export async function subscribeToNewsletter(payload: NewsletterSubscriptionPayload) {
-  const response = await api.post<NewsletterSubscriptionResponse>("/newsletter-subscriptions", payload)
+  const response = await publicWebsiteApi.post<NewsletterSubscriptionResponse>("/newsletter-subscriptions", payload)
   return response.data
 }
 

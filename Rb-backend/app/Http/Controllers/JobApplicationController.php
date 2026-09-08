@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreJobApplicationRequest;
 use App\Models\ContactSubmission;
 use App\Models\JobApplication;
+use App\Services\WebsiteFormNotificationService;
 use App\Support\JobApplicationFormMapper;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -21,7 +22,7 @@ class JobApplicationController extends Controller
         );
         $validated = [...$validated, ...$job];
         $validated['az_license_age'] = $validated['license_age'] ?? null;
-        unset($validated['license_age']);
+        unset($validated['license_age'], $validated['location']);
         $resume = $request->file('resume');
 
         if ($resume) {
@@ -79,6 +80,8 @@ class JobApplicationController extends Controller
 
             return [$application];
         });
+
+        WebsiteFormNotificationService::notifyJobApplication($application);
 
         return response()->json([
             'success' => true,

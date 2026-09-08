@@ -1,6 +1,6 @@
 "use client"
 
-import { api } from "./api"
+import { api, publicWebsiteApi } from "./api"
 
 export type ContactSubmissionStatus = "unread" | "read" | "archived"
 export type ContactRole = "employer" | "seeker"
@@ -127,7 +127,7 @@ export type ApiErrorResponse = {
 }
 
 export async function submitContactForm(payload: ContactFormPayload) {
-  const response = await api.post<{ success: boolean; message: string; data: { id: number | string } }>(
+  const response = await publicWebsiteApi.post<{ success: boolean; message: string; data: { id: number | string } }>(
     "/contact-submissions",
     payload,
   )

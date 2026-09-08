@@ -21,25 +21,6 @@ export function Hero() {
         <div className="absolute inset-0 bg-gradient-to-t from-gray-100 via-transparent to-white/80" />
       </div>
 
-      {/* Animated glow lines */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        {[0, 1, 2].map((i) => (
-          <motion.div
-            key={i}
-            className="absolute h-px w-full bg-gradient-to-r from-transparent via-[var(--accent-glow)] to-transparent"
-            style={{ top: `${30 + i * 18}%` }}
-            initial={{ x: "-100%", opacity: 0 }}
-            animate={{ x: "100%", opacity: [0, 0.8, 0] }}
-            transition={{
-              duration: 5 + i,
-              repeat: Number.POSITIVE_INFINITY,
-              delay: i * 1.5,
-              ease: "linear",
-            }}
-          />
-        ))}
-      </div>
-
       <div className="relative mx-auto grid w-full max-w-[1600px] gap-12 px-5 lg:grid-cols-[1.2fr_0.8fr] lg:items-center lg:px-8">
         <div>
           <motion.h1
@@ -74,15 +55,15 @@ export function Hero() {
             className="mt-8 flex flex-wrap gap-4"
           >
             <a
-              href="/contact#contact-form"
-              className="group inline-flex items-center gap-2 rounded-full bg-[var(--accent-glow)] px-7 py-3.5 text-sm font-semibold text-brand shadow-lg shadow-orange-500/25 transition-transform hover:scale-105"
+              href="/apply-form/"
+              className="group inline-flex items-center gap-2 rounded-full bg-[var(--accent-glow)] px-7 py-3.5 text-sm font-semibold text-white shadow-lg shadow-sky-500/30 transition-transform hover:scale-105"
             >
               <Users className="h-4 w-4" />
               Job Seekers
               <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
             </a>
             <a
-              href="/contact#contact-form"
+              href="/employers/"
               className="group inline-flex items-center gap-2 rounded-full border border-gray-300 bg-white/70 px-7 py-3.5 text-sm font-semibold text-gray-900 backdrop-blur transition-colors hover:bg-white"
             >
               <Briefcase className="h-4 w-4" />
@@ -112,19 +93,18 @@ export function Hero() {
               playsInline
               aria-label="R&B Services Plus recruitment video"
             />
-            <div className="flex items-center justify-between px-4 py-4">
+            <a
+              href="/employers/"
+              className="group flex items-center justify-between px-4 py-4 transition-colors hover:bg-white"
+            >
               <div>
                 <div className="text-sm font-semibold text-gray-950">Ready to hire?</div>
                 <div className="text-xs text-gray-600">Interview-ready candidates</div>
               </div>
-              <a
-                href="/contact#contact-form"
-                className="rounded-full bg-[var(--accent-glow)] p-2.5 text-brand transition-transform hover:scale-110"
-                aria-label="Get started"
-              >
+              <span className="rounded-full bg-[var(--accent-glow)] p-2.5 text-white transition-transform group-hover:scale-110">
                 <ArrowRight className="h-4 w-4" />
-              </a>
-            </div>
+              </span>
+            </a>
           </motion.div>
         </motion.div>
       </div>

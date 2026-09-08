@@ -23,6 +23,7 @@ class AdminFormsController extends Controller
         'general_labour_application',
         'az_driver_application',
         'forklift_application',
+        'accountant_application',
         'unclassified_contact',
         'unclassified_job_application',
     ];
@@ -70,6 +71,12 @@ class AdminFormsController extends Controller
                 'forklift_application',
                 'Forklift Application',
                 DB::table('job_applications')->whereNull('deleted_at')->where('application_form_key', 'forklift_application'),
+                'new'
+            ),
+            $this->modelSummary(
+                'accountant_application',
+                'Accountant Application',
+                DB::table('job_applications')->whereNull('deleted_at')->where('application_form_key', 'accountant_application'),
                 'new'
             ),
         ];
@@ -233,7 +240,7 @@ class AdminFormsController extends Controller
         if (in_array($form, ['all', 'career_growth_course_application'], true)) {
             $queries[] = $this->careerGrowthSubmissionsQuery($filters);
         }
-        if (in_array($form, ['all', 'general_labour_application', 'az_driver_application', 'forklift_application', 'unclassified_job_application'], true)) {
+        if (in_array($form, ['all', 'general_labour_application', 'az_driver_application', 'forklift_application', 'accountant_application', 'unclassified_job_application'], true)) {
             $queries[] = $this->jobSubmissionsQuery($form, $filters);
         }
         $combined = array_shift($queries);
@@ -250,7 +257,7 @@ class AdminFormsController extends Controller
             'job_seeker_contact', 'employer_contact', 'unclassified_contact' => ContactSubmission::class,
             'subscribe' => NewsletterSubscriber::class,
             'career_growth_course_application' => CareerGrowthRegistration::class,
-            'general_labour_application', 'az_driver_application', 'forklift_application', 'unclassified_job_application' => JobApplication::class,
+            'general_labour_application', 'az_driver_application', 'forklift_application', 'accountant_application', 'unclassified_job_application' => JobApplication::class,
             default => abort(422, 'Unsupported form type.'),
         };
     }

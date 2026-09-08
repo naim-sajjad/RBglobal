@@ -46,6 +46,7 @@ const formOptions: Array<{ value: FormKey; label: string }> = [
   { value: "general_labour_application", label: "General Labour Application" },
   { value: "az_driver_application", label: "AZ Driver Application" },
   { value: "forklift_application", label: "Forklift Application" },
+  { value: "accountant_application", label: "Accountant Application" },
   { value: "unclassified_contact", label: "Unclassified Contact Entries" },
   { value: "unclassified_job_application", label: "Unclassified Job Applications" },
 ]

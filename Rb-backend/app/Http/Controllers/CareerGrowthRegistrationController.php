@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreCareerGrowthRegistrationRequest;
 use App\Models\CareerGrowthRegistration;
 use App\Models\ContactSubmission;
+use App\Services\WebsiteFormNotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 
@@ -50,6 +51,8 @@ class CareerGrowthRegistrationController extends Controller
 
             return $registration;
         });
+
+        WebsiteFormNotificationService::notifyCareerGrowth($registration);
 
         return response()->json([
             'success' => true,

@@ -7,6 +7,7 @@ use App\Http\Requests\UpdateNewsletterSubscriberStatusRequest;
 use App\Mail\NewsletterSubscriptionConfirmation;
 use App\Models\ImportBatch;
 use App\Models\NewsletterSubscriber;
+use App\Services\WebsiteFormNotificationService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -92,6 +93,8 @@ class NewsletterSubscriberController extends Controller
                 'error' => $exception->getMessage(),
             ]);
         }
+
+        WebsiteFormNotificationService::notifyNewsletter($subscriber);
 
         return response()->json([
             'success' => true,

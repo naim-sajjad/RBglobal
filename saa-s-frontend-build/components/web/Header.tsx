@@ -2,17 +2,17 @@
 
 import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "motion/react"
-import { Menu, X } from "lucide-react"
+import { ChevronDown, Menu, X } from "lucide-react"
 import { Logo } from "@/components/logo"
 
 const navLinks = [
   { label: "Home", href: "/#home" },
   { label: "Jobs", href: "/jobs" },
+  { label: "Employers", href: "/employers/" },
   { label: "Insights", href: "/insights" },
   { label: "Group Chat", href: "/group-chat" },
   { label: "Career Course", href: "/career-growth-course" },
   { label: "Contact", href: "/contact" },
-  { label: "Subscribe", href: "/home/#subscribe" },
 ]
 
 function IconLinktree(props: React.SVGProps<SVGSVGElement>) {
@@ -76,6 +76,11 @@ function IconLinkedin(props: React.SVGProps<SVGSVGElement>) {
 const linktreeUrl =
   "https://linktr.ee/randbservicesplus?utm_source=ig&utm_medium=social&utm_content=link_in_bio&fbclid=PAZXh0bgNhZW0CMTEAc3J0YwZhcHBfaWQMMjU2MjgxMDQwNTU4AAGnByiGXkUuB7NwWb-pMin23uTWUT8gxnmKupPOTW_M8DomaPsRKFVyqPqrsJg_aem_xjHmF3x4Rf1Oz7sxwJwNQA"
 
+const registerLinks = [
+  { label: "Apply as Driver", href: "/driver/register/" },
+  { label: "Other", href: "/apply-form/" },
+]
+
 const socialLinks = [
   { icon: IconLinktree, label: "Linktree", href: linktreeUrl },
   { icon: IconWhatsapp, label: "WhatsApp", href: linktreeUrl },
@@ -85,6 +90,91 @@ const socialLinks = [
   { icon: IconYoutube, label: "YouTube", href: "https://www.youtube.com/@RBServicesPlus" },
   { icon: IconLinkedin, label: "LinkedIn", href: "https://www.linkedin.com/company/randb-services-plus/" },
 ]
+
+function RegisterMenu({
+  variant,
+  onNavigate,
+}: {
+  variant: "desktop" | "mobile"
+  onNavigate?: () => void
+}) {
+  const [open, setOpen] = useState(false)
+
+  if (variant === "mobile") {
+    return (
+      <div className="w-full">
+        <button
+          type="button"
+          onClick={() => setOpen((value) => !value)}
+          className="flex w-full items-center justify-center gap-1 text-sm font-semibold text-foreground transition-colors hover:text-primary"
+          aria-expanded={open}
+        >
+          Register
+          <ChevronDown className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`} />
+        </button>
+        {open ? (
+          <div className="mt-2 flex flex-col gap-1">
+            {registerLinks.map((link) => (
+              <a
+                key={link.href}
+                href={link.href}
+                onClick={onNavigate}
+                className="rounded-lg px-3 py-2 text-center text-sm text-foreground/70 hover:bg-accent hover:text-primary"
+              >
+                {link.label}
+              </a>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    )
+  }
+
+  return (
+    <div
+      className="relative"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className="inline-flex items-center gap-1 text-sm font-medium text-foreground/75 transition-colors hover:text-primary"
+        aria-expanded={open}
+        aria-haspopup="menu"
+      >
+        Register
+        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      <AnimatePresence>
+        {open ? (
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 6 }}
+            transition={{ duration: 0.15 }}
+            role="menu"
+            className="absolute right-0 top-full z-50 min-w-48 pt-2"
+          >
+            <div className="rounded-xl border border-border bg-background py-1.5 shadow-xl shadow-gray-900/10">
+            {registerLinks.map((link) => (
+              <a
+                key={link.href}
+                href={link.href}
+                role="menuitem"
+                onClick={() => setOpen(false)}
+                className="block px-4 py-2.5 text-sm text-foreground/80 transition-colors hover:bg-accent hover:text-primary"
+              >
+                {link.label}
+              </a>
+            ))}
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </div>
+  )
+}
 
 export function SiteHeader() {
   const [scrolled, setScrolled] = useState(false)
@@ -147,11 +237,13 @@ export function SiteHeader() {
           </a>
           <div className="flex items-center gap-4 whitespace-nowrap border-l border-border pl-4">
             <a
-              href="/driver/register/"
+              href="/home/#subscribe"
               className="text-sm font-medium text-foreground/75 transition-colors hover:text-primary"
             >
-              Register
+              Subscribe
             </a>
+            <span aria-hidden="true" className="text-sm text-foreground/40">/</span>
+            <RegisterMenu variant="desktop" />
             <span aria-hidden="true" className="text-sm text-foreground/40">/</span>
             <a
               href="/login/"
@@ -212,14 +304,16 @@ export function SiteHeader() {
               >
                 Apply Now
               </a>
-              <div className="mt-2 flex items-center justify-center gap-8 border-t border-border pt-4">
+              <div className="mt-2 flex items-center justify-center gap-4 border-t border-border pt-4">
                 <a
-                  href="/driver/register/"
+                  href="/home/#subscribe"
                   onClick={() => setOpen(false)}
                   className="text-sm font-semibold text-foreground transition-colors hover:text-primary"
                 >
-                  Register
+                  Subscribe
                 </a>
+                <span aria-hidden="true" className="text-sm text-foreground/40">/</span>
+                <RegisterMenu variant="mobile" onNavigate={() => setOpen(false)} />
                 <span aria-hidden="true" className="text-sm text-foreground/40">/</span>
                 <a
                   href="/login/"

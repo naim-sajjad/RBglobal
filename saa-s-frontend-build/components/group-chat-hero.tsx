@@ -73,9 +73,9 @@ export function GroupChatHero() {
             Live job updates
           </span>
 
-          <h1 className="mt-6 text-pretty text-4xl font-bold leading-tight tracking-tight text-gray-950 sm:text-5xl lg:text-6xl">
-            Get the latest{" "}
-            <span className="text-[var(--accent-glow)]">job updates</span>
+          <h1 className="mt-6 flex flex-col items-start gap-1 text-left text-[clamp(1.75rem,8vw,2.25rem)] font-bold leading-none tracking-tight text-gray-950 sm:text-5xl lg:text-6xl">
+            <span className="block whitespace-nowrap">Get the latest</span>
+            <span className="block whitespace-nowrap text-[var(--accent-glow)]">Job Updates</span>
           </h1>
 
           <p className="mt-6 max-w-lg text-pretty text-lg leading-relaxed text-gray-700">
@@ -104,7 +104,7 @@ export function GroupChatHero() {
             rel="noopener noreferrer"
             whileHover={{ scale: 1.04 }}
             whileTap={{ scale: 0.97 }}
-            className="mt-9 inline-flex items-center gap-2 rounded-full bg-[var(--accent-glow)] px-7 py-3.5 text-base font-semibold text-brand shadow-lg shadow-orange-500/25"
+            className="mt-9 inline-flex items-center gap-2 rounded-full bg-[var(--accent-glow)] px-7 py-3.5 text-base font-semibold text-white shadow-lg shadow-sky-500/30"
           >
             Join our group chat
             <ArrowRight className="h-5 w-5" />

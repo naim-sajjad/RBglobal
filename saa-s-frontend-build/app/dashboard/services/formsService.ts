@@ -11,6 +11,7 @@ export type FormKey =
   | "general_labour_application"
   | "az_driver_application"
   | "forklift_application"
+  | "accountant_application"
   | "unclassified_contact"
   | "unclassified_job_application"
 

@@ -3,7 +3,7 @@
 import { useRef, useState } from "react"
 import Image from "next/image"
 import { CheckCircle2, FileText, Loader2, Send, Upload, X } from "lucide-react"
-import { api, getErrorMessage } from "@/app/dashboard/services/api"
+import { getErrorMessage, publicWebsiteApi } from "@/app/dashboard/services/api"
 import { slugifyJob } from "@/lib/job-normalizers"
 
 const inputClass =
@@ -53,7 +53,7 @@ export function ApplyForm({ initialJob = "" }: { initialJob?: string }) {
       const payload = new FormData(event.currentTarget)
       payload.set("job_slug", slugifyJob(selectedJob))
       if (resume) payload.set("resume", resume)
-      await api.post("/job-applications", payload)
+      await publicWebsiteApi.post("/job-applications", payload)
       setSuccess(true)
       formRef.current?.reset()
       setResume(null)

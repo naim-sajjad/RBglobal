@@ -90,7 +90,7 @@ export function GroupChatSteps() {
             href="https://linktr.ee/randbservicesplus?utm_source=ig&utm_medium=social&utm_content=link_in_bio&fbclid=PAZXh0bgNhZW0CMTEAc3J0YwZhcHBfaWQMMjU2MjgxMDQwNTU4AAGnByiGXkUuB7NwWb-pMin23uTWUT8gxnmKupPOTW_M8DomaPsRKFVyqPqrsJg_aem_xjHmF3x4Rf1Oz7sxwJwNQA"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex shrink-0 items-center gap-2 rounded-full bg-[var(--accent-glow)] px-7 py-3.5 font-semibold text-brand shadow-lg shadow-orange-500/25 transition-transform hover:scale-105"
+            className="inline-flex shrink-0 items-center gap-2 rounded-full bg-[var(--accent-glow)] px-7 py-3.5 font-semibold text-white shadow-lg shadow-sky-500/30 transition-transform hover:scale-105"
           >
             Join our group chat
           </a>
