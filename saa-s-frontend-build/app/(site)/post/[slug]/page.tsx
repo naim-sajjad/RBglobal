@@ -51,6 +51,9 @@ async function fetchPost(slug: string): Promise<PublicBlogPost | null> {
 
   if (apiPost) {
     const normalized = normalizeApiBlogPost(apiPost)
+    if (staticInsight?.image) {
+      normalized.featuredImage = staticInsight.image
+    }
     const apiRelated = (normalized.relatedPosts ?? []).filter((post) => post.slug !== slug)
     normalized.relatedPosts = mergeBlogSummaries(apiRelated, staticSummaries).slice(0, 3)
 

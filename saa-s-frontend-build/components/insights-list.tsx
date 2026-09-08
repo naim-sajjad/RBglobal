@@ -13,8 +13,8 @@ import { insights } from "@/lib/insights"
 const staticPosts = insights.map(normalizeStaticInsightSummary)
 
 export function InsightsList() {
-  const [posts, setPosts] = useState<PublicBlogSummary[]>([])
-  const [loading, setLoading] = useState(true)
+  const [posts, setPosts] = useState<PublicBlogSummary[]>(staticPosts)
+  const [loading, setLoading] = useState(false)
   const [blogError, setBlogError] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState("")

@@ -25,7 +25,7 @@ export const insights: Insight[] = [
     title: "Professionally Planning for Your Future",
     date: "May 28, 2025",
     category: "Career Growth",
-    image: "/insight-toronto.png",
+    image: "/insights/professionally-planning-for-your-future.png",
     readTime: "5 min read",
     featured: true,
     excerpt:
@@ -76,7 +76,7 @@ export const insights: Insight[] = [
     title: "Opportunities in Trucking",
     date: "May 28, 2025",
     category: "Industry",
-    image: "/jobs/dock-aerial.png",
+    image: "/insights/opportunities-in-trucking.png",
     readTime: "4 min read",
     excerpt:
       "The trucking industry keeps the economy moving, and demand for reliable drivers continues to create strong opportunities for people looking for steady, rewarding work.",
@@ -115,7 +115,7 @@ export const insights: Insight[] = [
             "When you join R&B Services Plus Inc., you are not just another employee. You are part of a team that values safety, integrity, and professionalism while providing the resources and support drivers need to succeed.",
         },
       ],
-      secondaryImage: "/jobs/az-highway.png",
+      secondaryImage: "/jobs/az-driver-london.png",
       conclusionTitle: "Take the First Step Towards a Rewarding Career",
       conclusion:
         "If you are ready to embark on a rewarding career in trucking, R&B Services Plus Inc. can help. With competitive pay, comprehensive benefits, and opportunities for career growth, we are here to support your journey toward success.",
@@ -126,7 +126,7 @@ export const insights: Insight[] = [
     title: "How to Gain Experience in Canada",
     date: "May 28, 2025",
     category: "Newcomers",
-    image: "/insights/canada-experience.png",
+    image: "/insights/how-to-gain-experience-in-canada.png",
     readTime: "6 min read",
     excerpt:
       "Moving to Canada presents exciting opportunities for personal and professional growth. However, gaining relevant experience in a new country comes with its own challenges.",
@@ -170,7 +170,7 @@ export const insights: Insight[] = [
             "Gaining experience in a new country takes time and perseverance. Stay resilient, treat setbacks as learning opportunities, and keep building your network and skills.",
         },
       ],
-      secondaryImage: "/insight-toronto.png",
+      secondaryImage: "/insights/job-search-as-an-immigrant.png",
       conclusionTitle: "Seize Opportunities and Thrive",
       conclusion:
         "Gaining experience in Canada is an essential step toward achieving your career goals and building a successful future in your new home. By pursuing internships, volunteering, leveraging professional development programs, networking strategically, and tailoring your application materials, you can gain valuable experience and thrive in the Canadian job market.",
@@ -181,7 +181,7 @@ export const insights: Insight[] = [
     title: "How to Ensure a Job Interview",
     date: "May 14, 2025",
     category: "Interview Tips",
-    image: "/insights/interview-tips.png",
+    image: "/insights/how-to-ensure-a-job-interview.png",
     readTime: "5 min read",
     excerpt:
       "Securing a job interview is often the first crucial step towards landing your dream job. In today's competitive job market, it is essential to stand out from the crowd.",
@@ -231,7 +231,7 @@ export const insights: Insight[] = [
     title: "Job Search as an Immigrant",
     date: "April 30, 2025",
     category: "Newcomers",
-    image: "/contact/handshake.png",
+    image: "/insights/job-search-as-an-immigrant.png",
     readTime: "6 min read",
     excerpt:
       "Moving to a new country presents both exciting opportunities and unique challenges, especially when it comes to finding employment.",

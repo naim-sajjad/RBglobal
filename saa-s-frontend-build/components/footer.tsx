@@ -116,8 +116,8 @@ export function SiteFooter() {
         >
           {/* Left: contact info */}
           <div className="min-w-0">
-            <Logo variant="light" imageClassName="h-28 w-auto object-contain object-left sm:h-32" />
-            <p className="mt-5 max-w-md text-pretty leading-relaxed text-gray-700">
+            <Logo variant="light" imageClassName="block h-24 w-auto object-contain object-left sm:h-28" />
+            <p className="mt-4 max-w-md text-pretty leading-relaxed text-gray-700">
               Your Human Resources Partner — connecting Toronto and the GTA with the
               talent and opportunities that matter.
             </p>

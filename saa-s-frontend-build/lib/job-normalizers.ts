@@ -26,11 +26,22 @@ export function staticJobToPost(job: Job): JobPost {
   }
 }
 
+export function applyStaticJobImage(job: JobPost, localStaticJobs = staticJobs.map(staticJobToPost)): JobPost {
+  const bySlug = localStaticJobs.find((item) => item.slug === job.slug)
+  const titleSlug = slugifyJob(job.title)
+  const byTitle = localStaticJobs.find((item) => item.slug === titleSlug || slugifyJob(item.title) === titleSlug)
+  const match = bySlug ?? byTitle
+
+  if (match?.image_url) return { ...job, image_url: match.image_url }
+
+  return job
+}
+
 export function mergeJobsWithApiPriority(apiJobs: JobPost[], localStaticJobs = staticJobs.map(staticJobToPost)) {
   const apiSlugs = new Set(apiJobs.map((job) => job.slug))
 
   return [
     ...localStaticJobs.filter((job) => !apiSlugs.has(job.slug)),
-    ...apiJobs,
+    ...apiJobs.map((job) => applyStaticJobImage(job, localStaticJobs)),
   ]
 }

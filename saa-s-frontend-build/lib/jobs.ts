@@ -12,7 +12,7 @@ export const jobs: Job[] = [
     title: "AZ Driver | London, ON",
     location: "London, ON",
     category: "Trucking",
-    image: "/jobs/az-highway.png",
+    image: "/jobs/az-driver-london.png",
     bullets: [
       "Minimum 3-6 months experience required",
       "Heavy handbombing",
@@ -24,7 +24,7 @@ export const jobs: Job[] = [
     title: "AZ Driver | Ajax, ON",
     location: "Ajax, ON",
     category: "Trucking",
-    image: "/jobs/truck-yard.png",
+    image: "/jobs/az-driver-ajax.png",
     bullets: ["Minimum 6 months of experience"],
     note: "Hiring 2 individuals for this role",
   },
@@ -32,14 +32,14 @@ export const jobs: Job[] = [
     title: "AZ Driver | Cambridge, ON",
     location: "Cambridge, ON",
     category: "Trucking",
-    image: "/jobs/loading-dock.png",
+    image: "/jobs/az-driver-cambridge.png",
     bullets: ["Minimum 3 months experience", "All shifts available"],
   },
   {
     title: "AZ Driver | Whitby, ON",
     location: "Whitby, ON",
     category: "Trucking",
-    image: "/jobs/dock-aerial.png",
+    image: "/jobs/az-driver-whitby.png",
     bullets: [
       "2 years of experience required",
       "Clean record",
@@ -51,7 +51,7 @@ export const jobs: Job[] = [
     title: "Deep Reach Operator | Mississauga, ON",
     location: "Mississauga, ON",
     category: "Warehousing",
-    image: "/jobs/forklift-operator.png",
+    image: "/jobs/deep-reach-operator.png",
     bullets: [
       "2 years of experience required",
       "Full time availability",

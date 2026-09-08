@@ -5,7 +5,7 @@ import { SiteHeader } from "@/components/web/Header"
 import { SiteFooter } from "@/components/footer"
 import type { JobPost } from "@/app/dashboard/services/jobService"
 import { jobs as staticJobs } from "@/lib/jobs"
-import { getJobApplyHref, staticJobToPost } from "@/lib/job-normalizers"
+import { applyStaticJobImage, getJobApplyHref, staticJobToPost } from "@/lib/job-normalizers"
 
 type JobPageProps = {
   params: Promise<{ slug: string }>
@@ -28,7 +28,7 @@ async function fetchApiJob(slug: string): Promise<JobPost | null> {
 
 async function fetchJob(slug: string): Promise<JobPost | null> {
   const apiJob = await fetchApiJob(slug)
-  if (apiJob) return apiJob
+  if (apiJob) return applyStaticJobImage(apiJob)
 
   return staticJobs.map(staticJobToPost).find((job) => job.slug === slug) ?? null
 }

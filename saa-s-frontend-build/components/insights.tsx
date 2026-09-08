@@ -29,7 +29,7 @@ export function Insights() {
         >
           <div className="relative h-64 overflow-hidden lg:h-auto">
             <img
-              src="/insight-toronto.png"
+              src="/insights/professionally-planning-for-your-future.png"
               alt="Toronto skyline at sunset over Lake Ontario"
               className="h-full w-full object-cover transition-transform duration-700 hover:scale-105"
             />
