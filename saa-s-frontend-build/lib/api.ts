@@ -455,6 +455,9 @@ class ApiClient {
     employer_id?: number;
     week_start_from?: string;
     week_start_to?: string;
+    needs_review?: boolean | number | string;
+    source?: 'driver' | 'admin';
+    submitted_by?: 'driver';
     per_page?: number;
   }) {
     const response = await this.client.get('/tenant/timesheets', {

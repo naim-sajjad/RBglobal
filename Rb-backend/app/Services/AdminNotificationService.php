@@ -64,6 +64,51 @@ class AdminNotificationService
     }
 
     /**
+     * Notify tenant staff when a driver submits a timesheet for review.
+     */
+    public static function notifyTimesheetSubmitted(Timesheet $timesheet): void
+    {
+        $timesheet->loadMissing(['driver.user', 'employer']);
+        $tenantId = $timesheet->tenant_id;
+        if (! $tenantId) {
+            return;
+        }
+
+        $driverName = trim((string) ($timesheet->driver?->user?->name ?: 'Driver'));
+        $period = self::periodLabel($timesheet);
+        $employer = $timesheet->employer?->name;
+
+        $title = 'Timesheet submitted for review';
+        $message = "{$driverName} submitted a timesheet";
+        if ($period !== '') {
+            $message .= " for {$period}";
+        }
+        if ($employer) {
+            $message .= " ({$employer})";
+        }
+        $message .= '.';
+
+        $meta = [
+            'timesheet_id' => $timesheet->id,
+            'driver_id' => $timesheet->driver_id,
+            'driver_name' => $driverName,
+            'employer_id' => $timesheet->employer_id,
+            'href' => '/admin/timesheets/'.$timesheet->id,
+        ];
+
+        foreach (self::staffRecipients($tenantId) as $user) {
+            AdminNotification::create([
+                'tenant_id' => $tenantId,
+                'user_id' => $user->id,
+                'type' => AdminNotification::TYPE_TIMESHEET_SUBMITTED,
+                'title' => $title,
+                'message' => $message,
+                'meta' => $meta,
+            ]);
+        }
+    }
+
+    /**
      * @return \Illuminate\Support\Collection<int, User>
      */
     public static function staffRecipients(string $tenantId)

@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class AdminNotification extends Model
 {
     public const TYPE_ADJUSTMENT_REQUESTED = 'timesheet_adjustment_requested';
+    public const TYPE_TIMESHEET_SUBMITTED = 'timesheet_submitted';
 
     protected $fillable = [
         'tenant_id',

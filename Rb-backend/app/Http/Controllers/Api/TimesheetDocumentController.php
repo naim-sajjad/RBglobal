@@ -12,13 +12,48 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class TimesheetDocumentController extends Controller
 {
+    protected function getCurrentDriverId(): ?int
+    {
+        $user = auth()->user();
+        $driver = \App\Models\Driver::where('user_id', $user->id)
+            ->where('tenant_id', tenant('id'))
+            ->first();
+
+        return $driver?->id;
+    }
+
+    protected function isStaff(): bool
+    {
+        return (bool) auth()->user()?->hasPermissionTo('drivers.view');
+    }
+
+    /**
+     * Staff or the owning driver may access documents for this timesheet.
+     */
     protected function assertTimesheetAccess(Timesheet $timesheet): void
     {
         if ($timesheet->tenant_id !== tenant('id')) {
             abort(403, 'Unauthorized');
         }
-        if (! auth()->user()?->hasPermissionTo('drivers.view')) {
-            abort(403, 'Unauthorized');
+
+        if ($this->isStaff()) {
+            return;
+        }
+
+        $driverId = $this->getCurrentDriverId();
+        if ($driverId && (int) $timesheet->driver_id === (int) $driverId) {
+            return;
+        }
+
+        abort(403, 'Unauthorized');
+    }
+
+    /** Generate / regenerate remains staff-only. */
+    protected function assertStaffOnly(Timesheet $timesheet): void
+    {
+        $this->assertTimesheetAccess($timesheet);
+        if (! $this->isStaff()) {
+            abort(403, 'Only staff can generate documents.');
         }
     }
 
@@ -46,7 +81,7 @@ class TimesheetDocumentController extends Controller
 
     public function generate(Request $request, Timesheet $timesheet)
     {
-        $this->assertTimesheetAccess($timesheet);
+        $this->assertStaffOnly($timesheet);
 
         $validated = $request->validate([
             'document_type' => 'required|in:invoice,calculation_sheet',
@@ -78,10 +113,18 @@ class TimesheetDocumentController extends Controller
     {
         $this->assertTimesheetAccess($timesheet);
 
+        $allowedTypes = $this->isStaff()
+            ? 'invoice,calculation_sheet'
+            : 'invoice';
+
         $validated = $request->validate([
-            'document_type' => 'required|in:invoice,calculation_sheet',
+            'document_type' => 'required|in:'.$allowedTypes,
             'file' => 'required|file|mimes:pdf|max:10240',
         ]);
+
+        if (! $this->isStaff() && $validated['document_type'] !== TimesheetDocument::TYPE_INVOICE) {
+            abort(403, 'Drivers can only upload invoices.');
+        }
 
         $document = TimesheetDocumentService::upload(
             $timesheet,
@@ -130,6 +173,14 @@ class TimesheetDocumentController extends Controller
     {
         $this->assertTimesheetAccess($timesheet);
         $this->assertDocumentBelongsToTimesheet($timesheet, $document);
+
+        // Drivers may only remove invoices they uploaded (not generated docs / calc sheets).
+        if (! $this->isStaff()) {
+            if ($document->source !== TimesheetDocument::SOURCE_UPLOADED
+                || $document->document_type !== TimesheetDocument::TYPE_INVOICE) {
+                abort(403, 'You can only delete invoices you uploaded.');
+            }
+        }
 
         TimesheetDocumentService::deleteDocument($document);
 

@@ -212,7 +212,7 @@ export default function AdminTimesheetDetailPage() {
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [actionLoading, setActionLoading] = useState<
-    'approve' | 'reject' | 'paid' | 'submit' | null
+    'approve' | 'reject' | 'paid' | 'submit' | 'delete' | null
   >(null);
   const [showDocuments, setShowDocuments] = useState(false);
   const [tripsView, setTripsView] = useState<'lines' | 'trips'>('lines');
@@ -674,7 +674,7 @@ export default function AdminTimesheetDetailPage() {
       await fetchTimesheet();
       setRejectOpen(false);
       setRejectReason('');
-      toast.success('Timesheet rejected');
+      toast.success('Timesheet rejected — returned to draft for the driver');
     } catch (err: any) {
       toast.error(getApiErrorMessage(err, 'Failed to reject'));
     } finally {
@@ -692,6 +692,28 @@ export default function AdminTimesheetDetailPage() {
     } catch (err: any) {
       toast.error(getApiErrorMessage(err, 'Failed to mark as paid'));
     } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleDeleteTimesheet = async () => {
+    if (!id || !timesheet) return;
+    const driverLabel =
+      timesheet.driver?.user?.name ?? `Driver #${timesheet.driver_id}`;
+    if (
+      !confirm(
+        `Delete timesheet for ${driverLabel} (${timesheet.week_start_date} – ${timesheet.week_end_date})?\n\nThis permanently removes the timesheet and all trips. This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    setActionLoading('delete');
+    try {
+      await apiClient.deleteTimesheet(id);
+      toast.success('Timesheet deleted');
+      router.push('/admin/timesheets');
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Failed to delete timesheet'));
       setActionLoading(null);
     }
   };
@@ -903,6 +925,24 @@ export default function AdminTimesheetDetailPage() {
             </Button>
           )}
 
+          <Button
+            size='sm'
+            variant='outline'
+            onClick={() => void handleDeleteTimesheet()}
+            disabled={!!actionLoading}
+            className={cn(
+              TOOLBAR_BTN,
+              'hidden border-red-800/80 bg-red-950/30 text-red-300 hover:bg-red-900/50 hover:text-red-200 md:inline-flex',
+            )}
+          >
+            {actionLoading === 'delete' ? (
+              <Loader2 className='h-3.5 w-3.5 animate-spin' />
+            ) : (
+              <Trash2 className='h-3.5 w-3.5' />
+            )}
+            Delete
+          </Button>
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -979,6 +1019,15 @@ export default function AdminTimesheetDetailPage() {
                   </Link>
                 </DropdownMenuItem>
               )}
+              <DropdownMenuSeparator className='bg-slate-700' />
+              <DropdownMenuItem
+                className='focus:bg-slate-700 focus:text-red-300 cursor-pointer text-red-300'
+                disabled={!!actionLoading}
+                onClick={() => void handleDeleteTimesheet()}
+              >
+                <Trash2 className='h-4 w-4 mr-2' />
+                Delete timesheet
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -1003,7 +1052,7 @@ export default function AdminTimesheetDetailPage() {
           <CardDescription className='text-slate-400'>
             Driver: {timesheet.driver?.user?.name ?? `#${timesheet.driver_id}`}
             {timesheet.employer?.name
-              ? ` — Employer: ${timesheet.employer.name}`
+              ? ` — Customer: ${timesheet.employer.name}`
               : ''}{' '}
             — Weekly total:{' '}
             <span className='font-semibold text-white'>
@@ -1036,7 +1085,9 @@ export default function AdminTimesheetDetailPage() {
             <Alert variant='destructive' className='mt-2'>
               <AlertCircle className='h-4 w-4' />
               <AlertDescription>
-                Rejection reason: {timesheet.reject_reason}
+                {timesheet.status === 'draft'
+                  ? `Returned to draft for changes. Reason: ${timesheet.reject_reason}`
+                  : `Rejection reason: ${timesheet.reject_reason}`}
               </AlertDescription>
             </Alert>
           )}
@@ -1204,19 +1255,19 @@ export default function AdminTimesheetDetailPage() {
                   Add trip
                 </DialogTitle>
                 <DialogDescription className='max-w-md text-right text-xs text-slate-400'>
-                  Rates come from the employer Rate Card.
+                  Rates come from the customer Rate Card.
                 </DialogDescription>
               </div>
               <div className='grid grid-cols-1 gap-3 sm:grid-cols-3'>
                 <div className='space-y-1.5 sm:col-span-1'>
-                  <Label className='text-slate-300'>Employer</Label>
+                  <Label className='text-slate-300'>Customer</Label>
                   <Select
                     value={newTripEmployerId}
                     onValueChange={setNewTripEmployerId}
                     required
                   >
                     <SelectTrigger className='h-9 bg-slate-700 border-slate-600 text-white'>
-                      <SelectValue placeholder='Select employer' />
+                      <SelectValue placeholder='Select customer' />
                     </SelectTrigger>
                     <SelectContent className='bg-slate-800 border-slate-700'>
                       {employers.map((emp) => (
@@ -1558,7 +1609,7 @@ export default function AdminTimesheetDetailPage() {
                               >
                                 {newTripEmployerId && newTripDate
                                   ? 'No Rate Card add-ons for this date. Use Add pay item for extras.'
-                                  : 'Select employer and date to load Rate Card items.'}
+                                  : 'Select customer and date to load Rate Card items.'}
                               </td>
                             </tr>
                           ) : null}
@@ -1631,7 +1682,7 @@ export default function AdminTimesheetDetailPage() {
                 className='max-w-md text-right text-xs text-slate-400'
                 title='Overrides Rate Card pricing until the trip is adjusted again.'
               >
-                Match the employer invoice. Protected from rate-card overwrite.
+                Match the customer invoice. Protected from rate-card overwrite.
               </DialogDescription>
             </div>
             {adjustTrip && (
@@ -1642,7 +1693,7 @@ export default function AdminTimesheetDetailPage() {
                 <span className='text-slate-600'>·</span>
                 <span>
                   {adjustTrip.employer?.name ??
-                    `Employer #${adjustTrip.employer_id}`}
+                    `Customer #${adjustTrip.employer_id}`}
                 </span>
                 <span className='text-slate-600'>·</span>
                 <span>{formatDate(adjustTrip.trip_date)}</span>
@@ -1858,7 +1909,8 @@ export default function AdminTimesheetDetailPage() {
           <DialogHeader className='shrink-0'>
             <DialogTitle className='text-white'>Reject timesheet</DialogTitle>
             <DialogDescription className='text-slate-400'>
-              Optionally provide a reason for the driver.
+              Returns the timesheet to draft so the driver can fix it and
+              resubmit. Optionally include a reason.
             </DialogDescription>
           </DialogHeader>
           <div className='min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-y-contain pr-1'>
@@ -1955,7 +2007,7 @@ function AdminTripCard({
               Trip #{trip.trip_number || trip.id}
             </span>
             <span className='text-slate-400'>
-              — {trip.employer?.name ?? `Employer #${trip.employer_id}`}
+              — {trip.employer?.name ?? `Customer #${trip.employer_id}`}
             </span>
             {trip.is_adjusted && (
               <Badge className='bg-violet-700 text-xs'>adjusted</Badge>

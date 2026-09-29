@@ -10,6 +10,7 @@ use App\Models\TimesheetAdjustmentLog;
 use App\Models\TimesheetTrip;
 use App\Services\TimesheetCalculationService;
 use App\Services\Financial\TimesheetImportService;
+use App\Services\AdminNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Mail;
@@ -19,8 +20,22 @@ class TimesheetController extends Controller
     protected function getCurrentDriverId(): ?int
     {
         $user = auth()->user();
-        $driver = \App\Models\Driver::where('user_id', $user->id)->where('tenant_id', tenant('id'))->first();
-        return $driver?->id;
+        if (! $user) {
+            return null;
+        }
+
+        $query = \App\Models\Driver::where('user_id', $user->id);
+        if (tenant('id')) {
+            $query->where('tenant_id', tenant('id'));
+        }
+
+        $driver = $query->first();
+        if ($driver) {
+            return $driver->id;
+        }
+
+        // Fallback: some driver users may miss tenant pivot alignment temporarily.
+        return \App\Models\Driver::where('user_id', $user->id)->value('id');
     }
 
     protected function isStaff(): bool
@@ -40,23 +55,76 @@ class TimesheetController extends Controller
 
         $driverId = $request->input('driver_id');
         $currentDriverId = $this->getCurrentDriverId();
-        $isDriver = $currentDriverId && ! auth()->user()?->hasPermissionTo('drivers.view');
+        $isStaff = $this->isStaff();
 
-        if ($driverId) {
-            if ($isDriver && (int) $driverId !== $currentDriverId) {
+        // Non-staff (drivers) may only ever see their own timesheets —
+        // including ones created for them by admin.
+        if (! $isStaff) {
+            if (! $currentDriverId) {
+                abort(403, 'Driver profile required to view timesheets.');
+            }
+            if ($driverId && (int) $driverId !== (int) $currentDriverId) {
                 abort(403, 'You can only list your own timesheets.');
             }
-            $query->where('driver_id', $driverId);
-        } elseif ($isDriver) {
             $query->where('driver_id', $currentDriverId);
+        } elseif ($driverId) {
+            $query->where('driver_id', $driverId);
         }
 
         if (tenant('id')) {
             $query->where('tenant_id', tenant('id'));
         }
         if ($request->filled('status')) {
-            $query->where('status', $request->status);
+            $statuses = array_values(array_filter(array_map(
+                'trim',
+                explode(',', (string) $request->status)
+            )));
+            if (count($statuses) === 1) {
+                $query->where('status', $statuses[0]);
+            } elseif (count($statuses) > 1) {
+                $query->whereIn('status', $statuses);
+            }
         }
+
+        if ($request->boolean('needs_review')) {
+            $query->whereIn('status', ['submitted', 'under_review']);
+        }
+
+        // source=driver|admin — who created the timesheet (vs the driver's user).
+        if ($request->filled('source') && in_array($request->source, ['driver', 'admin'], true)) {
+            $source = $request->source;
+            if ($source === 'driver') {
+                $query->whereNotNull('created_by_user_id')
+                    ->whereExists(function ($q) {
+                        $q->selectRaw('1')
+                            ->from('drivers')
+                            ->whereColumn('drivers.id', 'timesheets.driver_id')
+                            ->whereColumn('drivers.user_id', 'timesheets.created_by_user_id');
+                    });
+            } else {
+                $query->where(function ($q) {
+                    $q->whereNull('created_by_user_id')
+                        ->orWhereNotExists(function ($sub) {
+                            $sub->selectRaw('1')
+                                ->from('drivers')
+                                ->whereColumn('drivers.id', 'timesheets.driver_id')
+                                ->whereColumn('drivers.user_id', 'timesheets.created_by_user_id');
+                        });
+                });
+            }
+        }
+
+        // submitted_by=driver — last submit was by the timesheet's driver.
+        if ($request->input('submitted_by') === 'driver') {
+            $query->whereNotNull('submitted_by_user_id')
+                ->whereExists(function ($q) {
+                    $q->selectRaw('1')
+                        ->from('drivers')
+                        ->whereColumn('drivers.id', 'timesheets.driver_id')
+                        ->whereColumn('drivers.user_id', 'timesheets.submitted_by_user_id');
+                });
+        }
+
         if ($request->filled('employer_id')) {
             $employerId = $request->employer_id;
             $query->where(function ($q) use ($employerId) {
@@ -102,7 +170,7 @@ class TimesheetController extends Controller
         $isStaff = $this->isStaff();
         $validated = $request->validate([
             'driver_id' => 'nullable|integer|exists:drivers,id',
-            'employer_id' => ($isStaff ? 'required' : 'nullable').'|integer|exists:employers,id',
+            'employer_id' => 'required|integer|exists:employers,id',
             'week_start_date' => 'required|date',
             'week_end_date' => 'required|date|after_or_equal:week_start_date',
         ]);
@@ -121,26 +189,18 @@ class TimesheetController extends Controller
             abort(403, 'Unauthorized');
         }
 
-        $employerId = $validated['employer_id'] ?? null;
-        if ($employerId) {
-            $employer = Employer::findOrFail($employerId);
-            if ($employer->tenant_id !== tenant('id')) {
-                abort(403, 'Unauthorized');
-            }
+        $employerId = (int) $validated['employer_id'];
+        $employer = Employer::findOrFail($employerId);
+        if ($employer->tenant_id !== tenant('id')) {
+            abort(403, 'Unauthorized');
         }
 
         $existsQuery = Timesheet::where('driver_id', $driverId)
-            ->where('week_start_date', $validated['week_start_date']);
-        if ($employerId) {
-            $existsQuery->where('employer_id', $employerId);
-        } else {
-            $existsQuery->whereNull('employer_id');
-        }
+            ->where('week_start_date', $validated['week_start_date'])
+            ->where('employer_id', $employerId);
         if ($existsQuery->exists()) {
             return response()->json([
-                'message' => $employerId
-                    ? 'A timesheet for this driver, employer, and week already exists.'
-                    : 'A timesheet for this week already exists.',
+                'message' => 'A timesheet for this driver, employer, and week already exists.',
             ], 422);
         }
 
@@ -151,7 +211,27 @@ class TimesheetController extends Controller
             'week_start_date' => $validated['week_start_date'],
             'week_end_date' => $validated['week_end_date'],
             'status' => 'draft',
+            'created_by_user_id' => auth()->id(),
         ]);
+
+        // Notify the driver when staff creates a timesheet for them.
+        if ($isStaff && $currentDriverId !== (int) $driverId) {
+            $periodStart = Carbon::parse($validated['week_start_date'])->format('M j, Y');
+            $periodEnd = Carbon::parse($validated['week_end_date'])->format('M j, Y');
+            DriverNotification::create([
+                'tenant_id' => tenant('id'),
+                'driver_id' => $driverId,
+                'type' => 'timesheet_created',
+                'title' => 'New timesheet ready',
+                'message' => "A timesheet for {$periodStart} – {$periodEnd} was created for you. Open it to review trips and upload documents.",
+                'meta' => [
+                    'timesheet_id' => $timesheet->id,
+                    'href' => '/driver/timesheets/'.$timesheet->id,
+                ],
+                'created_by_user_id' => auth()->id(),
+            ]);
+        }
+
         return response()->json($timesheet->load(['driver.user', 'employer', 'trips']), 201);
     }
 
@@ -197,9 +277,16 @@ class TimesheetController extends Controller
             abort(403, 'Unauthorized');
         }
         $currentDriverId = $this->getCurrentDriverId();
-        if ($currentDriverId && $timesheet->driver_id != $currentDriverId && ! auth()->user()?->hasPermissionTo('drivers.view')) {
+        $isStaff = $this->isStaff();
+        if ($currentDriverId && $timesheet->driver_id != $currentDriverId && ! $isStaff) {
             abort(403, 'You can only view your own timesheets.');
         }
+
+        // Staff opening a submitted sheet starts review.
+        if ($isStaff && $timesheet->status === 'submitted') {
+            $timesheet->update(['status' => 'under_review']);
+        }
+
         $timesheet->load([
             'driver.user',
             'driver.driverClass',
@@ -208,6 +295,9 @@ class TimesheetController extends Controller
             'documents.creator:id,name',
             'documentReviews.sender:id,name',
             'documentReviews.events',
+            'latestDocumentReview',
+            'createdBy:id,name',
+            'submittedBy:id,name',
         ]);
         return response()->json($timesheet);
     }
@@ -245,13 +335,14 @@ class TimesheetController extends Controller
         if ($timesheet->tenant_id !== tenant('id')) {
             abort(403, 'Unauthorized');
         }
-        if ($timesheet->status !== 'draft') {
-            return response()->json(['message' => 'Only draft timesheets can be deleted.'], 422);
-        }
         $currentDriverId = $this->getCurrentDriverId();
         $isStaff = $this->isStaff();
         if ($currentDriverId && $timesheet->driver_id != $currentDriverId && ! $isStaff) {
             abort(403, 'Unauthorized');
+        }
+        // Drivers may only delete drafts; staff can delete any timesheet.
+        if (! $isStaff && $timesheet->status !== 'draft') {
+            return response()->json(['message' => 'Only draft timesheets can be deleted.'], 422);
         }
         $timesheet->delete();
         return response()->json(null, 204);
@@ -270,7 +361,22 @@ class TimesheetController extends Controller
         if ($timesheet->driver_id != $currentDriverId && ! $isStaff) {
             abort(403, 'Unauthorized');
         }
-        $timesheet->update(['status' => 'submitted', 'submitted_at' => now()]);
+
+        $timesheet->update([
+            'status' => 'submitted',
+            'submitted_at' => now(),
+            'submitted_by_user_id' => auth()->id(),
+            'reject_reason' => null,
+        ]);
+
+        // Notify staff when the driver (not staff) submits for review.
+        $submittedByDriver = $currentDriverId
+            && (int) $timesheet->driver_id === (int) $currentDriverId
+            && ! $isStaff;
+        if ($submittedByDriver) {
+            AdminNotificationService::notifyTimesheetSubmitted($timesheet->fresh());
+        }
+
         return response()->json($timesheet->fresh()->load(['driver.user', 'trips.employer', 'trips.payItems.payItemTemplate']));
     }
 
@@ -299,13 +405,19 @@ class TimesheetController extends Controller
         if ($timesheet->tenant_id !== tenant('id')) {
             abort(403, 'Unauthorized');
         }
+        if (! $this->isStaff()) {
+            abort(403, 'Unauthorized');
+        }
         if (! in_array($timesheet->status, ['submitted', 'under_review'])) {
             return response()->json(['message' => 'Only submitted or under-review timesheets can be rejected.'], 422);
         }
         $validated = $request->validate(['reject_reason' => 'nullable|string|max:65535']);
+        // Return to draft so the driver can fix trips and resubmit.
         $timesheet->update([
-            'status' => 'rejected',
+            'status' => 'draft',
             'reject_reason' => $validated['reject_reason'] ?? null,
+            'submitted_at' => null,
+            'submitted_by_user_id' => null,
         ]);
         return response()->json($timesheet->fresh()->load(['driver.user', 'trips.employer', 'trips.payItems.payItemTemplate']));
     }
@@ -327,7 +439,16 @@ class TimesheetController extends Controller
         if ($timesheet->tenant_id !== tenant('id')) {
             abort(403, 'Unauthorized');
         }
+        $currentDriverId = $this->getCurrentDriverId();
+        $isStaff = $this->isStaff();
+        if ($currentDriverId && $timesheet->driver_id != $currentDriverId && ! $isStaff) {
+            abort(403, 'Unauthorized');
+        }
         if (! in_array($timesheet->status, ['draft', 'submitted', 'under_review'])) {
+            return response()->json(['message' => 'Cannot add trips to this timesheet.'], 422);
+        }
+        // Drivers may only add trips while the timesheet is still a draft.
+        if (! $isStaff && $timesheet->status !== 'draft') {
             return response()->json(['message' => 'Cannot add trips to this timesheet.'], 422);
         }
         $weekStart = $timesheet->week_start_date->format('Y-m-d');
@@ -349,7 +470,10 @@ class TimesheetController extends Controller
             'custom_pay_lines.*.agency_rate' => 'nullable|numeric|min:0',
             'rate_overrides' => 'nullable|array',
         ]);
-        $employerId = $validated['employer_id'] ?? $timesheet->employer_id;
+        // Drivers are locked to the timesheet employer and Rate Card rates (qty only).
+        $employerId = $isStaff
+            ? ($validated['employer_id'] ?? $timesheet->employer_id)
+            : $timesheet->employer_id;
         if (! $employerId) {
             return response()->json(['message' => 'Employer is required.'], 422);
         }
@@ -357,8 +481,12 @@ class TimesheetController extends Controller
         if ($employer->tenant_id !== tenant('id')) {
             abort(403, 'Unauthorized');
         }
-        $customPayLines = self::normalizeCustomPayLines($validated['custom_pay_lines'] ?? null);
-        $rateOverrides = self::normalizeRateOverrides($validated['rate_overrides'] ?? null);
+        $customPayLines = $isStaff
+            ? self::normalizeCustomPayLines($validated['custom_pay_lines'] ?? null)
+            : null;
+        $rateOverrides = $isStaff
+            ? self::normalizeRateOverrides($validated['rate_overrides'] ?? null)
+            : null;
         $trip = $timesheet->trips()->create([
             'employer_id' => $employerId,
             'trip_date' => $validated['trip_date'],

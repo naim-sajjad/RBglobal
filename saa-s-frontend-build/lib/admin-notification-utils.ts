@@ -1,15 +1,17 @@
 import { AdminNotification } from '@/lib/types';
 
 export function adminNotificationHref(item: AdminNotification): string {
-  return (
-    (item.meta?.review_id
-      ? `/admin/timesheets/adjustment-requests?id=${item.meta.review_id}`
-      : undefined) ||
-    (item.meta?.href as string | undefined) ||
-    (item.meta?.timesheet_id
-      ? `/admin/timesheets/${item.meta.timesheet_id}`
-      : '/admin/timesheets/adjustment-requests')
-  );
+  // Prefer explicit href (e.g. timesheet submitted → detail).
+  if (typeof item.meta?.href === 'string' && item.meta.href) {
+    return item.meta.href;
+  }
+  if (item.meta?.review_id) {
+    return `/admin/timesheets/adjustment-requests?id=${item.meta.review_id}`;
+  }
+  if (item.meta?.timesheet_id) {
+    return `/admin/timesheets/${item.meta.timesheet_id}`;
+  }
+  return '/admin/timesheets';
 }
 
 export function canUseBrowserNotifications(): boolean {

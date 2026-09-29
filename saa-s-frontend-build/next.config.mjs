@@ -9,6 +9,20 @@ const nextConfig = {
   },
   // Disable features that require server-side rendering
   trailingSlash: true,
+  async redirects() {
+    return [
+      {
+        source: '/admin/employers',
+        destination: '/admin/customers',
+        permanent: true,
+      },
+      {
+        source: '/admin/employers/:path*',
+        destination: '/admin/customers/:path*',
+        permanent: true,
+      },
+    ];
+  },
 }
 
 export default nextConfig

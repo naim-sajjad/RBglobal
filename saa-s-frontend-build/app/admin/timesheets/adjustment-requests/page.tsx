@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -87,27 +87,47 @@ export default function AdjustmentRequestsPage() {
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
   const [editing, setEditing] = useState<TimesheetDocumentReview | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [editStatus, setEditStatus] =
     useState<TimesheetAdjustmentHandlingStatus>('open');
   const [editNotes, setEditNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  /** Prevents URL sync from reopening the dialog while Close is in flight. */
+  const closingRef = useRef(false);
+  const loadedDetailIdRef = useRef<string | null>(null);
 
   const clearDetailParam = useCallback(() => {
     const params = new URLSearchParams(searchParams.toString());
+    if (!params.has('id')) return;
     params.delete('id');
     const qs = params.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname);
   }, [pathname, router, searchParams]);
 
-  const openDetail = useCallback((review: TimesheetDocumentReview) => {
+  const applyDetail = useCallback((review: TimesheetDocumentReview) => {
     setEditing(review);
     setEditStatus(handlingStatus(review));
     setEditNotes(review.admin_notes || '');
-    router.replace(`${pathname}?id=${review.id}`);
-  }, [pathname, router]);
+    setDetailOpen(true);
+    setDetailLoading(false);
+    loadedDetailIdRef.current = String(review.id);
+  }, []);
+
+  const openDetail = useCallback(
+    (review: TimesheetDocumentReview) => {
+      closingRef.current = false;
+      applyDetail(review);
+      router.replace(`${pathname}?id=${review.id}`);
+    },
+    [applyDetail, pathname, router],
+  );
 
   const closeDetail = useCallback(() => {
+    closingRef.current = true;
+    loadedDetailIdRef.current = null;
+    setDetailOpen(false);
+    setDetailLoading(false);
     setEditing(null);
     clearDetailParam();
   }, [clearDetailParam]);
@@ -136,35 +156,51 @@ export default function AdjustmentRequestsPage() {
 
   useEffect(() => {
     if (!detailId) {
+      closingRef.current = false;
+      if (detailOpen) {
+        setDetailOpen(false);
+        setDetailLoading(false);
+        setEditing(null);
+        loadedDetailIdRef.current = null;
+      }
+      return;
+    }
+
+    // User clicked Close — ignore stale ?id= until the URL catches up.
+    if (closingRef.current) {
+      return;
+    }
+
+    // Already showing this request.
+    if (loadedDetailIdRef.current === detailId && detailOpen) {
       return;
     }
 
     const fromList = items.find((item) => String(item.id) === detailId);
     if (fromList) {
-      setEditing(fromList);
-      setEditStatus(handlingStatus(fromList));
-      setEditNotes(fromList.admin_notes || '');
+      applyDetail(fromList);
       return;
     }
 
-    if (editing && String(editing.id) === detailId) {
+    // List still loading — wait; don't open a stuck loading dialog yet
+    // unless this is a deep link and the list finished empty of this id.
+    if (loading) {
       return;
     }
 
     let cancelled = false;
+    setDetailOpen(true);
     setDetailLoading(true);
     void apiClient
       .getDocumentAdjustmentRequest(detailId)
       .then((review) => {
-        if (cancelled) return;
-        setEditing(review);
-        setEditStatus(handlingStatus(review));
-        setEditNotes(review.admin_notes || '');
+        if (cancelled || closingRef.current) return;
+        applyDetail(review);
       })
       .catch((err: unknown) => {
-        if (cancelled) return;
+        if (cancelled || closingRef.current) return;
         toast.error(getApiErrorMessage(err, 'Adjustment request not found'));
-        clearDetailParam();
+        closeDetail();
       })
       .finally(() => {
         if (!cancelled) setDetailLoading(false);
@@ -173,7 +209,7 @@ export default function AdjustmentRequestsPage() {
     return () => {
       cancelled = true;
     };
-  }, [detailId, items, editing, clearDetailParam]);
+  }, [detailId, items, loading, detailOpen, applyDetail, closeDetail]);
 
   const saveEdit = async () => {
     if (!editing) return;
@@ -353,7 +389,7 @@ export default function AdjustmentRequestsPage() {
       </Card>
 
       <Dialog
-        open={!!editing || detailLoading}
+        open={detailOpen}
         onOpenChange={(open) => {
           if (!open) closeDetail();
         }}
@@ -401,7 +437,7 @@ export default function AdjustmentRequestsPage() {
                 </div>
                 <div>
                   <p className='text-xs text-slate-500 uppercase tracking-wide'>
-                    Employer
+                    Customer
                   </p>
                   <p className='text-slate-200'>
                     {editing.timesheet?.employer?.name || '—'}

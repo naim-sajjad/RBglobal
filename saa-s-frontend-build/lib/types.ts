@@ -503,12 +503,16 @@ export interface Timesheet {
   adjusted_at?: string | null;
   adjusted_by?: number | null;
   submitted_at: string | null;
+  submitted_by_user_id?: number | null;
+  submitted_by?: { id: number; name: string } | null;
   approved_at: string | null;
   approved_by: number | null;
   paid_at: string | null;
   paid_by: number | null;
   reject_reason: string | null;
   notes: string | null;
+  created_by_user_id?: number | null;
+  created_by?: { id: number; name: string } | null;
   weekly_total: number;
   driver?: DriverWithDetails;
   employer?: Employer;

@@ -237,6 +237,7 @@ class TimesheetImportService
                             'week_end_date' => $g['week_end'],
                             'status' => 'draft',
                             'weekly_total' => 0,
+                            'created_by_user_id' => $userId,
                         ]);
                     } elseif ($timesheet->employer_id === null) {
                         $timesheet->update(['employer_id' => $employer->id]);
