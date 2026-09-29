@@ -49,13 +49,11 @@ import {
   ChevronRight,
   PencilLine,
   Plus,
+  Trash2,
   X,
   ChevronsUpDown,
   ArrowUp,
   ArrowDown,
-  Check,
-  Circle,
-  AlertTriangle,
   Upload,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api';
@@ -68,6 +66,10 @@ import {
 import { toast } from 'sonner';
 import { cn, formatApiDate, getApiErrorMessage } from '@/lib/utils';
 import { TimesheetImportDialog } from '@/components/admin/timesheet-import-dialog';
+import {
+  TimesheetStatusBadge,
+  formatTimesheetStatusLabel,
+} from '@/components/timesheet-status-badge';
 
 const STATUS_OPTIONS: TimesheetStatus[] = [
   'draft',
@@ -95,10 +97,6 @@ const APPROVABLE_STATUSES: TimesheetStatus[] = [
 
 type SortKey = 'driver' | 'week' | 'status' | 'total';
 type SortDir = 'asc' | 'desc';
-
-function formatStatusLabel(status: TimesheetStatus) {
-  return status.replace('_', ' ');
-}
 
 function parseYmd(value: string): Date | null {
   const ymd = value.slice(0, 10);
@@ -155,76 +153,6 @@ function employerToOption(employer: Employer): SearchableFilterOption {
     label: employer.name,
     sublabel: employer.company_code ?? employer.service_location ?? undefined,
   };
-}
-
-function StatusBadge({
-  status,
-  adjusted,
-  driverReviewStatus,
-  driverReviewLabel,
-}: {
-  status: TimesheetStatus;
-  adjusted?: boolean;
-  driverReviewStatus?: string | null;
-  driverReviewLabel?: string | null;
-}) {
-  const styles: Record<TimesheetStatus, string> = {
-    draft: 'bg-slate-600 text-slate-100',
-    submitted: 'bg-blue-600 text-white',
-    under_review: 'bg-amber-600 text-white',
-    approved: 'bg-green-600 text-white',
-    rejected: 'bg-red-600 text-white',
-    paid: 'bg-emerald-700 text-white',
-  };
-  const icon =
-    status === 'approved' ? (
-      <Check className='h-3 w-3' aria-hidden />
-    ) : status === 'rejected' ? (
-      <AlertTriangle className='h-3 w-3' aria-hidden />
-    ) : (
-      <Circle className='h-2.5 w-2.5 fill-current' aria-hidden />
-    );
-
-  const reviewHint =
-    driverReviewStatus === 'approved'
-      ? {
-          text: driverReviewLabel || 'Confirmed',
-          className: 'text-emerald-300',
-        }
-      : driverReviewStatus === 'adjustment_requested'
-        ? {
-            text: driverReviewLabel || 'Adjustment Requested',
-            className: 'text-amber-300',
-          }
-        : driverReviewStatus === 'pending'
-          ? {
-              text: driverReviewLabel || 'Pending Review',
-              className: 'text-sky-300',
-            }
-          : null;
-
-  return (
-    <div className='flex flex-col items-start gap-0.5'>
-      <Badge className={cn('gap-1 font-medium capitalize', styles[status])}>
-        {icon}
-        <span>{formatStatusLabel(status)}</span>
-      </Badge>
-      {adjusted ? (
-        <span className='inline-flex items-center gap-1 text-xs text-violet-300'>
-          <PencilLine className='h-3 w-3' aria-hidden />
-          Adjusted
-        </span>
-      ) : null}
-      {reviewHint ? (
-        <span
-          className={cn('text-xs', reviewHint.className)}
-          title='Invoice / calculation sheet review by driver'
-        >
-          {reviewHint.text}
-        </span>
-      ) : null}
-    </div>
-  );
 }
 
 function ActiveFilterChip({
@@ -431,6 +359,7 @@ export default function AdminTimesheetsPage() {
   const [employerId, setEmployerId] = useState<string>('all');
   const [employerLabel, setEmployerLabel] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [sourceFilter, setSourceFilter] = useState<string>('all');
   const [weekStartFrom, setWeekStartFrom] = useState<string>('');
   const [weekStartTo, setWeekStartTo] = useState<string>('');
   const [sortKey, setSortKey] = useState<SortKey>('week');
@@ -439,10 +368,13 @@ export default function AdminTimesheetsPage() {
   const [bulkLoading, setBulkLoading] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
 
+  const needsReviewFilter = statusFilter === 'needs_review';
+
   const hasActiveFilters =
     driverId !== 'all' ||
     employerId !== 'all' ||
     statusFilter !== 'all' ||
+    sourceFilter !== 'all' ||
     weekStartFrom !== '' ||
     weekStartTo !== '';
 
@@ -465,11 +397,21 @@ export default function AdminTimesheetsPage() {
         status?: string;
         week_start_from?: string;
         week_start_to?: string;
+        needs_review?: number;
+        source?: 'driver' | 'admin';
+        submitted_by?: 'driver';
         per_page?: number;
       } = { per_page: 100 };
       if (driverId !== 'all') params.driver_id = parseInt(driverId, 10);
       if (employerId !== 'all') params.employer_id = parseInt(employerId, 10);
-      if (statusFilter !== 'all') params.status = statusFilter;
+      if (needsReviewFilter) {
+        params.needs_review = 1;
+      } else if (statusFilter !== 'all') {
+        params.status = statusFilter;
+      }
+      if (sourceFilter === 'driver' || sourceFilter === 'admin') {
+        params.source = sourceFilter;
+      }
       if (weekStartFrom) params.week_start_from = weekStartFrom;
       if (weekStartTo) params.week_start_to = weekStartTo;
       const response = await apiClient.getTimesheets(params);
@@ -483,7 +425,15 @@ export default function AdminTimesheetsPage() {
     } finally {
       setLoading(false);
     }
-  }, [driverId, employerId, statusFilter, weekStartFrom, weekStartTo]);
+  }, [
+    driverId,
+    employerId,
+    statusFilter,
+    sourceFilter,
+    needsReviewFilter,
+    weekStartFrom,
+    weekStartTo,
+  ]);
 
   useEffect(() => {
     void fetchTimesheets();
@@ -528,6 +478,7 @@ export default function AdminTimesheetsPage() {
     setEmployerId('all');
     setEmployerLabel('');
     setStatusFilter('all');
+    setSourceFilter('all');
     setWeekStartFrom('');
     setWeekStartTo('');
   };
@@ -567,6 +518,11 @@ export default function AdminTimesheetsPage() {
       total: timesheets.length,
       draft: timesheets.filter((ts) => ts.status === 'draft').length,
       submitted: timesheets.filter((ts) => ts.status === 'submitted').length,
+      underReview: timesheets.filter((ts) => ts.status === 'under_review')
+        .length,
+      needsReview: timesheets.filter((ts) =>
+        ts.status === 'submitted' || ts.status === 'under_review',
+      ).length,
       approved: timesheets.filter((ts) => ts.status === 'approved').length,
     }),
     [timesheets],
@@ -617,6 +573,25 @@ export default function AdminTimesheetsPage() {
     router.push(`/admin/timesheets/${timesheetId}`);
   };
 
+  const handleDeleteTimesheet = async (ts: Timesheet) => {
+    const name = driverName(ts);
+    if (
+      !confirm(
+        `Delete timesheet for ${name} (${formatCompactWeek(ts.week_start_date, ts.week_end_date)})?\n\nThis permanently removes the timesheet and all trips. This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    try {
+      await apiClient.deleteTimesheet(ts.id);
+      toast.success('Timesheet deleted');
+      setSelectedIds((prev) => prev.filter((item) => item !== ts.id));
+      await fetchTimesheets();
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Failed to delete timesheet'));
+    }
+  };
+
   return (
     <div className='space-y-4'>
       <div className='flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3'>
@@ -639,13 +614,26 @@ export default function AdminTimesheetsPage() {
               <dd className='font-semibold text-slate-200 tabular-nums'>{counts.draft}</dd>
               <span>Draft</span>
             </div>
-            <div className='flex items-baseline gap-1.5'>
-              <dt className='sr-only'>Submitted</dt>
-              <dd className='font-semibold text-blue-300 tabular-nums'>
-                {counts.submitted}
+            <button
+              type='button'
+              className={cn(
+                'flex items-baseline gap-1.5 rounded-md px-1.5 py-0.5 -mx-1.5 transition-colors',
+                needsReviewFilter
+                  ? 'bg-amber-900/40 text-amber-200'
+                  : 'hover:bg-slate-700/60',
+              )}
+              onClick={() =>
+                setStatusFilter((prev) =>
+                  prev === 'needs_review' ? 'all' : 'needs_review',
+                )
+              }
+            >
+              <dt className='sr-only'>Needs review</dt>
+              <dd className='font-semibold text-amber-300 tabular-nums'>
+                {counts.needsReview}
               </dd>
-              <span>Submitted</span>
-            </div>
+              <span>Needs review</span>
+            </button>
             <div className='flex items-baseline gap-1.5'>
               <dt className='sr-only'>Approved</dt>
               <dd className='font-semibold text-green-300 tabular-nums'>
@@ -710,14 +698,14 @@ export default function AdminTimesheetsPage() {
 
             <div className='w-full sm:w-48'>
               <Label htmlFor='timesheet-employer-filter' className='sr-only'>
-                Employer
+                Customer
               </Label>
               <SearchableFilterCombobox
                 id='timesheet-employer-filter'
-                allLabel='All employers'
-                searchPlaceholder='Search employers…'
-                loadingMessage='Searching employers…'
-                emptyMessage='No employers found'
+                allLabel='All customers'
+                searchPlaceholder='Search customers…'
+                loadingMessage='Searching customers…'
+                emptyMessage='No customers found'
                 value={employerId}
                 selectedLabel={employerLabel}
                 onValueChange={handleEmployerChange}
@@ -726,7 +714,7 @@ export default function AdminTimesheetsPage() {
               />
             </div>
 
-            <div className='w-full sm:w-40'>
+            <div className='w-full sm:w-44'>
               <Label htmlFor='timesheet-status-filter' className='sr-only'>
                 Status
               </Label>
@@ -739,11 +727,31 @@ export default function AdminTimesheetsPage() {
                 </SelectTrigger>
                 <SelectContent className='text-white bg-slate-800 border-slate-700'>
                   <SelectItem value='all'>All statuses</SelectItem>
+                  <SelectItem value='needs_review'>Needs review</SelectItem>
                   {STATUS_OPTIONS.map((s) => (
                     <SelectItem key={s} value={s}>
-                      {formatStatusLabel(s)}
+                      {formatTimesheetStatusLabel(s)}
                     </SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className='w-full sm:w-40'>
+              <Label htmlFor='timesheet-source-filter' className='sr-only'>
+                Source
+              </Label>
+              <Select value={sourceFilter} onValueChange={setSourceFilter}>
+                <SelectTrigger
+                  id='timesheet-source-filter'
+                  className='w-full h-10 bg-slate-700 border-slate-600 text-white'
+                >
+                  <SelectValue placeholder='All sources' />
+                </SelectTrigger>
+                <SelectContent className='text-white bg-slate-800 border-slate-700'>
+                  <SelectItem value='all'>All sources</SelectItem>
+                  <SelectItem value='driver'>Driver-created</SelectItem>
+                  <SelectItem value='admin'>Admin-created</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -784,14 +792,30 @@ export default function AdminTimesheetsPage() {
               )}
               {employerId !== 'all' && (
                 <ActiveFilterChip
-                  label={employerLabel || `Employer #${employerId}`}
+                  label={employerLabel || `Customer #${employerId}`}
                   onRemove={() => handleEmployerChange('all')}
                 />
               )}
               {statusFilter !== 'all' && (
                 <ActiveFilterChip
-                  label={formatStatusLabel(statusFilter as TimesheetStatus)}
+                  label={
+                    statusFilter === 'needs_review'
+                      ? 'Needs review'
+                      : formatTimesheetStatusLabel(
+                          statusFilter as TimesheetStatus,
+                        )
+                  }
                   onRemove={() => setStatusFilter('all')}
+                />
+              )}
+              {sourceFilter !== 'all' && (
+                <ActiveFilterChip
+                  label={
+                    sourceFilter === 'driver'
+                      ? 'Driver-created'
+                      : 'Admin-created'
+                  }
+                  onRemove={() => setSourceFilter('all')}
                 />
               )}
               {dateRangeLabel && (
@@ -940,7 +964,7 @@ export default function AdminTimesheetsPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <StatusBadge
+                        <TimesheetStatusBadge
                           status={ts.status}
                           adjusted={Boolean(ts.adjusted_at)}
                           driverReviewStatus={
@@ -967,6 +991,15 @@ export default function AdminTimesheetsPage() {
                             <Link href={`/admin/timesheets/${ts.id}?adjust=1`}>
                               <PencilLine className='h-4 w-4 text-slate-400' />
                             </Link>
+                          </Button>
+                          <Button
+                            type='button'
+                            variant='ghost'
+                            size='icon'
+                            title='Delete timesheet'
+                            onClick={() => void handleDeleteTimesheet(ts)}
+                          >
+                            <Trash2 className='h-4 w-4 text-slate-400 hover:text-red-400' />
                           </Button>
                           <ChevronRight
                             className='h-4 w-4 text-slate-500'

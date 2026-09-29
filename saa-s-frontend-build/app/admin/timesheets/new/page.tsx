@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { endOfWeek, format, startOfWeek } from 'date-fns';
@@ -21,6 +21,7 @@ import {
   SearchableFilterCombobox,
   SearchableFilterOption,
 } from '@/components/admin/searchable-filter-combobox';
+import { useAuth } from '@/context/AuthContext';
 import { apiClient } from '@/lib/api';
 import { DriverWithDetails, Employer } from '@/lib/types';
 import { toast } from 'sonner';
@@ -36,15 +37,57 @@ function currentWeekBounds() {
 
 export default function AdminNewTimesheetPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const week = currentWeekBounds();
   const [driverId, setDriverId] = useState('');
   const [driverLabel, setDriverLabel] = useState('');
+  const [driverLocked, setDriverLocked] = useState(false);
+  const [resolvingDriver, setResolvingDriver] = useState(true);
   const [employerId, setEmployerId] = useState('');
   const [employerLabel, setEmployerLabel] = useState('');
   const [weekStartDate, setWeekStartDate] = useState(week.start);
   const [weekEndDate, setWeekEndDate] = useState(week.end);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  const isDriverRole = Boolean(
+    user?.roles?.some((role) => role.name?.toLowerCase() === 'driver'),
+  );
+
+  // Pure drivers should use the driver create flow (no driver picker).
+  useEffect(() => {
+    if (isDriverRole) {
+      router.replace('/driver/timesheets/new');
+    }
+  }, [isDriverRole, router]);
+
+  // If the logged-in staff user also has a driver profile, lock them in as the driver.
+  useEffect(() => {
+    if (isDriverRole) return;
+
+    let cancelled = false;
+    const resolve = async () => {
+      setResolvingDriver(true);
+      try {
+        const profile = (await apiClient.getMyDriverProfile()) as DriverWithDetails;
+        if (cancelled || !profile?.id) return;
+        setDriverId(String(profile.id));
+        setDriverLabel(
+          profile.name ?? profile.user?.name ?? `Driver #${profile.id}`,
+        );
+        setDriverLocked(true);
+      } catch {
+        // Not a driver profile — keep the picker for staff.
+      } finally {
+        if (!cancelled) setResolvingDriver(false);
+      }
+    };
+
+    void resolve();
+    return () => {
+      cancelled = true;
+    };
+  }, [isDriverRole]);
 
   const searchDrivers = useCallback(
     async (query: string, signal: AbortSignal) => {
@@ -86,7 +129,7 @@ export default function AdminNewTimesheetPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!driverId || !employerId || !weekStartDate || !weekEndDate) {
-      setError('Select a driver, employer, and week dates.');
+      setError('Select a driver, customer, and week dates.');
       return;
     }
     setIsSubmitting(true);
@@ -109,6 +152,14 @@ export default function AdminNewTimesheetPage() {
     }
   };
 
+  if (isDriverRole) {
+    return (
+      <div className='flex justify-center py-16'>
+        <Spinner className='h-8 w-8 text-white' />
+      </div>
+    );
+  }
+
   return (
     <div className='max-w-lg mx-auto space-y-6'>
       <Button variant='ghost' asChild className='text-slate-300 hover:text-white -ml-2'>
@@ -125,7 +176,7 @@ export default function AdminNewTimesheetPage() {
             Create timesheet
           </CardTitle>
           <CardDescription className='text-slate-400'>
-            Create a weekly timesheet for a driver and employer. You can add trips,
+            Create a weekly timesheet for a driver and customer. You can add trips,
             adjust rates, approve, and generate client invoices from the detail
             screen.
           </CardDescription>
@@ -143,33 +194,47 @@ export default function AdminNewTimesheetPage() {
               <Label htmlFor='create-timesheet-driver' className='text-slate-300'>
                 Driver
               </Label>
-              <SearchableFilterCombobox
-                id='create-timesheet-driver'
-                allLabel='Select driver'
-                searchPlaceholder='Search drivers…'
-                loadingMessage='Searching drivers…'
-                emptyMessage='No drivers found'
-                value={driverId || 'all'}
-                selectedLabel={driverLabel}
-                onValueChange={(value, option?: SearchableFilterOption) => {
-                  setDriverId(value === 'all' ? '' : value);
-                  setDriverLabel(value === 'all' ? '' : option?.label ?? '');
-                }}
-                onSearch={searchDrivers}
-                className='w-full'
-              />
+              {resolvingDriver ? (
+                <div className='flex h-10 items-center gap-2 rounded-md border border-slate-600 bg-slate-700 px-3 text-sm text-slate-400'>
+                  <Spinner className='h-4 w-4' />
+                  Checking profile…
+                </div>
+              ) : driverLocked ? (
+                <Input
+                  id='create-timesheet-driver'
+                  value={driverLabel}
+                  readOnly
+                  className='bg-slate-700 border-slate-600 text-white'
+                />
+              ) : (
+                <SearchableFilterCombobox
+                  id='create-timesheet-driver'
+                  allLabel='Select driver'
+                  searchPlaceholder='Search drivers…'
+                  loadingMessage='Searching drivers…'
+                  emptyMessage='No drivers found'
+                  value={driverId || 'all'}
+                  selectedLabel={driverLabel}
+                  onValueChange={(value, option?: SearchableFilterOption) => {
+                    setDriverId(value === 'all' ? '' : value);
+                    setDriverLabel(value === 'all' ? '' : option?.label ?? '');
+                  }}
+                  onSearch={searchDrivers}
+                  className='w-full'
+                />
+              )}
             </div>
 
             <div className='space-y-2'>
               <Label htmlFor='create-timesheet-employer' className='text-slate-300'>
-                Employer
+                Customer
               </Label>
               <SearchableFilterCombobox
                 id='create-timesheet-employer'
-                allLabel='Select employer'
-                searchPlaceholder='Search employers…'
-                loadingMessage='Searching employers…'
-                emptyMessage='No employers found'
+                allLabel='Select customer'
+                searchPlaceholder='Search customers…'
+                loadingMessage='Searching customers…'
+                emptyMessage='No customers found'
                 value={employerId || 'all'}
                 selectedLabel={employerLabel}
                 onValueChange={(value, option?: SearchableFilterOption) => {
@@ -222,7 +287,12 @@ export default function AdminNewTimesheetPage() {
               </Button>
               <Button
                 type='submit'
-                disabled={isSubmitting || !driverId || !employerId}
+                disabled={
+                  isSubmitting ||
+                  resolvingDriver ||
+                  !driverId ||
+                  !employerId
+                }
                 className='bg-emerald-600 hover:bg-emerald-500 text-white'
               >
                 {isSubmitting ? (

@@ -106,8 +106,8 @@ export function Sidebar() {
           icon: <Layers className='w-5 h-5' />,
         },
         {
-          label: 'Employers',
-          href: '/admin/employers',
+          label: 'Customers',
+          href: '/admin/customers',
           icon: <Briefcase className='w-5 h-5' />,
         },
         {

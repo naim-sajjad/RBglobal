@@ -34,16 +34,25 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { TableActions } from '@/components/TableActions';
 import { Spinner } from '@/components/ui/spinner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   Plus,
   Search,
   AlertCircle,
   CheckCircle2,
   Upload,
+  Download,
   FileSpreadsheet,
+  ChevronDown,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import {
@@ -54,6 +63,8 @@ import {
 import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
+import { downloadDriversCsv } from '@/lib/driver-csv-export';
+import { cn } from '@/lib/utils';
 
 export default function DriversPage() {
   const router = useRouter();
@@ -84,6 +95,7 @@ export default function DriversPage() {
   const [updatingReferenceCheckFor, setUpdatingReferenceCheckFor] = useState<
     string | number | null
   >(null);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
 
   const [formData, setFormData] = useState<CreateDriverData>({
     name: '',
@@ -107,10 +119,12 @@ export default function DriversPage() {
         ...(term ? { search: term } : {}),
       });
       setDrivers(Array.isArray(response) ? response : []);
+      setSelectedIds([]);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to load drivers');
       toast.error('Failed to load drivers');
       setDrivers([]);
+      setSelectedIds([]);
     } finally {
       setIsLoading(false);
     }
@@ -326,6 +340,40 @@ export default function DriversPage() {
     });
   }, [drivers, searchQuery]);
 
+  const allVisibleSelected =
+    filteredDrivers.length > 0 &&
+    filteredDrivers.every((d) => selectedIds.includes(d.id));
+  const selectedDrivers = filteredDrivers.filter((d) =>
+    selectedIds.includes(d.id),
+  );
+
+  const toggleSelectAll = (checked: boolean) => {
+    setSelectedIds(checked ? filteredDrivers.map((d) => d.id) : []);
+  };
+
+  const toggleSelect = (id: number, checked: boolean) => {
+    setSelectedIds((prev) =>
+      checked ? [...prev, id] : prev.filter((item) => item !== id),
+    );
+  };
+
+  const handleExportDrivers = (mode: 'all' | 'selected') => {
+    const rows =
+      mode === 'selected' ? selectedDrivers : filteredDrivers;
+    if (rows.length === 0) {
+      toast.error(
+        mode === 'selected'
+          ? 'Select at least one driver to export'
+          : 'No drivers to export',
+      );
+      return;
+    }
+    downloadDriversCsv(rows);
+    toast.success(
+      `Exported ${rows.length} driver${rows.length === 1 ? '' : 's'}`,
+    );
+  };
+
   const getStatusBadge = (status: string) => {
     const statusConfig: Record<string, { label: string; className: string }> = {
       pending_approval: {
@@ -356,6 +404,42 @@ export default function DriversPage() {
           </p>
         </div>
         <div className='flex items-center gap-2'>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type='button'
+                variant='outline'
+                className='border-slate-600'
+                disabled={isLoading || filteredDrivers.length === 0}
+              >
+                <Download className='mr-2 h-4 w-4' />
+                Export CSV
+                <ChevronDown className='ml-1 h-4 w-4 opacity-70' />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align='end'
+              className='bg-slate-800 border-slate-700 text-white min-w-52'
+            >
+              <DropdownMenuItem
+                className='focus:bg-slate-700 focus:text-white cursor-pointer'
+                onClick={() => handleExportDrivers('all')}
+              >
+                Export all{filteredDrivers.length ? ` (${filteredDrivers.length})` : ''}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className={cn(
+                  'focus:bg-slate-700 focus:text-white cursor-pointer',
+                  selectedDrivers.length === 0 && 'opacity-50',
+                )}
+                disabled={selectedDrivers.length === 0}
+                onClick={() => handleExportDrivers('selected')}
+              >
+                Export selected
+                {selectedDrivers.length ? ` (${selectedDrivers.length})` : ''}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button
             onClick={() => router.push('/admin/drivers/create')}
             className='bg-blue-600 hover:bg-blue-700'
@@ -416,12 +500,40 @@ export default function DriversPage() {
 
       {/* Table Card */}
       <Card className='bg-slate-800 border-slate-700'>
-        <CardHeader>
-          <CardTitle className='text-white'>All Drivers</CardTitle>
-          <CardDescription>
-            {filteredDrivers.length} driver
-            {filteredDrivers.length !== 1 ? 's' : ''} found
-          </CardDescription>
+        <CardHeader className='flex flex-row flex-wrap items-center justify-between gap-3 space-y-0'>
+          <div>
+            <CardTitle className='text-white'>All Drivers</CardTitle>
+            <CardDescription>
+              {filteredDrivers.length} driver
+              {filteredDrivers.length !== 1 ? 's' : ''} found
+              {selectedIds.length > 0
+                ? ` · ${selectedIds.length} selected`
+                : ''}
+            </CardDescription>
+          </div>
+          {selectedIds.length > 0 ? (
+            <div className='flex items-center gap-2'>
+              <Button
+                type='button'
+                size='sm'
+                variant='outline'
+                className='border-slate-600'
+                onClick={() => handleExportDrivers('selected')}
+              >
+                <Download className='mr-2 h-3.5 w-3.5' />
+                Export selected ({selectedIds.length})
+              </Button>
+              <Button
+                type='button'
+                size='sm'
+                variant='ghost'
+                className='text-slate-300 hover:text-white'
+                onClick={() => setSelectedIds([])}
+              >
+                Clear selection
+              </Button>
+            </div>
+          ) : null}
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -441,6 +553,16 @@ export default function DriversPage() {
               <Table>
                 <TableHeader>
                   <TableRow className='border-slate-700 hover:bg-transparent'>
+                    <TableHead className='w-10 text-slate-300'>
+                      <Checkbox
+                        aria-label='Select all drivers'
+                        checked={allVisibleSelected}
+                        onCheckedChange={(checked) =>
+                          toggleSelectAll(checked === true)
+                        }
+                        className='border-slate-500 data-[state=checked]:bg-emerald-600 data-[state=checked]:border-emerald-600'
+                      />
+                    </TableHead>
                     <TableHead className='text-slate-300'>Name</TableHead>
                     <TableHead className='text-slate-300'>Email</TableHead>
                     <TableHead className='text-slate-300'>
@@ -475,6 +597,19 @@ export default function DriversPage() {
                         router.push(`/admin/drivers/view?id=${driver.id}`)
                       }
                     >
+                      <TableCell
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => e.stopPropagation()}
+                      >
+                        <Checkbox
+                          aria-label={`Select ${driver.name || driver.user?.name || `driver ${driver.id}`}`}
+                          checked={selectedIds.includes(driver.id)}
+                          onCheckedChange={(checked) =>
+                            toggleSelect(driver.id, checked === true)
+                          }
+                          className='border-slate-500 data-[state=checked]:bg-emerald-600 data-[state=checked]:border-emerald-600'
+                        />
+                      </TableCell>
                       <TableCell className='text-white font-medium'>
                         <button
                           onClick={(e) => {

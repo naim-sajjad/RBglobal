@@ -27,16 +27,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
   ArrowLeft,
   Plus,
-  PlusCircle,
   Trash2,
   FileSpreadsheet,
   AlertCircle,
@@ -49,30 +41,24 @@ import {
   Timesheet,
   TimesheetTrip,
   Employer,
-  TimesheetStatus,
   RateCard,
   RateCardRatesConfig,
 } from '@/lib/types';
 import { toast } from 'sonner';
-import { getApiErrorMessage } from '@/lib/utils';
+import { cn, getApiErrorMessage } from '@/lib/utils';
+import { DriverTimesheetDocumentsCard } from '@/components/driver/driver-timesheet-documents-card';
+import { TimesheetStatusBadge } from '@/components/timesheet-status-badge';
 import {
   suggestNextTripDate,
   resolveClassDriverRate,
   resolveDistanceBandRates,
-  createCustomPayLineDraft,
   DISTANCE_RATE_OVERRIDE_KEY,
-  type CustomPayLineDraft,
   type PayRateDraft,
 } from '@/lib/timesheet-lines';
 
-const STATUS_COLORS: Record<TimesheetStatus, string> = {
-  draft: 'bg-slate-500',
-  submitted: 'bg-blue-500',
-  under_review: 'bg-amber-500',
-  approved: 'bg-green-500',
-  rejected: 'bg-red-500',
-  paid: 'bg-emerald-600',
-};
+const TOOLBAR_BTN = 'h-8 shrink-0 gap-1 px-2.5 text-xs font-medium';
+const TOOLBAR_SECONDARY =
+  'h-8 shrink-0 gap-1 px-2.5 text-xs font-medium border-slate-600 bg-slate-700 text-white hover:bg-slate-600 hover:text-white';
 
 function formatDate(d: string) {
   return new Date(d).toLocaleDateString('en-CA', {
@@ -92,6 +78,7 @@ export default function DriverTimesheetDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [addTripOpen, setAddTripOpen] = useState(false);
+  const [addTripStep, setAddTripStep] = useState<'date' | 'details'>('date');
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [updatingTripId, setUpdatingTripId] = useState<number | null>(null);
@@ -111,13 +98,7 @@ export default function DriverTimesheetDetailPage() {
   const [additionalQuantities, setAdditionalQuantities] = useState<
     Record<string, string>
   >({});
-  const [customPayLines, setCustomPayLines] = useState<CustomPayLineDraft[]>(
-    [],
-  );
   const [payRates, setPayRates] = useState<Record<string, PayRateDraft>>({});
-  const [payRateDirty, setPayRateDirty] = useState<Record<string, boolean>>(
-    {},
-  );
 
   const fetchTimesheet = useCallback(async () => {
     if (!id) return;
@@ -148,6 +129,13 @@ export default function DriverTimesheetDetailPage() {
     }
   }, [id, fetchTimesheet]);
 
+  // Keep trip employer locked to the timesheet employer.
+  useEffect(() => {
+    if (timesheet?.employer_id) {
+      setNewTripEmployerId(String(timesheet.employer_id));
+    }
+  }, [timesheet?.employer_id]);
+
   // When employer or trip date changes, load that employer's rate cards and pick the active one for the date
   useEffect(() => {
     const employerNumeric = newTripEmployerId
@@ -170,11 +158,15 @@ export default function DriverTimesheetDetailPage() {
             [employerNumeric]: cards,
           }));
         }
-        const date = new Date(newTripDate);
+        const date = new Date(`${newTripDate}T12:00:00`);
         const active = cards.find((c) => {
           if (c.status !== 'active' && c.status !== 'scheduled') return false;
-          const from = c.effective_from ? new Date(c.effective_from) : null;
-          const to = c.effective_to ? new Date(c.effective_to) : null;
+          const from = c.effective_from
+            ? new Date(`${String(c.effective_from).slice(0, 10)}T12:00:00`)
+            : null;
+          const to = c.effective_to
+            ? new Date(`${String(c.effective_to).slice(0, 10)}T12:00:00`)
+            : null;
           const inRange = (!from || date >= from) && (!to || date <= to);
           return inRange;
         });
@@ -186,7 +178,7 @@ export default function DriverTimesheetDetailPage() {
       }
     };
 
-    load();
+    void load();
   }, [newTripEmployerId, newTripDate, employerRateCards]);
 
   useEffect(() => {
@@ -198,18 +190,18 @@ export default function DriverTimesheetDetailPage() {
       distanceQty,
       classCode,
     );
-    setPayRates((prev) => {
-      const next = { ...prev };
-      if (!payRateDirty[DISTANCE_RATE_OVERRIDE_KEY]) {
-        next[DISTANCE_RATE_OVERRIDE_KEY] = {
+    // Drivers cannot override rates — always sync from the rate card.
+    setPayRates(() => {
+      const next: Record<string, PayRateDraft> = {
+        [DISTANCE_RATE_OVERRIDE_KEY]: {
           driver_rate: String(distanceRates.driverRate),
           agency_rate: String(distanceRates.agencyRate),
-        };
-      }
+        },
+      };
       for (const c of activeRateConfig.additional_charges ?? []) {
         if (!c.active) continue;
         const key = c.key ?? c.charge_type;
-        if (!key || payRateDirty[key]) continue;
+        if (!key) continue;
         next[key] = {
           driver_rate: String(
             resolveClassDriverRate(
@@ -223,34 +215,19 @@ export default function DriverTimesheetDetailPage() {
       }
       return next;
     });
-  }, [
-    activeRateConfig,
-    newTripDistance,
-    timesheet?.driver?.driver_class?.code,
-    payRateDirty,
-  ]);
+  }, [activeRateConfig, newTripDistance, timesheet?.driver?.driver_class?.code]);
 
   const canEdit = timesheet?.status === 'draft'; // Only drivers can edit when draft; admin can edit when submitted/under_review (separate page)
   const canSubmit = timesheet?.status === 'draft';
 
   const handleAddTrip = async (e: React.FormEvent) => {
     e.preventDefault();
+    const employerId =
+      newTripEmployerId ||
+      (timesheet?.employer_id ? String(timesheet.employer_id) : '');
     const distance = parseFloat(newTripDistance);
-    if (
-      !id ||
-      !newTripEmployerId ||
-      !newTripDate ||
-      isNaN(distance) ||
-      distance < 0
-    )
+    if (!id || !employerId || !newTripDate || isNaN(distance) || distance < 0)
       return;
-    const blankCustom = customPayLines.some(
-      (line) => Number(line.quantity) > 0 && !line.label.trim(),
-    );
-    if (blankCustom) {
-      toast.error('Each custom pay item needs a label');
-      return;
-    }
     setSaving(true);
     try {
       const additional_quantities = Object.fromEntries(
@@ -259,64 +236,24 @@ export default function DriverTimesheetDetailPage() {
           .filter(([, num]) => Number.isFinite(num) && num > 0),
       ) as Record<string, number>;
 
-      const custom_pay_lines = customPayLines
-        .map((line) => ({
-          label: line.label.trim(),
-          quantity: Number(line.quantity),
-          unit: line.unit.trim() || undefined,
-          rate: Number(line.driver_rate) || 0,
-          agency_rate: Number(line.agency_rate) || 0,
-        }))
-        .filter(
-          (line) =>
-            line.label &&
-            Number.isFinite(line.quantity) &&
-            line.quantity > 0,
-        );
-
-      const rate_overrides: Record<
-        string,
-        { rate: number; agency_rate: number }
-      > = {};
-      const distanceRate = payRates[DISTANCE_RATE_OVERRIDE_KEY];
-      if (distanceRate) {
-        rate_overrides[DISTANCE_RATE_OVERRIDE_KEY] = {
-          rate: Number(distanceRate.driver_rate) || 0,
-          agency_rate: Number(distanceRate.agency_rate) || 0,
-        };
-      }
-      for (const key of Object.keys(additional_quantities)) {
-        const rates = payRates[key];
-        if (!rates) continue;
-        rate_overrides[key] = {
-          rate: Number(rates.driver_rate) || 0,
-          agency_rate: Number(rates.agency_rate) || 0,
-        };
-      }
-
       await apiClient.createTimesheetTrip(id, {
-        employer_id: parseInt(newTripEmployerId, 10),
+        employer_id: parseInt(employerId, 10),
         trip_date: newTripDate,
         trip_number: newTripNumber || undefined,
         distance,
         notes: newTripNotes || undefined,
         additional_quantities,
-        custom_pay_lines:
-          custom_pay_lines.length > 0 ? custom_pay_lines : undefined,
-        rate_overrides:
-          Object.keys(rate_overrides).length > 0 ? rate_overrides : undefined,
       });
       await fetchTimesheet();
       setAddTripOpen(false);
-      setNewTripEmployerId('');
+      setAddTripStep('date');
+      setNewTripEmployerId(employerId);
       setNewTripDate('');
       setNewTripNumber('');
       setNewTripDistance('0');
       setNewTripNotes('');
       setAdditionalQuantities({});
-      setCustomPayLines([]);
       setPayRates({});
-      setPayRateDirty({});
       toast.success('Trip added');
     } catch (err: any) {
       toast.error(getApiErrorMessage(err, 'Failed to add trip'));
@@ -406,32 +343,52 @@ export default function DriverTimesheetDetailPage() {
 
   return (
     <div className='max-w-5xl mx-auto space-y-6'>
-      <div className='flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4'>
+      <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
         <Button
           variant='ghost'
           asChild
-          className='text-slate-300 hover:text-white'
+          className='h-8 -ml-2 w-fit px-2 text-xs text-slate-300 hover:text-white'
         >
-          <Link href='/driver/timesheets' className='flex items-center gap-2'>
-            <ArrowLeft className='h-4 w-4' />
+          <Link href='/driver/timesheets' className='flex items-center gap-1.5'>
+            <ArrowLeft className='h-3.5 w-3.5' />
             Back to timesheets
           </Link>
         </Button>
-        <div className='flex items-center gap-2 flex-wrap'>
-          <Badge className={STATUS_COLORS[timesheet.status]}>
-            {timesheet.status.replace('_', ' ')}
-          </Badge>
+        <div className='flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto pb-0.5'>
+          <TimesheetStatusBadge
+            status={timesheet.status}
+            adjusted={Boolean(timesheet.adjusted_at)}
+            driverReviewStatus={
+              timesheet.latest_document_review?.status ??
+              timesheet.document_reviews?.[0]?.status ??
+              null
+            }
+            driverReviewLabel={
+              timesheet.latest_document_review?.status_label ??
+              timesheet.document_reviews?.[0]?.status_label ??
+              null
+            }
+          />
           {canSubmit && (
             <Button
+              size='sm'
               onClick={handleSubmit}
-              disabled={submitting || trips.length === 0}
+              disabled={
+                submitting ||
+                (trips.length === 0 &&
+                  (timesheet.documents?.length ?? 0) === 0)
+              }
+              className={cn(
+                TOOLBAR_BTN,
+                'bg-emerald-600 text-white hover:bg-emerald-700',
+              )}
             >
               {submitting ? (
-                <Loader2 className='h-4 w-4 animate-spin' />
+                <Loader2 className='h-3.5 w-3.5 animate-spin' />
               ) : (
-                <Send className='h-4 w-4 mr-1' />
+                <Send className='h-3.5 w-3.5' />
               )}
-              Submit to employer
+              Submit
             </Button>
           )}
         </div>
@@ -445,11 +402,23 @@ export default function DriverTimesheetDetailPage() {
             {formatDate(timesheet.week_end_date)}
           </CardTitle>
           <p className='text-sm text-slate-400'>
+            {timesheet.employer?.name
+              ? `Customer: ${timesheet.employer.name} — `
+              : ''}
             Weekly total:{' '}
             <span className='font-semibold text-white'>
               ${Number(weeklyTotal).toFixed(2)}
             </span>
           </p>
+          {timesheet.reject_reason ? (
+            <Alert variant='destructive' className='mt-3'>
+              <AlertCircle className='h-4 w-4' />
+              <AlertDescription>
+                Admin rejected this timesheet. Please update trips and submit
+                again. Reason: {timesheet.reject_reason}
+              </AlertDescription>
+            </Alert>
+          ) : null}
         </CardHeader>
         <CardContent className='space-y-6'>
           {error && (
@@ -463,6 +432,10 @@ export default function DriverTimesheetDetailPage() {
             <div className='flex gap-2'>
               <Button
                 onClick={() => {
+                  if (timesheet.employer_id) {
+                    setNewTripEmployerId(String(timesheet.employer_id));
+                  }
+                  // No trips yet → week start; otherwise day after last trip.
                   setNewTripDate(
                     suggestNextTripDate(
                       timesheet.trips,
@@ -470,14 +443,16 @@ export default function DriverTimesheetDetailPage() {
                       timesheet.week_end_date,
                     ),
                   );
+                  setNewTripNumber('');
                   setNewTripDistance('0');
+                  setNewTripNotes('');
                   setAdditionalQuantities({});
-                  setCustomPayLines([]);
                   setPayRates({});
-                  setPayRateDirty({});
+                  setAddTripStep('date');
                   setAddTripOpen(true);
                 }}
                 size='sm'
+                className='bg-slate-700 hover:bg-slate-600 text-white'
               >
                 <Plus className='h-4 w-4 mr-2' />
                 Add trip
@@ -486,7 +461,7 @@ export default function DriverTimesheetDetailPage() {
           )}
 
           {trips.length === 0 ? (
-            <p className='text-slate-400 py-8 text-center'>
+            <p className='text-slate-400 py-8 text-center border border-dashed border-slate-600 rounded-md'>
               No trips yet. Add a trip to start logging pay items.
             </p>
           ) : (
@@ -525,42 +500,54 @@ export default function DriverTimesheetDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Add trip dialog */}
-      <Dialog open={addTripOpen} onOpenChange={setAddTripOpen}>
-        <DialogContent className='flex min-h-0 max-h-[min(90vh,880px)] w-[calc(100%-1.5rem)] max-w-5xl flex-col gap-0 overflow-hidden bg-slate-800 border-slate-700 p-0 sm:max-w-5xl'>
-          <form
-            onSubmit={handleAddTrip}
-            className='flex min-h-0 flex-1 flex-col overflow-hidden'
-          >
-            <DialogHeader className='shrink-0 space-y-3 border-b border-slate-700 px-6 py-4 pr-12 text-left'>
-              <div className='flex flex-wrap items-start justify-between gap-2'>
+      <DriverTimesheetDocumentsCard
+        timesheetId={timesheet.id}
+        documents={timesheet.documents ?? []}
+        canUpload={timesheet.status !== 'paid'}
+        onDocumentsChange={fetchTimesheet}
+      />
+
+      {/* Add trip — step 1: date, step 2: pay item quantities */}
+      <Dialog
+        open={addTripOpen}
+        onOpenChange={(open) => {
+          setAddTripOpen(open);
+          if (!open) setAddTripStep('date');
+        }}
+      >
+        <DialogContent
+          className={cn(
+            'bg-slate-800 border-slate-700',
+            addTripStep === 'date'
+              ? 'w-[calc(100%-1.5rem)] max-w-md sm:max-w-md'
+              : 'flex min-h-0 max-h-[min(90vh,880px)] w-[calc(100%-1.5rem)] max-w-5xl flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl',
+          )}
+        >
+          {addTripStep === 'date' ? (
+            <>
+              <DialogHeader className='text-left'>
                 <DialogTitle className='flex items-center gap-2 text-white'>
                   <Plus className='h-5 w-5' />
                   Add trip
                 </DialogTitle>
-                <DialogDescription className='max-w-md text-right text-xs text-slate-400'>
-                  Rates come from the employer Rate Card.
+                <DialogDescription className='text-slate-400'>
+                  Choose the trip date first. Pay items from the Rate Card will
+                  open next.
                 </DialogDescription>
-              </div>
-              <div className='grid grid-cols-1 gap-3 sm:grid-cols-3'>
-                <div className='space-y-1.5 sm:col-span-1'>
-                  <Label className='text-slate-300'>Employer</Label>
-                  <Select
-                    value={newTripEmployerId}
-                    onValueChange={setNewTripEmployerId}
-                    required
-                  >
-                    <SelectTrigger className='h-9 bg-slate-700 border-slate-600 text-white'>
-                      <SelectValue placeholder='Select employer' />
-                    </SelectTrigger>
-                    <SelectContent className='bg-slate-800 border-slate-700'>
-                      {employers.map((emp) => (
-                        <SelectItem key={emp.id} value={String(emp.id)}>
-                          {emp.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+              </DialogHeader>
+              <div className='space-y-4 py-2'>
+                <div className='space-y-1.5'>
+                  <Label className='text-slate-300'>Customer</Label>
+                  <Input
+                    value={
+                      timesheet?.employer?.name ??
+                      employers.find((e) => String(e.id) === newTripEmployerId)
+                        ?.name ??
+                      ''
+                    }
+                    readOnly
+                    className='h-9 bg-slate-700/60 border-slate-600 text-white'
+                  />
                 </div>
                 <div className='space-y-1.5'>
                   <Label className='text-slate-300'>Trip date</Label>
@@ -584,373 +571,237 @@ export default function DriverTimesheetDetailPage() {
                   />
                 </div>
               </div>
-            </DialogHeader>
+              <DialogFooter className='gap-2 sm:justify-end'>
+                <Button
+                  type='button'
+                  variant='outline'
+                  onClick={() => setAddTripOpen(false)}
+                  className={TOOLBAR_SECONDARY}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type='button'
+                  disabled={!newTripDate}
+                  onClick={() => {
+                    setNewTripDistance('0');
+                    setAdditionalQuantities({});
+                    setNewTripNotes('');
+                    setAddTripStep('details');
+                  }}
+                  className='bg-emerald-600 text-white hover:bg-emerald-500'
+                >
+                  Continue
+                </Button>
+              </DialogFooter>
+            </>
+          ) : (
+            <form
+              onSubmit={handleAddTrip}
+              className='flex min-h-0 flex-1 flex-col overflow-hidden'
+            >
+              <DialogHeader className='shrink-0 space-y-3 border-b border-slate-700 px-6 py-4 pr-12 text-left'>
+                <div className='flex flex-wrap items-start justify-between gap-2'>
+                  <DialogTitle className='flex items-center gap-2 text-white'>
+                    <Plus className='h-5 w-5' />
+                    Trip details
+                  </DialogTitle>
+                  <DialogDescription className='max-w-md text-right text-xs text-slate-400'>
+                    Enter quantities only. Rates come from the customer Rate
+                    Card.
+                  </DialogDescription>
+                </div>
+                <div className='flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-300'>
+                  <span>
+                    <span className='text-slate-500'>Customer: </span>
+                    {timesheet?.employer?.name ?? '—'}
+                  </span>
+                  <span>
+                    <span className='text-slate-500'>Date: </span>
+                    {newTripDate ? formatDate(newTripDate) : '—'}
+                  </span>
+                  {newTripNumber ? (
+                    <span>
+                      <span className='text-slate-500'>Trip #: </span>
+                      {newTripNumber}
+                    </span>
+                  ) : null}
+                </div>
+              </DialogHeader>
 
-            <div className='min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-y-contain px-6 py-3'>
-              <div className='overflow-x-auto rounded-md border border-slate-700'>
-                <table className='w-full min-w-[640px] table-fixed border-collapse text-sm'>
-                  <thead>
-                    <tr className='border-b border-slate-700 bg-slate-900/80 text-left text-xs uppercase tracking-wide text-slate-400'>
-                      <th className='w-[28%] px-2 py-2 font-medium'>Pay Item</th>
-                      <th className='w-[14%] px-2 py-2 font-medium'>Unit</th>
-                      <th className='w-[14%] px-2 py-2 font-medium'>Driver $</th>
-                      <th className='w-[14%] px-2 py-2 font-medium'>Agency $</th>
-                      <th className='w-[16%] px-2 py-2 font-medium'>Qty</th>
-                      <th className='w-10 px-1 py-2' />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(() => {
-                      const driverClassCode =
-                        timesheet.driver?.driver_class?.code ?? null;
-                      const distanceUnit =
-                        activeRateConfig?.measurement_unit ?? 'km';
-                      const rateCardCharges =
-                        activeRateConfig?.additional_charges?.filter(
-                          (c) => c.active,
-                        ) ?? [];
-                      const distanceRateDraft = payRates[
-                        DISTANCE_RATE_OVERRIDE_KEY
-                      ] ?? { driver_rate: '0', agency_rate: '0' };
+              <div className='min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-y-contain px-6 py-3'>
+                <div className='overflow-x-auto rounded-md border border-slate-700'>
+                  <table className='w-full min-w-[640px] table-fixed border-collapse text-sm'>
+                    <thead>
+                      <tr className='border-b border-slate-700 bg-slate-900/80 text-left text-xs uppercase tracking-wide text-slate-400'>
+                        <th className='w-[36%] px-2 py-2 font-medium'>
+                          Pay Item
+                        </th>
+                        <th className='w-[18%] px-2 py-2 font-medium'>Unit</th>
+                        <th className='w-[18%] px-2 py-2 font-medium'>Rate</th>
+                        <th className='w-[20%] px-2 py-2 font-medium'>Qty</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(() => {
+                        const driverClassCode =
+                          timesheet.driver?.driver_class?.code ?? null;
+                        const distanceUnit =
+                          activeRateConfig?.measurement_unit ?? 'km';
+                        const rateCardCharges =
+                          activeRateConfig?.additional_charges?.filter(
+                            (c) => c.active,
+                          ) ?? [];
+                        const distanceRateDraft = payRates[
+                          DISTANCE_RATE_OVERRIDE_KEY
+                        ] ?? { driver_rate: '0', agency_rate: '0' };
 
-                      const updatePayRate = (
-                        key: string,
-                        patch: Partial<PayRateDraft>,
-                      ) => {
-                        setPayRateDirty((prev) => ({ ...prev, [key]: true }));
-                        setPayRates((prev) => ({
-                          ...prev,
-                          [key]: {
-                            driver_rate: prev[key]?.driver_rate ?? '0',
-                            agency_rate: prev[key]?.agency_rate ?? '0',
-                            ...patch,
-                          },
-                        }));
-                      };
-
-                      return (
-                        <>
-                          <tr className='border-b border-slate-700/80'>
-                            <td className='px-2 py-1.5 align-middle font-medium text-white'>
-                              Distance
-                            </td>
-                            <td className='px-2 py-1.5 align-middle text-slate-300'>
-                              {distanceUnit}
-                            </td>
-                            <td className='px-2 py-1.5 align-middle'>
-                              <Input
-                                type='number'
-                                step='0.01'
-                                value={distanceRateDraft.driver_rate}
-                                onChange={(e) =>
-                                  updatePayRate(DISTANCE_RATE_OVERRIDE_KEY, {
-                                    driver_rate: e.target.value,
-                                  })
-                                }
-                                className='h-8 bg-slate-900 border-slate-600 text-white'
-                              />
-                            </td>
-                            <td className='px-2 py-1.5 align-middle'>
-                              <Input
-                                type='number'
-                                step='0.01'
-                                value={distanceRateDraft.agency_rate}
-                                onChange={(e) =>
-                                  updatePayRate(DISTANCE_RATE_OVERRIDE_KEY, {
-                                    agency_rate: e.target.value,
-                                  })
-                                }
-                                className='h-8 bg-slate-900 border-slate-600 text-white'
-                              />
-                            </td>
-                            <td className='px-2 py-1.5 align-middle'>
-                              <Input
-                                type='number'
-                                min={0}
-                                step='0.01'
-                                value={newTripDistance}
-                                onChange={(e) =>
-                                  setNewTripDistance(e.target.value)
-                                }
-                                required
-                                placeholder='0'
-                                className='h-8 bg-slate-900 border-slate-600 text-white'
-                              />
-                            </td>
-                            <td className='px-1 py-1.5' />
-                          </tr>
-
-                          {loadingCharges ? (
-                            <tr>
-                              <td
-                                colSpan={6}
-                                className='px-2 py-4 text-center text-sm text-slate-400'
-                              >
-                                <span className='inline-flex items-center gap-2'>
-                                  <Spinner className='h-4 w-4' />
-                                  Loading Rate Card items…
-                                </span>
+                        return (
+                          <>
+                            <tr className='border-b border-slate-700/80'>
+                              <td className='px-2 py-1.5 align-middle font-medium text-white'>
+                                Distance
                               </td>
-                            </tr>
-                          ) : (
-                            rateCardCharges.map((c) => {
-                              const key = c.key ?? c.charge_type;
-                              const rateDraft = payRates[key] ?? {
-                                driver_rate: String(
-                                  resolveClassDriverRate(
-                                    c.driver_rate,
-                                    c.driver_rates_by_class,
-                                    driverClassCode,
-                                  ),
-                                ),
-                                agency_rate: String(
-                                  Number(c.agency_rate ?? 0) || 0,
-                                ),
-                              };
-                              return (
-                                <tr
-                                  key={key}
-                                  className='border-b border-slate-700/80'
-                                >
-                                  <td className='px-2 py-1.5 align-middle text-white'>
-                                    {c.charge_type || 'Pay item'}
-                                  </td>
-                                  <td className='px-2 py-1.5 align-middle text-slate-300'>
-                                    {c.unit || '—'}
-                                  </td>
-                                  <td className='px-2 py-1.5 align-middle'>
-                                    <Input
-                                      type='number'
-                                      step='0.01'
-                                      value={rateDraft.driver_rate}
-                                      onChange={(e) =>
-                                        updatePayRate(key, {
-                                          driver_rate: e.target.value,
-                                        })
-                                      }
-                                      className='h-8 bg-slate-900 border-slate-600 text-white'
-                                    />
-                                  </td>
-                                  <td className='px-2 py-1.5 align-middle'>
-                                    <Input
-                                      type='number'
-                                      step='0.01'
-                                      value={rateDraft.agency_rate}
-                                      onChange={(e) =>
-                                        updatePayRate(key, {
-                                          agency_rate: e.target.value,
-                                        })
-                                      }
-                                      className='h-8 bg-slate-900 border-slate-600 text-white'
-                                    />
-                                  </td>
-                                  <td className='px-2 py-1.5 align-middle'>
-                                    <Input
-                                      type='number'
-                                      min={0}
-                                      step='0.01'
-                                      value={additionalQuantities[key] ?? ''}
-                                      onChange={(e) =>
-                                        setAdditionalQuantities((prev) => ({
-                                          ...prev,
-                                          [key]: e.target.value,
-                                        }))
-                                      }
-                                      placeholder='0'
-                                      className='h-8 bg-slate-900 border-slate-600 text-white'
-                                    />
-                                  </td>
-                                  <td className='px-1 py-1.5' />
-                                </tr>
-                              );
-                            })
-                          )}
-
-                          {customPayLines.map((line) => (
-                            <tr
-                              key={line.id}
-                              className='border-b border-slate-700/80 last:border-0'
-                            >
-                              <td className='px-2 py-1.5 align-middle'>
-                                <Input
-                                  value={line.label}
-                                  onChange={(e) =>
-                                    setCustomPayLines((prev) =>
-                                      prev.map((row) =>
-                                        row.id === line.id
-                                          ? { ...row, label: e.target.value }
-                                          : row,
-                                      ),
-                                    )
-                                  }
-                                  placeholder='Pay item'
-                                  className='h-8 bg-slate-900 border-slate-600 text-white'
-                                />
+                              <td className='px-2 py-1.5 align-middle text-slate-300'>
+                                {distanceUnit}
                               </td>
-                              <td className='px-2 py-1.5 align-middle'>
-                                <Input
-                                  value={line.unit}
-                                  onChange={(e) =>
-                                    setCustomPayLines((prev) =>
-                                      prev.map((row) =>
-                                        row.id === line.id
-                                          ? { ...row, unit: e.target.value }
-                                          : row,
-                                      ),
-                                    )
-                                  }
-                                  placeholder='ea'
-                                  className='h-8 bg-slate-900 border-slate-600 text-white'
-                                />
-                              </td>
-                              <td className='px-2 py-1.5 align-middle'>
-                                <Input
-                                  type='number'
-                                  step='0.01'
-                                  value={line.driver_rate}
-                                  onChange={(e) =>
-                                    setCustomPayLines((prev) =>
-                                      prev.map((row) =>
-                                        row.id === line.id
-                                          ? {
-                                              ...row,
-                                              driver_rate: e.target.value,
-                                            }
-                                          : row,
-                                      ),
-                                    )
-                                  }
-                                  className='h-8 bg-slate-900 border-slate-600 text-white'
-                                />
-                              </td>
-                              <td className='px-2 py-1.5 align-middle'>
-                                <Input
-                                  type='number'
-                                  step='0.01'
-                                  value={line.agency_rate}
-                                  onChange={(e) =>
-                                    setCustomPayLines((prev) =>
-                                      prev.map((row) =>
-                                        row.id === line.id
-                                          ? {
-                                              ...row,
-                                              agency_rate: e.target.value,
-                                            }
-                                          : row,
-                                      ),
-                                    )
-                                  }
-                                  className='h-8 bg-slate-900 border-slate-600 text-white'
-                                />
+                              <td className='px-2 py-1.5 align-middle text-slate-200'>
+                                $
+                                {Number(distanceRateDraft.driver_rate).toFixed(
+                                  2,
+                                )}
                               </td>
                               <td className='px-2 py-1.5 align-middle'>
                                 <Input
                                   type='number'
                                   min={0}
                                   step='0.01'
-                                  value={line.quantity}
+                                  value={newTripDistance}
                                   onChange={(e) =>
-                                    setCustomPayLines((prev) =>
-                                      prev.map((row) =>
-                                        row.id === line.id
-                                          ? {
-                                              ...row,
-                                              quantity: e.target.value,
-                                            }
-                                          : row,
-                                      ),
-                                    )
+                                    setNewTripDistance(e.target.value)
                                   }
+                                  required
+                                  placeholder='0'
                                   className='h-8 bg-slate-900 border-slate-600 text-white'
                                 />
                               </td>
-                              <td className='px-1 py-1.5 align-middle'>
-                                <Button
-                                  type='button'
-                                  size='icon'
-                                  variant='ghost'
-                                  title='Remove'
-                                  className='h-7 w-7 text-slate-400 hover:text-destructive'
-                                  onClick={() =>
-                                    setCustomPayLines((prev) =>
-                                      prev.filter((row) => row.id !== line.id),
-                                    )
-                                  }
+                            </tr>
+
+                            {loadingCharges ? (
+                              <tr>
+                                <td
+                                  colSpan={4}
+                                  className='px-2 py-4 text-center text-sm text-slate-400'
                                 >
-                                  <Trash2 className='h-3.5 w-3.5' />
-                                </Button>
-                              </td>
-                            </tr>
-                          ))}
+                                  <span className='inline-flex items-center gap-2'>
+                                    <Spinner className='h-4 w-4' />
+                                    Loading Rate Card items…
+                                  </span>
+                                </td>
+                              </tr>
+                            ) : (
+                              rateCardCharges.map((c) => {
+                                const key = c.key ?? c.charge_type;
+                                const rateDraft = payRates[key] ?? {
+                                  driver_rate: String(
+                                    resolveClassDriverRate(
+                                      c.driver_rate,
+                                      c.driver_rates_by_class,
+                                      driverClassCode,
+                                    ),
+                                  ),
+                                  agency_rate: String(
+                                    Number(c.agency_rate ?? 0) || 0,
+                                  ),
+                                };
+                                return (
+                                  <tr
+                                    key={key}
+                                    className='border-b border-slate-700/80'
+                                  >
+                                    <td className='px-2 py-1.5 align-middle text-white'>
+                                      {c.charge_type || 'Pay item'}
+                                    </td>
+                                    <td className='px-2 py-1.5 align-middle text-slate-300'>
+                                      {c.unit || '—'}
+                                    </td>
+                                    <td className='px-2 py-1.5 align-middle text-slate-200'>
+                                      $
+                                      {Number(rateDraft.driver_rate).toFixed(2)}
+                                    </td>
+                                    <td className='px-2 py-1.5 align-middle'>
+                                      <Input
+                                        type='number'
+                                        min={0}
+                                        step='0.01'
+                                        value={additionalQuantities[key] ?? ''}
+                                        onChange={(e) =>
+                                          setAdditionalQuantities((prev) => ({
+                                            ...prev,
+                                            [key]: e.target.value,
+                                          }))
+                                        }
+                                        placeholder='0'
+                                        className='h-8 bg-slate-900 border-slate-600 text-white'
+                                      />
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            )}
 
-                          {!loadingCharges &&
-                          rateCardCharges.length === 0 &&
-                          customPayLines.length === 0 ? (
-                            <tr>
-                              <td
-                                colSpan={6}
-                                className='px-2 py-3 text-center text-xs text-slate-500'
-                              >
-                                {newTripEmployerId && newTripDate
-                                  ? 'No Rate Card add-ons for this date. Use Add pay item for extras.'
-                                  : 'Select employer and date to load Rate Card items.'}
-                              </td>
-                            </tr>
-                          ) : null}
-                        </>
-                      );
-                    })()}
-                  </tbody>
-                </table>
+                            {!loadingCharges &&
+                            rateCardCharges.length === 0 ? (
+                              <tr>
+                                <td
+                                  colSpan={4}
+                                  className='px-2 py-3 text-center text-xs text-slate-500'
+                                >
+                                  No Rate Card add-ons for this customer/date.
+                                </td>
+                              </tr>
+                            ) : null}
+                          </>
+                        );
+                      })()}
+                    </tbody>
+                  </table>
+                </div>
+                <div className='space-y-1.5'>
+                  <Label className='text-slate-300'>Notes</Label>
+                  <Input
+                    value={newTripNotes}
+                    onChange={(e) => setNewTripNotes(e.target.value)}
+                    placeholder='Optional'
+                    className='h-9 bg-slate-700 border-slate-600 text-white'
+                  />
+                </div>
               </div>
-              <Button
-                type='button'
-                variant='ghost'
-                size='sm'
-                className='h-8 text-slate-300 hover:text-white'
-                onClick={() =>
-                  setCustomPayLines((prev) => [
-                    ...prev,
-                    createCustomPayLineDraft(),
-                  ])
-                }
-              >
-                <PlusCircle className='h-4 w-4' />
-                Add pay item
-              </Button>
-              <div className='space-y-1.5'>
-                <Label className='text-slate-300'>Notes</Label>
-                <Input
-                  value={newTripNotes}
-                  onChange={(e) => setNewTripNotes(e.target.value)}
-                  placeholder='Optional'
-                  className='h-9 bg-slate-700 border-slate-600 text-white'
-                />
-              </div>
-            </div>
 
-            <DialogFooter className='shrink-0 gap-2 border-t border-slate-700 px-6 py-4 sm:justify-end'>
-              <Button
-                type='button'
-                variant='outline'
-                onClick={() => setAddTripOpen(false)}
-                disabled={saving}
-              >
-                Cancel
-              </Button>
-              <Button
-                type='submit'
-                disabled={saving}
-                className='bg-emerald-600 text-white hover:bg-emerald-500'
-              >
-                {saving ? (
-                  <Loader2 className='h-4 w-4 animate-spin' />
-                ) : (
-                  'Add trip'
-                )}
-              </Button>
-            </DialogFooter>
-          </form>
+              <DialogFooter className='shrink-0 gap-2 border-t border-slate-700 px-6 py-4 sm:justify-end'>
+                <Button
+                  type='button'
+                  variant='outline'
+                  onClick={() => setAddTripStep('date')}
+                  disabled={saving}
+                  className={TOOLBAR_SECONDARY}
+                >
+                  Back
+                </Button>
+                <Button
+                  type='submit'
+                  disabled={saving}
+                  className='bg-emerald-600 text-white hover:bg-emerald-500'
+                >
+                  {saving ? (
+                    <Loader2 className='h-4 w-4 animate-spin' />
+                  ) : (
+                    'Add trip'
+                  )}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
         </DialogContent>
       </Dialog>
     </div>
@@ -1004,7 +855,7 @@ function TripCard({
               Trip #{trip.trip_number || trip.id}
             </span>
             <span className='text-slate-400'>
-              — {trip.employer?.name ?? `Employer #${trip.employer_id}`}
+              — {trip.employer?.name ?? `Customer #${trip.employer_id}`}
             </span>
             {trip.minimum_applied && (
               <Badge variant='secondary' className='text-xs'>
@@ -1016,7 +867,7 @@ function TripCard({
             <Button
               variant='ghost'
               size='sm'
-              className='text-destructive hover:text-destructive'
+              className='text-red-400 hover:text-red-300 hover:bg-slate-700'
               onClick={() => onDeleteTrip(trip.id)}
             >
               <Trash2 className='h-4 w-4' />

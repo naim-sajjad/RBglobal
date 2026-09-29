@@ -19,12 +19,14 @@ class Timesheet extends Model
         'week_end_date',
         'status',
         'submitted_at',
+        'submitted_by_user_id',
         'approved_at',
         'approved_by',
         'paid_at',
         'paid_by',
         'reject_reason',
         'notes',
+        'created_by_user_id',
         'weekly_total',
         'adjusted_at',
         'adjusted_by',
@@ -58,6 +60,16 @@ class Timesheet extends Model
     public function approver(): BelongsTo
     {
         return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    public function createdBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by_user_id');
+    }
+
+    public function submittedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'submitted_by_user_id');
     }
 
     public function trips(): HasMany
