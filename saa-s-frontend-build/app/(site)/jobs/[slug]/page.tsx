@@ -4,14 +4,14 @@ import { ArrowLeft, ArrowRight, CheckCircle2, MapPin } from "lucide-react"
 import { SiteHeader } from "@/components/web/Header"
 import { SiteFooter } from "@/components/footer"
 import type { JobPost } from "@/app/dashboard/services/jobService"
-import { jobs as staticJobs } from "@/lib/jobs"
-import { applyStaticJobImage, getJobApplyHref, staticJobToPost } from "@/lib/job-normalizers"
+import { getJobApplyHref } from "@/lib/job-normalizers"
+import { JobRequirement } from "@/components/job-requirement"
 
 type JobPageProps = {
   params: Promise<{ slug: string }>
 }
 
-const apiBaseUrl = (process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000").replace(/\/$/, "")
+const apiBaseUrl = (process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000").replace(/\/$/, "").replace(/\/api\/v1$/, "/api")
 const apiUrl = apiBaseUrl.endsWith("/api") ? apiBaseUrl : `${apiBaseUrl}/api`
 
 async function fetchApiJob(slug: string): Promise<JobPost | null> {
@@ -27,10 +27,7 @@ async function fetchApiJob(slug: string): Promise<JobPost | null> {
 }
 
 async function fetchJob(slug: string): Promise<JobPost | null> {
-  const apiJob = await fetchApiJob(slug)
-  if (apiJob) return applyStaticJobImage(apiJob)
-
-  return staticJobs.map(staticJobToPost).find((job) => job.slug === slug) ?? null
+  return fetchApiJob(slug)
 }
 
 export async function generateMetadata({ params }: JobPageProps): Promise<Metadata> {
@@ -81,12 +78,12 @@ export default async function JobDetailPage({ params }: JobPageProps) {
 
           <section className="mt-10 rounded-3xl border border-gray-200 bg-white p-6 shadow-xl shadow-gray-900/5 sm:p-8 lg:p-10">
             <h2 className="text-2xl font-bold text-gray-950">Job Details</h2>
-            {job.bullets.length ? (
+            {job.description ? <div className="mt-6 text-base leading-relaxed text-gray-700 [&_p]:my-4 [&_h1]:my-5 [&_h1]:text-3xl [&_h2]:my-5 [&_h2]:text-2xl [&_h3]:my-4 [&_h3]:text-xl [&_h1]:font-bold [&_h2]:font-bold [&_h3]:font-bold [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-6 [&_ol]:pl-6 [&_a]:underline [&_img]:max-w-full [&_blockquote]:border-l-4 [&_blockquote]:pl-5 [&_pre]:overflow-x-auto [&_pre]:whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: job.description }} /> : job.bullets.length ? (
               <ul className="mt-6 space-y-3">
                 {job.bullets.map((bullet) => (
                   <li key={bullet} className="flex items-start gap-3 text-base leading-relaxed text-gray-700">
                     <CheckCircle2 className="mt-1 h-5 w-5 shrink-0 text-brand-light" />
-                    <span>{bullet}</span>
+                    <JobRequirement text={bullet} />
                   </li>
                 ))}
               </ul>

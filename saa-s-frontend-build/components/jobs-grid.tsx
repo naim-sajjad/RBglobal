@@ -4,22 +4,24 @@ import { useMemo, useState } from "react"
 import { useEffect } from "react"
 import { motion, AnimatePresence } from "motion/react"
 import { MapPin, ArrowRight, CheckCircle2 } from "lucide-react"
-import { jobs as allJobs } from "@/lib/jobs"
-import { getPublicJobs, type JobPost } from "@/app/dashboard/services/jobService"
-import { getJobApplyHref, mergeJobsWithApiPriority, staticJobToPost } from "@/lib/job-normalizers"
-
-const categories = ["All", "Trucking", "Warehousing", "General Labour", "Office & Accounting"]
-
-const staticJobs = allJobs.map(staticJobToPost)
+import { getErrorMessage } from "@/app/dashboard/services/api"
+import { getPublicJobs, getJobCategories, type JobPost } from "@/app/dashboard/services/jobService"
+import { getJobApplyHref } from "@/lib/job-normalizers"
+import { JobRequirement } from "@/components/job-requirement"
 
 export function JobsGrid() {
+  const [categories, setCategories] = useState<string[]>(["All"])
   const [active, setActive] = useState("All")
-  const [jobs, setJobs] = useState<JobPost[]>(staticJobs)
+  const [jobs, setJobs] = useState<JobPost[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
 
   useEffect(() => {
+    getJobCategories(false).then(items => setCategories(["All", ...items.map(item => item.name)])).catch(() => {})
     getPublicJobs({ per_page: 100, sort: "latest" })
-      .then((response) => setJobs(mergeJobsWithApiPriority(response.data, staticJobs)))
-      .catch(() => setJobs(staticJobs))
+      .then((response) => setJobs(response.data))
+      .catch(error => setError(getErrorMessage(error)))
+      .finally(() => setLoading(false))
   }, [])
 
   const filtered = useMemo(
@@ -56,6 +58,9 @@ export function JobsGrid() {
         </div>
 
         {/* grid */}
+        {loading && <p className="mb-6 text-center text-muted-foreground">Loading jobs...</p>}
+        {error && <p role="alert" className="mb-6 text-center text-destructive">{error}</p>}
+        {!loading && !error && !filtered.length && <p className="mb-6 text-center text-muted-foreground">No jobs are currently available in this category.</p>}
         <motion.div layout className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           <AnimatePresence mode="popLayout">
             {filtered.map((job, i) => (
@@ -91,7 +96,7 @@ export function JobsGrid() {
                     {job.bullets.map((b) => (
                       <li key={b} className="flex items-start gap-2 text-sm text-foreground/80">
                         <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-brand-light" />
-                        <span>{b}</span>
+                        <JobRequirement text={b} />
                       </li>
                     ))}
                     {job.note && (

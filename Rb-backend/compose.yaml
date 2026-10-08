@@ -32,6 +32,24 @@ services:
             - mysql
             - redis
             - mailpit
+    newsletter-worker:
+        image: sail-8.5/app
+        working_dir: /var/www/html
+        entrypoint: ['/bin/bash', '/var/www/html/docker/start-container.sh']
+        command: ['php', 'artisan', 'queue:work', '--queue=newsletter', '--sleep=3', '--tries=1', '--timeout=60', '--max-time=3600']
+        restart: unless-stopped
+        environment:
+            WWWUSER: '${WWWUSER}'
+            LARAVEL_SAIL: 1
+        volumes:
+            - '.:/var/www/html'
+            - 'sail-vendor:/var/www/html/vendor'
+            - 'sail-composer:/.composer'
+        networks:
+            - sail
+        depends_on:
+            - mysql
+            - laravel.test
     mysql:
         image: 'mysql:8.4'
         ports:

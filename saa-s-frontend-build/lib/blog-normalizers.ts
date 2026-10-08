@@ -64,6 +64,7 @@ export function normalizeApiBlogPost(post: BlogPost): PublicBlogPost {
   return {
     ...normalizeApiBlogSummary(post),
     content: post.content ?? post.excerpt ?? "",
+    contentFormat: post.content_format,
     seoTitle: post.seo_title,
     metaDescription: post.meta_description,
     cta: {

@@ -24,6 +24,7 @@ class StoreJobPostRequest extends FormRequest
             'bullets' => ['nullable'],
             'bullets.*' => ['string', 'max:500'],
             'note' => ['nullable', 'string', 'max:1000'],
+            'description' => ['nullable', 'string', 'max:100000'],
             'application_email' => ['nullable', 'email', 'max:255'],
             'application_url' => ['nullable', 'url', 'max:255'],
             'status' => ['required', Rule::in([JobPost::STATUS_DRAFT, JobPost::STATUS_PUBLISHED, JobPost::STATUS_CLOSED, JobPost::STATUS_ARCHIVED])],

@@ -5,9 +5,10 @@ export function slugifyJob(value: string) {
   return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
 }
 
-export function getJobApplyHref(job: Pick<JobPost, "title" | "location">) {
-  const position = job.title.includes(" | ") ? job.title : `${job.title} | ${job.location}`
-  return `/apply-form/?job=${encodeURIComponent(position)}`
+export function getJobApplyHref(job: Pick<JobPost, "title" | "location" | "application_url" | "application_email">) {
+  if (job.application_url && /^https?:\/\//i.test(job.application_url)) return job.application_url
+  if (job.application_email) return `mailto:${job.application_email}?subject=${encodeURIComponent(`Application for ${job.title}`)}`
+  return `/apply-form/?job=${encodeURIComponent(job.title)}`
 }
 
 export function staticJobToPost(job: Job): JobPost {

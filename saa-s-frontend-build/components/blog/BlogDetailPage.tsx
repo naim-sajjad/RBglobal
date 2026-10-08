@@ -134,7 +134,7 @@ export function BlogDetailPage({ post, currentUrl }: BlogDetailPageProps) {
 
           <div className="mt-10 rounded-3xl border border-gray-200 bg-white p-6 shadow-xl shadow-gray-900/5 sm:p-8 lg:p-10">
             <div className="space-y-8 text-base leading-relaxed text-gray-700">
-              {renderContent(post.content || post.excerpt || "")}
+              {post.contentFormat === "html" ? <div className="[&_h1]:text-3xl [&_h2]:text-2xl [&_h3]:text-xl [&_h1]:font-bold [&_h2]:font-bold [&_h3]:font-bold [&_p]:my-4 [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-6 [&_ol]:pl-6 [&_a]:underline [&_img]:max-w-full [&_blockquote]:border-l-4 [&_blockquote]:pl-5 [&_pre]:overflow-x-auto [&_pre]:whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: post.content }} /> : renderContent(post.content || post.excerpt || "")}
             </div>
           </div>
 

@@ -230,6 +230,7 @@ $registerWebsitePublicRoutes = function (): void {
     Route::get('/blog-categories', [BlogCategoryController::class, 'publicIndex']);
     Route::get('/jobs', [JobPostController::class, 'publicIndex']);
     Route::get('/jobs/{slug}', [JobPostController::class, 'publicShow']);
+    Route::get('/job-categories', [\App\Http\Controllers\JobCategoryController::class, 'index']);
     Route::get('/job-posts', [JobPostController::class, 'publicIndex']);
     Route::get('/job-posts/{slug}', [JobPostController::class, 'publicShow']);
     Route::post('/job-applications', [JobApplicationController::class, 'store'])
@@ -281,6 +282,11 @@ Route::prefix('admin')->group(function (): void {
             Route::get('/newsletter-imports', [NewsletterSubscriberController::class, 'imports']);
             Route::get('/newsletter-imports/{importBatch}', [NewsletterSubscriberController::class, 'importShow']);
             Route::get('/newsletter-imports/{importBatch}/errors', [NewsletterSubscriberController::class, 'importErrors']);
+            Route::get('/newsletter-campaigns', [\App\Http\Controllers\NewsletterCampaignController::class, 'index']);
+            Route::post('/newsletter-campaigns', [\App\Http\Controllers\NewsletterCampaignController::class, 'store']);
+            Route::put('/newsletter-campaigns/{campaign}', [\App\Http\Controllers\NewsletterCampaignController::class, 'update']);
+            Route::post('/newsletter-campaigns/{campaign}/test', [\App\Http\Controllers\NewsletterCampaignController::class, 'test'])->middleware('throttle:10,1');
+            Route::post('/newsletter-campaigns/{campaign}/send', [\App\Http\Controllers\NewsletterCampaignController::class, 'send'])->middleware('throttle:5,1');
             Route::get('/newsletter-subscribers', [NewsletterSubscriberController::class, 'index']);
             Route::get('/newsletter-subscribers/{newsletterSubscriber}', [NewsletterSubscriberController::class, 'show']);
             Route::patch('/newsletter-subscribers/{newsletterSubscriber}/status', [NewsletterSubscriberController::class, 'updateStatus']);
@@ -302,6 +308,10 @@ Route::prefix('admin')->group(function (): void {
             Route::put('/blog-categories/{blogCategory}', [BlogCategoryController::class, 'update']);
             Route::delete('/blog-categories/{blogCategory}', [BlogCategoryController::class, 'destroy']);
 
+            Route::get('/job-categories', [\App\Http\Controllers\JobCategoryController::class, 'index']);
+            Route::post('/job-categories', [\App\Http\Controllers\JobCategoryController::class, 'store']);
+            Route::put('/job-categories/{id}', [\App\Http\Controllers\JobCategoryController::class, 'update']);
+            Route::delete('/job-categories/{id}', [\App\Http\Controllers\JobCategoryController::class, 'destroy']);
             Route::get('/jobs', [JobPostController::class, 'index']);
             Route::post('/jobs', [JobPostController::class, 'store']);
             Route::get('/jobs/{jobPost}', [JobPostController::class, 'show']);

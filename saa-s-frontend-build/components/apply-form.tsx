@@ -1,10 +1,10 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import Image from "next/image"
 import { CheckCircle2, FileText, Loader2, Send, Upload, X } from "lucide-react"
 import { getErrorMessage, publicWebsiteApi } from "@/app/dashboard/services/api"
-import { slugifyJob } from "@/lib/job-normalizers"
+import { getPublicJobs, type JobPost } from "@/app/dashboard/services/jobService"
 
 const inputClass =
   "mt-1.5 w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-3.5 text-sm text-gray-950 outline-none transition-all placeholder:text-gray-400 focus:border-[var(--accent-glow)] focus:bg-white focus:ring-4 focus:ring-[var(--accent-glow)]/10"
@@ -39,9 +39,15 @@ export function ApplyForm({ initialJob = "" }: { initialJob?: string }) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState(false)
-  const [selectedJob, setSelectedJob] = useState(
-    applicationJobs.includes(initialJob as (typeof applicationJobs)[number]) ? initialJob : "",
-  )
+  const [selectedJob, setSelectedJob] = useState(initialJob || "")
+  const [availableJobs, setAvailableJobs] = useState<JobPost[]>([])
+  const [loadingJobs, setLoadingJobs] = useState(true)
+  useEffect(() => {
+    getPublicJobs({ per_page: 100 }).then(response => {
+      setAvailableJobs(response.data)
+      setSelectedJob(current => response.data.some(job => job.title === current) ? current : "")
+    }).catch(e => setError(getErrorMessage(e))).finally(() => setLoadingJobs(false))
+  }, [])
   const licenseType = selectedJob.startsWith("AZ Driver")
     ? "AZ"
     : selectedJob === "Deep Reach Operator | Mississauga, ON" ? "FL" : null
@@ -51,7 +57,10 @@ export function ApplyForm({ initialJob = "" }: { initialJob?: string }) {
     setSubmitting(true); setError("")
     try {
       const payload = new FormData(event.currentTarget)
-      payload.set("job_slug", slugifyJob(selectedJob))
+      const job = availableJobs.find(item => item.title === selectedJob)
+      if (!job) throw new Error("Please select an available job.")
+      payload.set("job_slug", job.slug)
+      payload.set("job_id", String(job.id))
       if (resume) payload.set("resume", resume)
       await publicWebsiteApi.post("/job-applications", payload)
       setSuccess(true)
@@ -95,15 +104,15 @@ export function ApplyForm({ initialJob = "" }: { initialJob?: string }) {
             {error && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{error}</div>}
             <label className={labelClass}>
               Which position are you applying for? <span className="text-[var(--accent-glow)]">*</span>
-              <select name="job_title" required value={selectedJob} onChange={event => setSelectedJob(event.target.value)} className={inputClass}>
+              <select name="job_title" disabled={loadingJobs} required value={selectedJob} onChange={event => setSelectedJob(event.target.value)} className={inputClass}>
                 <option value="" disabled>Select a position</option>
-                {applicationJobs.map(job => <option key={job} value={job}>{job}</option>)}
+                {availableJobs.map(item=>item.title).map(job => <option key={job} value={job}>{job}</option>)}
               </select>
             </label>
             <div className="grid gap-5 sm:grid-cols-2">
               {fields.map(field => <label key={field.name} className={labelClass}>
-                {field.label}{!field.optional && <span className="text-[var(--accent-glow)]"> *</span>}
-                <input name={field.name} type={"type" in field ? field.type : "text"} required={!field.optional} placeholder={field.placeholder} className={inputClass} />
+                {field.label}{!("optional" in field && field.optional) && <span className="text-[var(--accent-glow)]"> *</span>}
+                <input name={field.name} type={"type" in field ? field.type : "text"} required={!("optional" in field && field.optional)} placeholder={field.placeholder} className={inputClass} />
               </label>)}
               {licenseType && <label className={labelClass}>
                 How old is your {licenseType} licence? <span className="text-[var(--accent-glow)]">*</span>
