@@ -31,7 +31,7 @@ class StoreBlogPostRequest extends FormRequest
             'cta_description' => ['nullable', 'string', 'max:1000'],
             'cta_button_label' => ['nullable', 'string', 'max:255'],
             'cta_button_url' => ['nullable', 'string', 'max:255'],
-            'content_format' => ['nullable', Rule::in(['markdown'])],
+            'content_format' => ['nullable', Rule::in(['markdown', 'html'])],
         ];
     }
 }

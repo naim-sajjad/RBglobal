@@ -7,6 +7,7 @@ use App\Http\Requests\UpdateBlogPostRequest;
 use App\Http\Requests\UpdateBlogPostStatusRequest;
 use App\Models\BlogPost;
 use App\Support\UniqueSlug;
+use App\Support\BlogHtml;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -140,8 +141,12 @@ class BlogPostController extends Controller
     private function payload(array $validated, ?BlogPost $post = null): array
     {
         $status = $validated['status'];
-        $publishedAt = $validated['published_at'] ?? $post?->published_at;
-        $content = $this->cleanMarkdownContent($validated['content']);
+        $publishedAt = array_key_exists('published_at', $validated)
+            ? $validated['published_at']
+            : $post?->published_at;
+        $content = ($validated['content_format'] ?? 'markdown') === 'html'
+            ? BlogHtml::clean($validated['content'])
+            : $this->cleanMarkdownContent($validated['content']);
         $readingTime = $validated['reading_time'] ?? null;
 
         if ($status === BlogPost::STATUS_PUBLISHED && ! $publishedAt) {
@@ -204,7 +209,9 @@ class BlogPostController extends Controller
             'slug' => $post->slug,
             'excerpt' => $post->excerpt,
             'featured_image' => $post->featured_image,
-            'featured_image_url' => $post->featured_image ? url(Storage::disk('public')->url($post->featured_image)) : null,
+            'featured_image_url' => $post->featured_image
+                ? (str_starts_with($post->featured_image, '/') ? $post->featured_image : url(Storage::disk('public')->url($post->featured_image)))
+                : null,
             'status' => $post->status,
             'published_at' => optional($post->published_at)->toISOString(),
             'reading_time' => $post->reading_time ?: $this->calculateReadingTime($post->content),
@@ -223,7 +230,7 @@ class BlogPostController extends Controller
         ];
 
         if ($includeContent) {
-            $data['content'] = $post->content;
+            $data['content'] = $post->content_format === 'html' ? BlogHtml::clean($post->content) : $post->content;
         }
 
         return $data;

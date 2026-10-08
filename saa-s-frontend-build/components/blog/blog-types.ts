@@ -17,6 +17,7 @@ export type PublicBlogSummary = {
 
 export type PublicBlogPost = PublicBlogSummary & {
   content: string
+  contentFormat?: string | null
   seoTitle?: string | null
   metaDescription?: string | null
   cta?: {

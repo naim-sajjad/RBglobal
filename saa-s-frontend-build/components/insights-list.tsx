@@ -7,14 +7,11 @@ import { getErrorMessage } from "@/app/dashboard/services/api"
 import { getPublicBlogPosts } from "@/app/dashboard/services/blogService"
 import { subscribeToNewsletter } from "@/app/dashboard/services/newsletterService"
 import type { PublicBlogSummary } from "@/components/blog/blog-types"
-import { mergeBlogSummaries, normalizeApiBlogSummary, normalizeStaticInsightSummary } from "@/lib/blog-normalizers"
-import { insights } from "@/lib/insights"
-
-const staticPosts = insights.map(normalizeStaticInsightSummary)
+import { normalizeApiBlogSummary } from "@/lib/blog-normalizers"
 
 export function InsightsList() {
-  const [posts, setPosts] = useState<PublicBlogSummary[]>(staticPosts)
-  const [loading, setLoading] = useState(false)
+  const [posts, setPosts] = useState<PublicBlogSummary[]>([])
+  const [loading, setLoading] = useState(true)
   const [blogError, setBlogError] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState("")
@@ -22,10 +19,9 @@ export function InsightsList() {
 
   useEffect(() => {
     getPublicBlogPosts({ per_page: 9, sort: "latest" })
-      .then((response) => setPosts(mergeBlogSummaries(staticPosts, response.data.map(normalizeApiBlogSummary))))
-      .catch(() => {
-        setPosts(staticPosts)
-        setBlogError("")
+      .then((response) => setPosts(response.data.map(normalizeApiBlogSummary)))
+      .catch((error) => {
+        setBlogError(getErrorMessage(error))
       })
       .finally(() => setLoading(false))
   }, [])

@@ -6,6 +6,7 @@ use App\Models\CareerGrowthRegistration;
 use App\Models\ContactSubmission;
 use App\Models\JobApplication;
 use App\Models\NewsletterSubscriber;
+use App\Support\FormSubmissionTimestamps;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -117,7 +118,7 @@ class AdminFormsController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => $paginator->items(),
+            'data' => array_map(fn ($row) => FormSubmissionTimestamps::serialize($row), $paginator->items()),
             'meta' => [
                 'current_page' => $paginator->currentPage(),
                 'last_page' => $paginator->lastPage(),

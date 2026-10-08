@@ -3,6 +3,21 @@
 import { api } from "./api"
 
 export type JobStatus = "draft" | "published" | "closed" | "archived"
+export type JobCategory = { id: number; name: string }
+
+export async function getJobCategories(admin = true) {
+  const response = await api.get<{ data: JobCategory[] }>(admin ? "/admin/job-categories" : "/job-categories")
+  return response.data.data
+}
+
+export async function saveJobCategory(name: string, id?: number) {
+  if (id) return (await api.put(`/admin/job-categories/${id}`, { name })).data
+  return (await api.post("/admin/job-categories", { name })).data
+}
+
+export async function deleteJobCategory(id: number) {
+  return (await api.delete(`/admin/job-categories/${id}`)).data
+}
 
 export type JobPost = {
   id: number | string
@@ -17,6 +32,7 @@ export type JobPost = {
   image_url?: string | null
   bullets: string[]
   note?: string | null
+  description?: string | null
   application_email?: string | null
   application_url?: string | null
   status: JobStatus

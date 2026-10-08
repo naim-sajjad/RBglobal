@@ -45,6 +45,9 @@ export function Sidebar() {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [websiteOpen, setWebsiteOpen] = useState(true);
+  const [jobsOpen, setJobsOpen] = useState(true);
+  const [blogsOpen, setBlogsOpen] = useState(true);
+  const [formsOpen, setFormsOpen] = useState(true);
 
   // Check if user is super-admin
   const isSuperAdmin =
@@ -214,16 +217,62 @@ export function Sidebar() {
                 </button>
                 {websiteOpen && (
                   <div className='ml-5 mt-1 space-y-1 border-l border-slate-600 pl-3'>
-                    {[
-                      ['Forms and Submissions', '/dashboard/forms', <ClipboardList key='forms' className='w-4 h-4' />],
-                      ['Blogs', '/dashboard/website/blogs', <Newspaper key='blog' className='w-4 h-4' />],
-                      ['Jobs', '/dashboard/website/jobs', <Briefcase key='job' className='w-4 h-4' />],
-                    ].map(([label, href, icon]) => (
-                      <Link key={String(href)} href={String(href)} onClick={() => setIsOpen(false)}
-                        className='flex items-center gap-2 px-3 py-2 text-sm text-slate-400 hover:text-white hover:bg-slate-700 rounded-md'>
-                        {icon}{label}
-                      </Link>
-                    ))}
+                    <div>
+                      <div className='flex items-center rounded-md text-sm text-slate-400 hover:bg-slate-700'>
+                        <Link href='/dashboard/forms' onClick={() => setIsOpen(false)} className='flex flex-1 items-center gap-2 px-3 py-2 hover:text-white'><ClipboardList className='h-4 w-4 shrink-0' />Forms and Submissions</Link>
+                        <button type='button' aria-label='Toggle Forms submenu' aria-expanded={formsOpen} onClick={() => setFormsOpen(open => !open)} className='p-2 hover:text-white'><ChevronDown className={`h-4 w-4 ${formsOpen ? 'rotate-180' : ''}`} /></button>
+                      </div>
+                      {formsOpen && <div className='ml-5 mt-1 border-l border-slate-600 pl-3'>
+                        <Link href='/dashboard/forms/subscribers' onClick={() => setIsOpen(false)} className='flex items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-400 hover:bg-slate-700 hover:text-white'><Users className='h-4 w-4 shrink-0' />Subscribers</Link>
+                        <Link href='/dashboard/forms/subscribers/campaigns' onClick={() => setIsOpen(false)} className='flex items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-400 hover:bg-slate-700 hover:text-white'><Mail className='h-4 w-4 shrink-0' />Promotional emails</Link>
+                      </div>}
+                    </div>
+                    <div>
+                      <div className='flex items-center rounded-md text-sm text-slate-400 hover:bg-slate-700'>
+                        <Link href='/dashboard/website/blogs' onClick={() => setIsOpen(false)}
+                          className='flex flex-1 items-center gap-2 px-3 py-2 hover:text-white'>
+                          <Newspaper className='w-4 h-4' />Blogs
+                        </Link>
+                        <button type='button' aria-label='Toggle Blogs submenu' aria-expanded={blogsOpen}
+                          aria-controls='blogs-submenu' onClick={() => setBlogsOpen(open => !open)}
+                          className='cursor-pointer rounded-md p-2 hover:text-white'>
+                          <ChevronDown className={`w-4 h-4 transition-transform ${blogsOpen ? 'rotate-180' : ''}`} />
+                        </button>
+                      </div>
+                      {blogsOpen && <div id='blogs-submenu' className='ml-5 mt-1 border-l border-slate-600 pl-3'>
+                        <Link href='/dashboard/website/blogs/new' onClick={() => setIsOpen(false)}
+                          className='flex items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-400 hover:bg-slate-700 hover:text-white'>
+                          <Newspaper className='h-4 w-4 shrink-0' />Add new blog
+                        </Link>
+                        <Link href='/dashboard/website/blogs/categories' onClick={() => setIsOpen(false)}
+                          className='flex items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-400 hover:bg-slate-700 hover:text-white'>
+                          <Layers className='h-4 w-4 shrink-0' />Blog categories
+                        </Link>
+                      </div>}
+                    </div>
+                    <div>
+                      <div className='flex items-center rounded-md text-sm text-slate-400 hover:bg-slate-700'>
+                        <Link href='/dashboard/website/jobs' onClick={() => setIsOpen(false)}
+                          className='flex flex-1 items-center gap-2 px-3 py-2 hover:text-white'>
+                          <Briefcase className='w-4 h-4' />Jobs
+                        </Link>
+                        <button type='button' aria-label='Toggle Jobs submenu' aria-expanded={jobsOpen}
+                          aria-controls='jobs-submenu' onClick={() => setJobsOpen(open => !open)}
+                          className='cursor-pointer rounded-md p-2 hover:text-white'>
+                          <ChevronDown className={`w-4 h-4 transition-transform ${jobsOpen ? 'rotate-180' : ''}`} />
+                        </button>
+                      </div>
+                      {jobsOpen && <div id='jobs-submenu' className='ml-5 mt-1 border-l border-slate-600 pl-3'>
+                        <Link href='/dashboard/website/jobs/new' onClick={() => setIsOpen(false)}
+                          className='flex items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-400 hover:bg-slate-700 hover:text-white'>
+                          <Briefcase className='h-4 w-4 shrink-0' />Add new job
+                        </Link>
+                        <Link href='/dashboard/website/jobs/categories' onClick={() => setIsOpen(false)}
+                          className='flex items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-400 hover:bg-slate-700 hover:text-white'>
+                          <Layers className='h-4 w-4 shrink-0' />Job categories
+                        </Link>
+                      </div>}
+                    </div>
                   </div>
                 )}
               </div>

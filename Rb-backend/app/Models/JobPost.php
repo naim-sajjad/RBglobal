@@ -26,6 +26,7 @@ class JobPost extends Model
         'image',
         'bullets',
         'note',
+        'description',
         'application_email',
         'application_url',
         'status',

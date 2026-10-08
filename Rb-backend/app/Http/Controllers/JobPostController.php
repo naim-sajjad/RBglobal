@@ -8,10 +8,12 @@ use App\Http\Requests\UpdateJobPostStatusRequest;
 use App\Models\JobPost;
 use App\Support\JobApplicationFormMapper;
 use App\Support\UniqueSlug;
+use App\Support\BlogHtml;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\DB;
 
 class JobPostController extends Controller
 {
@@ -126,24 +128,31 @@ class JobPostController extends Controller
     private function payload(array $validated, ?JobPost $job = null): array
     {
         $status = $validated['status'];
-        $publishedAt = $validated['published_at'] ?? $job?->published_at;
+        $publishedAt = array_key_exists('published_at', $validated)
+            ? $validated['published_at']
+            : $job?->published_at;
 
         if ($status === JobPost::STATUS_PUBLISHED && ! $publishedAt) {
             $publishedAt = now();
         }
 
         $mapping = JobApplicationFormMapper::forTitle($validated['title']);
+        $category = trim($validated['category']);
+        DB::table('job_categories')->insertOrIgnore(['name' => $category, 'created_at' => now(), 'updated_at' => now()]);
 
         return [
             'title' => $validated['title'],
             'slug' => $validated['slug'] ?? null,
             'location' => $validated['location'],
-            'category' => $validated['category'],
+            'category' => $category,
             'job_type' => $mapping['job_type'],
             'application_form_key' => $mapping['form_key'],
             'application_form_name' => $mapping['form_name'],
             'bullets' => $this->normalizeBullets($validated['bullets'] ?? []),
             'note' => $validated['note'] ?? null,
+            'description' => array_key_exists('description', $validated)
+                ? BlogHtml::clean($validated['description'] ?? '')
+                : $job?->description,
             'application_email' => $validated['application_email'] ?? null,
             'application_url' => $validated['application_url'] ?? null,
             'status' => $status,
@@ -211,9 +220,12 @@ class JobPostController extends Controller
             'application_form_key' => $job->application_form_key,
             'application_form_name' => $job->application_form_name,
             'image' => $job->image,
-            'image_url' => $job->image ? url(Storage::disk('public')->url($job->image)) : null,
+            'image_url' => $job->image
+                ? (str_starts_with($job->image, '/') ? $job->image : url(Storage::disk('public')->url($job->image)))
+                : null,
             'bullets' => $job->bullets ?? [],
             'note' => $job->note,
+            'description' => $job->description ? BlogHtml::clean($job->description) : null,
             'application_email' => $job->application_email,
             'application_url' => $job->application_url,
             'status' => $job->status,
