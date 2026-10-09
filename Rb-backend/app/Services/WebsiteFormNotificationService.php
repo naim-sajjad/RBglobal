@@ -87,6 +87,7 @@ class WebsiteFormNotificationService
             ],
             $registration->email,
             $name,
+            websiteMailbox: false,
         );
     }
 
@@ -118,6 +119,7 @@ class WebsiteFormNotificationService
         ?string $replyToName = null,
         ?string $attachmentPath = null,
         ?string $attachmentName = null,
+        bool $websiteMailbox = true,
     ): void {
         $to = self::recipient();
         if ($to === null) {
@@ -126,7 +128,9 @@ class WebsiteFormNotificationService
             return;
         }
 
-        [$fromAddress, $fromName] = self::fromAddress($to);
+        [$fromAddress, $fromName] = $websiteMailbox
+            ? [(string) config('mail.mailers.website.username'), 'R&B Services Plus']
+            : self::fromAddress($to);
         $mailable = new WebsiteFormSubmissionMail(
             $subject,
             $formName,
@@ -140,7 +144,7 @@ class WebsiteFormNotificationService
         );
 
         $errors = [];
-        foreach (self::mailerNames() as $mailer) {
+        foreach ($websiteMailbox ? ['website'] : self::mailerNames() as $mailer) {
             try {
                 Mail::mailer($mailer)
                     ->to([new Address($to, 'R&B Services Plus')])

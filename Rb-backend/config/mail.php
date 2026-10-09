@@ -37,6 +37,18 @@ return [
 
     'mailers' => [
 
+        // Dedicated transport for public contact, application and subscription notifications.
+        'website' => [
+            'transport' => 'smtp',
+            'scheme' => 'smtps',
+            'host' => env('WEBSITE_MAIL_HOST', 'mail.gennextglobaltech.ca'),
+            'port' => env('WEBSITE_MAIL_PORT', 465),
+            'username' => env('WEBSITE_MAIL_USERNAME', 'info@gennextglobaltech.ca'),
+            'password' => env('WEBSITE_MAIL_PASSWORD'),
+            'timeout' => 20,
+            'local_domain' => env('MAIL_EHLO_DOMAIN', parse_url((string) env('APP_URL', 'http://localhost'), PHP_URL_HOST)),
+        ],
+
         'smtp' => [
             'transport' => 'smtp',
             'scheme' => env('MAIL_SCHEME'),

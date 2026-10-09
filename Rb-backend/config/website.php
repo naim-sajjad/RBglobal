@@ -8,8 +8,8 @@ return [
     |--------------------------------------------------------------------------
     |
     | New frontend form entries are stored in the dashboard and also emailed
-    | using the existing Laravel MAIL_* transport. Only the recipient is
-    | specific to website forms.
+    | using a dedicated website SMTP transport for contact forms, job
+    | applications and subscriptions. Other mail settings stay independent.
     |
     */
 
