@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Spinner } from '@/components/ui/spinner';
-import { ArrowLeft, Building2 } from 'lucide-react';
+import { ArrowLeft, Building2, Mail } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { TenantCompanyProfile } from '@/lib/types';
 import { toast } from 'sonner';
@@ -25,6 +25,8 @@ export default function CompanyProfileSettingsPage() {
   const [clearanceEmail, setClearanceEmail] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [testEmail, setTestEmail] = useState('');
+  const [sendingTest, setSendingTest] = useState(false);
 
   const isSuperAdmin =
     user?.is_global_admin || user?.roles?.some((r) => r.name === 'super-admin') || false;
@@ -41,6 +43,7 @@ export default function CompanyProfileSettingsPage() {
       setPayStubCcEmails(res.pay_stub_cc_emails ?? '');
       setAdjustmentsEmail(res.adjustments_email ?? '');
       setClearanceEmail(res.clearance_email ?? '');
+      setTestEmail((prev) => prev || (res.company_email || user?.email || '').trim());
     } catch {
       setCompanyLegalName('');
       setCompanyAddress('');
@@ -77,6 +80,29 @@ export default function CompanyProfileSettingsPage() {
       toast.error(msg || 'Could not save (tenant context required)');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const sendTestMail = async () => {
+    const email = testEmail.trim();
+    if (!email) {
+      toast.error('Enter an email address to send the test');
+      return;
+    }
+    setSendingTest(true);
+    try {
+      const res = await apiClient.sendCompanyProfileTestMail(email);
+      toast.success(
+        res.mailer
+          ? `${res.message} (via ${res.mailer})`
+          : res.message || 'Test email sent',
+      );
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } })
+        ?.response?.data?.message;
+      toast.error(msg || 'Could not send test email');
+    } finally {
+      setSendingTest(false);
     }
   };
 
@@ -249,6 +275,55 @@ export default function CompanyProfileSettingsPage() {
               </Button>
             </>
           )}
+        </CardContent>
+      </Card>
+
+      <Card className="bg-slate-800 border-slate-700">
+        <CardHeader>
+          <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+            <Mail className="h-5 w-5" />
+            Outbound email (A2 Hosting)
+          </h2>
+          <p className="text-slate-500 text-sm font-normal">
+            Pay stubs, timesheet reviews, adjustment notices, and newsletters send through the
+            A2 cPanel mailbox in the API <code className="text-slate-400">.env</code> (
+            <code className="text-slate-400">MAIL_HOST</code>,{' '}
+            <code className="text-slate-400">MAIL_USERNAME</code>,{' '}
+            <code className="text-slate-400">MAIL_PASSWORD</code>). If SMTP is blocked on the
+            server, delivery falls back to cPanel sendmail.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="test_mail_to" className="text-slate-300">
+              Send a test email
+            </Label>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Input
+                id="test_mail_to"
+                type="email"
+                value={testEmail}
+                onChange={(e) => setTestEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="bg-slate-700 border-slate-600 text-white"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void sendTestMail()}
+                disabled={sendingTest || !testEmail.trim()}
+                className="border-slate-600 shrink-0"
+              >
+                {sendingTest ? <Spinner className="h-4 w-4" /> : 'Send test'}
+              </Button>
+            </div>
+            <p className="text-slate-500 text-xs">
+              On A2, create a mailbox in cPanel → Email Accounts, then set MAIL_* to that
+              mailbox (SSL port 465 or STARTTLS port 587). The From address must match the
+              mailbox. After changing .env run{' '}
+              <code className="text-slate-400">php artisan config:clear</code>.
+            </p>
+          </div>
         </CardContent>
       </Card>
     </div>

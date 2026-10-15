@@ -24,6 +24,112 @@ class TimesheetDocumentReviewController extends Controller
         }
     }
 
+    protected function currentDriverId(): ?int
+    {
+        $user = auth()->user();
+        if (! $user) {
+            return null;
+        }
+
+        $query = \App\Models\Driver::where('user_id', $user->id);
+        if (tenant('id')) {
+            $query->where('tenant_id', tenant('id'));
+        }
+
+        return $query->value('id')
+            ?? \App\Models\Driver::where('user_id', $user->id)->value('id');
+    }
+
+    /**
+     * Driver: request an adjustment on the latest pending review package.
+     */
+    public function requestAdjustmentAsDriver(Request $request, Timesheet $timesheet)
+    {
+        if ($timesheet->tenant_id !== tenant('id')) {
+            abort(403, 'Unauthorized');
+        }
+
+        $driverId = $this->currentDriverId();
+        if (! $driverId || (int) $timesheet->driver_id !== (int) $driverId) {
+            abort(403, 'You can only request an adjustment on your own timesheet.');
+        }
+
+        $validated = $request->validate([
+            'comment' => 'required|string|min:3|max:5000',
+        ]);
+
+        try {
+            $review = TimesheetDocumentReviewService::requestAdjustmentForDriver(
+                $timesheet,
+                (int) $driverId,
+                $validated['comment']
+            );
+        } catch (RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        $review->makeHidden(['token']);
+
+        return response()->json([
+            'message' => 'Adjustment request submitted. Admin will update the documents and send them again.',
+            'review' => $review,
+        ]);
+    }
+
+    /**
+     * Driver: list own review packages that can be (or have been) adjustment-requested.
+     */
+    public function listMyAdjustmentRequests(Request $request)
+    {
+        $driverId = $this->currentDriverId();
+        if (! $driverId) {
+            abort(403, 'Driver profile required.');
+        }
+
+        $validated = $request->validate([
+            'adjustment_status' => 'nullable|in:pending,open,in_progress,resolved,dismissed,all_open,all',
+            'per_page' => 'nullable|integer|min:1|max:100',
+        ]);
+
+        $query = TimesheetDocumentReview::query()
+            ->where('driver_id', $driverId)
+            ->whereIn('status', [
+                TimesheetDocumentReview::STATUS_PENDING,
+                TimesheetDocumentReview::STATUS_ADJUSTMENT_REQUESTED,
+            ])
+            ->with([
+                'timesheet.employer',
+            ])
+            ->orderByDesc('reviewed_at')
+            ->orderByDesc('id');
+
+        if (tenant('id')) {
+            $query->where('tenant_id', tenant('id'));
+        }
+
+        $filter = $validated['adjustment_status'] ?? 'all';
+        if ($filter === 'pending') {
+            $query->where('status', TimesheetDocumentReview::STATUS_PENDING);
+        } elseif ($filter === 'all_open') {
+            $query->where('status', TimesheetDocumentReview::STATUS_ADJUSTMENT_REQUESTED)
+                ->where(function ($q) {
+                    $q->whereIn('adjustment_status', [
+                        TimesheetDocumentReview::ADJUSTMENT_OPEN,
+                        TimesheetDocumentReview::ADJUSTMENT_IN_PROGRESS,
+                    ])->orWhereNull('adjustment_status');
+                });
+        } elseif (in_array($filter, ['open', 'in_progress', 'resolved', 'dismissed'], true)) {
+            $query->where('status', TimesheetDocumentReview::STATUS_ADJUSTMENT_REQUESTED)
+                ->where('adjustment_status', $filter);
+        }
+
+        $perPage = $validated['per_page'] ?? 50;
+        $page = $query->paginate($perPage);
+        $page->getCollection()->each(fn ($review) => $review->makeHidden(['token']));
+
+        return response()->json($page);
+    }
+
     /**
      * Admin: list driver adjustment requests (optionally filter by handling status).
      */

@@ -2,10 +2,16 @@
 
 namespace App\Services;
 
+use App\Mail\AdminAlertMail;
 use App\Models\AdminNotification;
 use App\Models\Timesheet;
 use App\Models\TimesheetDocumentReview;
 use App\Models\User;
+use App\Support\AdminMail;
+use Illuminate\Contracts\Mail\Mailer;
+use Illuminate\Support\Facades\Log;
+use Stancl\Tenancy\Database\Models\Tenant;
+use Throwable;
 
 class AdminNotificationService
 {
@@ -16,8 +22,12 @@ class AdminNotificationService
     {
         $review->loadMissing(['timesheet.employer', 'driver.user']);
         $timesheet = $review->timesheet;
-        $tenantId = $review->tenant_id ?? $timesheet?->tenant_id;
+        $tenantId = $review->tenant_id ?? $timesheet?->tenant_id ?? tenant('id');
         if (! $tenantId) {
+            Log::warning('Skipped admin adjustment email: missing tenant.', [
+                'review_id' => $review->id,
+            ]);
+
             return;
         }
 
@@ -51,16 +61,105 @@ class AdminNotificationService
             'href' => '/admin/timesheets/adjustment-requests?id='.$review->id,
         ];
 
+        try {
+            foreach (self::staffRecipients($tenantId) as $user) {
+                AdminNotification::create([
+                    'tenant_id' => $tenantId,
+                    'user_id' => $user->id,
+                    'type' => AdminNotification::TYPE_ADJUSTMENT_REQUESTED,
+                    'title' => $title,
+                    'message' => $message,
+                    'meta' => $meta,
+                ]);
+            }
+        } catch (Throwable $exception) {
+            Log::warning('Admin in-app notification failed for adjustment request.', [
+                'review_id' => $review->id,
+                'error' => $exception->getMessage(),
+            ]);
+        }
+
+        $comment = trim((string) ($review->adjustment_comment ?? ''));
+        $adminUrl = self::absoluteAdminUrl((string) $meta['href']);
+        $plain = $message;
+        if ($comment !== '') {
+            $plain .= "\n\nDriver comment:\n{$comment}";
+        }
+        $plain .= "\n\nOpen in admin: {$adminUrl}";
+
+        $html = '<p>'.e($message).'</p>';
+        if ($comment !== '') {
+            $html .= '<p><strong>Driver comment</strong></p><p>'.nl2br(e($comment)).'</p>';
+        }
+        $html .= '<p><a href="'.e($adminUrl).'">Open adjustment request</a></p>';
+
+        self::emailAdmins(
+            $tenantId,
+            $title.($period !== '' ? " – {$period}" : ''),
+            $plain,
+            $html,
+            includeAdjustmentsMailbox: true
+        );
+    }
+
+    /**
+     * Notify tenant staff when a driver confirms (approves) the invoice / calculation package.
+     */
+    public static function notifyDocumentsApproved(TimesheetDocumentReview $review): void
+    {
+        $review->loadMissing(['timesheet.employer', 'driver.user']);
+        $timesheet = $review->timesheet;
+        $tenantId = $review->tenant_id ?? $timesheet?->tenant_id ?? tenant('id');
+        if (! $tenantId) {
+            Log::warning('Skipped admin adjustment email: missing tenant.', [
+                'review_id' => $review->id,
+            ]);
+
+            return;
+        }
+
+        $driverName = trim((string) ($review->driver_name ?: $review->driver?->user?->name ?: 'Driver'));
+        $period = self::periodLabel($timesheet);
+        $employer = $timesheet?->employer?->name;
+
+        $title = 'Driver confirmed timesheet documents';
+        $message = "{$driverName} approved the invoice and calculation sheet";
+        if ($period !== '') {
+            $message .= " for {$period}";
+        }
+        if ($employer) {
+            $message .= " ({$employer})";
+        }
+        $message .= '.';
+
+        $href = '/admin/timesheets/'.(int) $review->timesheet_id;
+        $meta = [
+            'timesheet_id' => $review->timesheet_id,
+            'review_id' => $review->id,
+            'driver_id' => $review->driver_id,
+            'driver_name' => $driverName,
+            'href' => $href,
+        ];
+
         foreach (self::staffRecipients($tenantId) as $user) {
             AdminNotification::create([
                 'tenant_id' => $tenantId,
                 'user_id' => $user->id,
-                'type' => AdminNotification::TYPE_ADJUSTMENT_REQUESTED,
+                'type' => AdminNotification::TYPE_DOCUMENTS_APPROVED,
                 'title' => $title,
                 'message' => $message,
                 'meta' => $meta,
             ]);
         }
+
+        $adminUrl = self::absoluteAdminUrl($href);
+        self::emailAdmins(
+            $tenantId,
+            $title.($period !== '' ? " – {$period}" : ''),
+            $message."\n\nOpen in admin: {$adminUrl}",
+            '<p>'.e($message).'</p><p><a href="'.e($adminUrl).'">Open timesheet</a></p>',
+            includeAdjustmentsMailbox: true
+        );
     }
 
     /**
@@ -139,5 +238,107 @@ class AdminNotificationService
         $end = $timesheet->week_end_date?->format('M j, Y') ?? '';
 
         return trim("{$start} – {$end}", ' –');
+    }
+
+    private static function absoluteAdminUrl(string $path): string
+    {
+        $base = rtrim((string) env('FRONTEND_URL', 'http://localhost:3001'), '/');
+        $path = '/'.ltrim($path, '/');
+
+        return $base.$path;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function adminEmailAddresses(string $tenantId, bool $includeAdjustmentsMailbox): array
+    {
+        $emails = [];
+        $tenant = Tenant::query()->find($tenantId);
+
+        if ($includeAdjustmentsMailbox) {
+            $adjustments = trim((string) ($tenant?->adjustments_email ?? ''));
+            if ($adjustments !== '') {
+                $emails[] = $adjustments;
+            }
+        }
+
+        $companyEmail = trim((string) ($tenant?->company_email ?? ''));
+        if ($companyEmail !== '') {
+            $emails[] = $companyEmail;
+        }
+
+        $extra = (string) env('MAIL_ADMIN_NOTIFY', '');
+        foreach (preg_split('/[,\s]+/', $extra) ?: [] as $address) {
+            if ($address !== '') {
+                $emails[] = $address;
+            }
+        }
+
+        try {
+            foreach (self::staffRecipients($tenantId) as $user) {
+                $emails[] = (string) $user->email;
+            }
+        } catch (Throwable $exception) {
+            Log::warning('Could not load staff email recipients.', [
+                'tenant_id' => $tenantId,
+                'error' => $exception->getMessage(),
+            ]);
+        }
+
+        $unique = [];
+        foreach ($emails as $email) {
+            $normalized = strtolower(trim($email));
+            if ($normalized !== '' && filter_var($normalized, FILTER_VALIDATE_EMAIL)) {
+                $unique[$normalized] = $normalized;
+            }
+        }
+
+        if ($unique === []) {
+            $from = strtolower(trim((string) config('mail.from.address', '')));
+            if ($from !== '' && filter_var($from, FILTER_VALIDATE_EMAIL)) {
+                $unique[$from] = $from;
+            }
+        }
+
+        return array_values($unique);
+    }
+
+    private static function emailAdmins(
+        string $tenantId,
+        string $subject,
+        string $plainBody,
+        string $htmlBody,
+        bool $includeAdjustmentsMailbox = false
+    ): void {
+        $to = self::adminEmailAddresses($tenantId, $includeAdjustmentsMailbox);
+        if ($to === []) {
+            Log::warning('No admin email recipients for staff notification.', [
+                'tenant_id' => $tenantId,
+                'subject' => $subject,
+            ]);
+
+            return;
+        }
+
+        try {
+            AdminMail::send(function (Mailer $mailer) use ($to, $subject, $plainBody, $htmlBody): void {
+                $mailer->to($to)->send(new AdminAlertMail(
+                    emailSubject: $subject,
+                    htmlBody: $htmlBody,
+                    plainBody: $plainBody,
+                ));
+            });
+            Log::info('Admin notification email sent.', [
+                'subject' => $subject,
+                'to' => $to,
+            ]);
+        } catch (Throwable $exception) {
+            Log::warning('Admin notification email failed.', [
+                'subject' => $subject,
+                'to' => $to,
+                'error' => $exception->getMessage(),
+            ]);
+        }
     }
 }

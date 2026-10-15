@@ -11,9 +11,10 @@ use App\Models\TimesheetTrip;
 use App\Services\TimesheetCalculationService;
 use App\Services\Financial\TimesheetImportService;
 use App\Services\AdminNotificationService;
+use App\Support\AdminMail;
+use Illuminate\Contracts\Mail\Mailer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Mail;
 
 class TimesheetController extends Controller
 {
@@ -635,8 +636,10 @@ class TimesheetController extends Controller
             if (is_string($to) && $to !== '') {
                 $subject = 'Timesheet अपडेट / Updated';
                 $body = 'Your timesheet has been updated by the admin based on employer-provided invoice. Please log in and review the changes.';
-                Mail::raw($body, function ($m) use ($to, $subject) {
-                    $m->to($to)->subject($subject);
+                AdminMail::send(function (Mailer $mailer) use ($to, $subject, $body): void {
+                    $mailer->raw($body, function ($m) use ($to, $subject) {
+                        $m->to($to)->subject($subject);
+                    });
                 });
             }
         }

@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Support\AdminMail;
+use Illuminate\Contracts\Mail\Mailer;
 use Illuminate\Http\Request;
 use Stancl\Tenancy\Database\Models\Tenant;
 
@@ -81,5 +83,43 @@ class TenantCompanyProfileController extends Controller
         $tenant->save();
 
         return $this->show();
+    }
+
+    /**
+     * Send a test message through the A2 Hosting / admin mailers.
+     */
+    public function sendTest(Request $request)
+    {
+        $validated = $request->validate([
+            'email' => 'required|email|max:255',
+        ]);
+
+        $email = strtolower(trim($validated['email']));
+        $from = (string) config('mail.from.address');
+        $host = (string) config('mail.mailers.admin.host');
+        $port = (string) config('mail.mailers.admin.port');
+        $body = 'This is a test message from '.(string) config('app.name')
+            .".\n\nIf you received this, A2 Hosting outbound email is working for admin mail (pay stubs, timesheet reviews, newsletters)."
+            ."\n\nSMTP host: {$host}:{$port}\nFrom: {$from}";
+
+        try {
+            $mailerUsed = AdminMail::send(function (Mailer $mailer) use ($email, $body): void {
+                $mailer->raw($body, function ($message) use ($email): void {
+                    $message->to($email)->subject('A2 Hosting mail test');
+                });
+            });
+        } catch (\Throwable $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 422);
+        }
+
+        return response()->json([
+            'message' => "Test email sent to {$email}.",
+            'mailer' => $mailerUsed,
+            'from' => $from,
+            'host' => $host,
+            'port' => $port,
+        ]);
     }
 }

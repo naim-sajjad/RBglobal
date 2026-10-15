@@ -167,10 +167,12 @@ Route::prefix('v1/tenant')->middleware([
     Route::get('/timesheets/{timesheet}/documents/{document}/view', [TimesheetDocumentController::class, 'view']);
     Route::delete('/timesheets/{timesheet}/documents/{document}', [TimesheetDocumentController::class, 'destroy']);
     Route::get('/timesheet-document-adjustment-requests', [TimesheetDocumentReviewController::class, 'listAdjustmentRequests']);
+    Route::get('/driver/timesheet-document-adjustment-requests', [TimesheetDocumentReviewController::class, 'listMyAdjustmentRequests']);
     Route::get('/timesheet-document-adjustment-requests/{review}', [TimesheetDocumentReviewController::class, 'showAdjustmentRequest']);
     Route::put('/timesheet-document-reviews/{review}/adjustment', [TimesheetDocumentReviewController::class, 'updateAdjustment']);
     Route::get('/timesheets/{timesheet}/document-reviews', [TimesheetDocumentReviewController::class, 'index']);
     Route::post('/timesheets/{timesheet}/document-reviews/send', [TimesheetDocumentReviewController::class, 'send']);
+    Route::post('/timesheets/{timesheet}/document-reviews/request-adjustment', [TimesheetDocumentReviewController::class, 'requestAdjustmentAsDriver']);
 
     // Client billing (invoices from approved timesheet trips — billable lines only)
     Route::post('/billing/invoice-preview', [InvoiceFinancialController::class, 'preview']);
@@ -185,6 +187,7 @@ Route::prefix('v1/tenant')->middleware([
     // Tenant company profile (invoice client / billing identity)
     Route::get('/company-profile', [TenantCompanyProfileController::class, 'show']);
     Route::put('/company-profile', [TenantCompanyProfileController::class, 'update']);
+    Route::post('/company-profile/test-mail', [TenantCompanyProfileController::class, 'sendTest']);
 
     Route::get('/email-templates', [EmailTemplateController::class, 'index']);
     Route::put('/email-templates/{key}', [EmailTemplateController::class, 'update']);

@@ -49,15 +49,28 @@ return [
             'local_domain' => env('MAIL_EHLO_DOMAIN', parse_url((string) env('APP_URL', 'http://localhost'), PHP_URL_HOST)),
         ],
 
+        // A2 Hosting / cPanel mailbox used for admin emails (pay stubs, reviews, newsletters).
+        // SSL: MAIL_SCHEME=smtps MAIL_PORT=465  |  STARTTLS: MAIL_SCHEME= MAIL_PORT=587 MAIL_ENCRYPTION=tls
+        'admin' => [
+            'transport' => 'smtp',
+            'scheme' => env('MAIL_SCHEME', in_array(strtolower((string) env('MAIL_ENCRYPTION', '')), ['ssl', 'smtps'], true) ? 'smtps' : null),
+            'host' => env('MAIL_HOST', 'mail.gennextglobaltech.ca'),
+            'port' => env('MAIL_PORT', 465),
+            'username' => env('MAIL_USERNAME', 'noreply@gennextglobaltech.ca'),
+            'password' => env('MAIL_PASSWORD'),
+            'timeout' => 20,
+            'local_domain' => env('MAIL_EHLO_DOMAIN', parse_url((string) env('APP_URL', 'http://localhost'), PHP_URL_HOST)),
+        ],
+
         'smtp' => [
             'transport' => 'smtp',
-            'scheme' => env('MAIL_SCHEME'),
+            'scheme' => env('MAIL_SCHEME', in_array(strtolower((string) env('MAIL_ENCRYPTION', '')), ['ssl', 'smtps'], true) ? 'smtps' : null),
             'url' => env('MAIL_URL'),
-            'host' => env('MAIL_HOST', '127.0.0.1'),
-            'port' => env('MAIL_PORT', 2525),
-            'username' => env('MAIL_USERNAME'),
+            'host' => env('MAIL_HOST', 'mail.gennextglobaltech.ca'),
+            'port' => env('MAIL_PORT', 465),
+            'username' => env('MAIL_USERNAME', 'noreply@gennextglobaltech.ca'),
             'password' => env('MAIL_PASSWORD'),
-            'timeout' => null,
+            'timeout' => 20,
             'local_domain' => env('MAIL_EHLO_DOMAIN', parse_url((string) env('APP_URL', 'http://localhost'), PHP_URL_HOST)),
         ],
 
@@ -100,7 +113,8 @@ return [
         'failover' => [
             'transport' => 'failover',
             'mailers' => [
-                'smtp',
+                'admin',
+                'cpanel',
                 'log',
             ],
             'retry_after' => 60,
@@ -129,8 +143,8 @@ return [
     */
 
     'from' => [
-        'address' => env('MAIL_FROM_ADDRESS', 'hello@example.com'),
-        'name' => env('MAIL_FROM_NAME', 'Example'),
+        'address' => env('MAIL_FROM_ADDRESS', 'noreply@gennextglobaltech.ca'),
+        'name' => env('MAIL_FROM_NAME', 'R&B Services Plus'),
     ],
 
 ];

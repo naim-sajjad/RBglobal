@@ -8,11 +8,12 @@ use App\Mail\NewsletterSubscriptionConfirmation;
 use App\Models\ImportBatch;
 use App\Models\NewsletterSubscriber;
 use App\Services\WebsiteFormNotificationService;
+use App\Support\AdminMail;
 use Carbon\Carbon;
+use Illuminate\Contracts\Mail\Mailer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Storage;
@@ -84,7 +85,9 @@ class NewsletterSubscriberController extends Controller
         }
 
         try {
-            Mail::to($subscriber->email)->send(new NewsletterSubscriptionConfirmation($subscriber));
+            AdminMail::send(function (Mailer $mailer) use ($subscriber): void {
+                $mailer->to($subscriber->email)->send(new NewsletterSubscriptionConfirmation($subscriber));
+            });
         } catch (\Throwable $exception) {
             // A temporary mail transport problem must not undo a valid subscription.
             Log::warning('Newsletter confirmation email could not be sent.', [

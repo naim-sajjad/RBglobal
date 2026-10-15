@@ -7,8 +7,9 @@ use App\Models\NewsletterCampaign;
 use App\Models\NewsletterSubscriber;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use App\Support\AdminMail;
+use Illuminate\Contracts\Mail\Mailer;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Mail;
 
 class SendNewsletterPromotion implements ShouldQueue
 {
@@ -33,8 +34,10 @@ class SendNewsletterPromotion implements ShouldQueue
             return;
         }
         try {
-            Mail::to($subscriber->email)->send(new NewsletterPromotion($campaign->subject, $campaign->body,
-                url('/api/newsletter/unsubscribe/'.$subscriber->unsubscribe_token)));
+            AdminMail::send(function (Mailer $mailer) use ($subscriber, $campaign): void {
+                $mailer->to($subscriber->email)->send(new NewsletterPromotion($campaign->subject, $campaign->body,
+                    url('/api/newsletter/unsubscribe/'.$subscriber->unsubscribe_token)));
+            });
             $this->finish('sent');
         } catch (\Throwable $error) {
             $this->finish('failed');

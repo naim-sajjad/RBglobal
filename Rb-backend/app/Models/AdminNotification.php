@@ -9,6 +9,7 @@ class AdminNotification extends Model
 {
     public const TYPE_ADJUSTMENT_REQUESTED = 'timesheet_adjustment_requested';
     public const TYPE_TIMESHEET_SUBMITTED = 'timesheet_submitted';
+    public const TYPE_DOCUMENTS_APPROVED = 'timesheet_documents_approved';
 
     protected $fillable = [
         'tenant_id',
