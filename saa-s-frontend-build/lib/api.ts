@@ -708,6 +708,38 @@ class ApiClient {
     };
   }
 
+  async requestTimesheetAdjustment(
+    timesheetId: string | number,
+    comment: string,
+  ) {
+    const response = await this.client.post(
+      `/tenant/timesheets/${timesheetId}/document-reviews/request-adjustment`,
+      { comment },
+    );
+    return response.data as {
+      message: string;
+      review: import('./types').TimesheetDocumentReview;
+    };
+  }
+
+  async getMyDocumentAdjustmentRequests(params?: {
+    adjustment_status?: string;
+    per_page?: number;
+    page?: number;
+  }) {
+    const response = await this.client.get(
+      '/tenant/driver/timesheet-document-adjustment-requests',
+      { params },
+    );
+    return response.data as {
+      data: import('./types').TimesheetDocumentReview[];
+      current_page: number;
+      last_page: number;
+      total: number;
+      per_page: number;
+    };
+  }
+
   async getDocumentAdjustmentRequests(params?: {
     adjustment_status?: string;
     driver_id?: number;
@@ -899,6 +931,19 @@ class ApiClient {
   }) {
     const response = await this.client.put('/tenant/company-profile', data);
     return response.data;
+  }
+
+  async sendCompanyProfileTestMail(email: string) {
+    const response = await this.client.post('/tenant/company-profile/test-mail', {
+      email,
+    });
+    return response.data as {
+      message: string;
+      mailer?: string;
+      from?: string;
+      host?: string;
+      port?: string;
+    };
   }
 
   async getEmailTemplates() {

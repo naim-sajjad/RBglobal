@@ -9,7 +9,8 @@ use App\Models\TimesheetDocument;
 use App\Models\TimesheetDocumentReview;
 use App\Models\TimesheetDocumentReviewEvent;
 use App\Services\AdminNotificationService;
-use Illuminate\Support\Facades\Mail;
+use App\Support\AdminMail;
+use Illuminate\Contracts\Mail\Mailer;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -153,8 +154,10 @@ class TimesheetDocumentReviewService
     /**
      * Ensure the review is still pending, not expired, and pinned to the current documents.
      */
-    public static function assertCanRespond(TimesheetDocumentReview $review): void
-    {
+    public static function assertCanRespond(
+        TimesheetDocumentReview $review,
+        bool $requireFreshToken = true
+    ): void {
         if ($review->status === TimesheetDocumentReview::STATUS_SUPERSEDED) {
             throw new RuntimeException(
                 'This review link is outdated. Updated documents were sent — please use the latest email.'
@@ -169,12 +172,16 @@ class TimesheetDocumentReviewService
         if ($review->status !== TimesheetDocumentReview::STATUS_PENDING) {
             throw new RuntimeException('This review link is no longer active.');
         }
-        if ($review->token_expires_at && $review->token_expires_at->isPast()) {
+        if ($requireFreshToken && $review->token_expires_at && $review->token_expires_at->isPast()) {
             $review->update(['status' => TimesheetDocumentReview::STATUS_EXPIRED]);
             throw new RuntimeException('This review link has expired. Please ask admin to resend.');
         }
 
         $timesheet = $review->timesheet;
+        if (! $review->invoice_document_id || ! $review->calculation_document_id) {
+            return;
+        }
+
         $latestInvoice = self::latestDocument($timesheet, TimesheetDocument::TYPE_INVOICE);
         $latestCalc = self::latestDocument($timesheet, TimesheetDocument::TYPE_CALCULATION_SHEET);
 
@@ -208,6 +215,8 @@ class TimesheetDocumentReviewService
             'driver_email' => $review->driver_email,
         ]);
 
+        AdminNotificationService::notifyDocumentsApproved($review->fresh());
+
         return $review->fresh([
             'invoiceDocument',
             'calculationDocument',
@@ -217,9 +226,10 @@ class TimesheetDocumentReviewService
 
     public static function requestAdjustment(
         TimesheetDocumentReview $review,
-        string $comment
+        string $comment,
+        bool $requireFreshToken = true
     ): TimesheetDocumentReview {
-        self::assertCanRespond($review);
+        self::assertCanRespond($review, $requireFreshToken);
 
         $comment = trim($comment);
         if ($comment === '') {
@@ -248,6 +258,120 @@ class TimesheetDocumentReviewService
             'type' => 'timesheet_adjustment_requested',
             'title' => 'Adjustment request received',
             'message' => 'Your adjustment request was submitted. Admin will update the documents and send them again for review.',
+            'meta' => [
+                'timesheet_id' => $review->timesheet_id,
+                'review_id' => $review->id,
+            ],
+            'created_by_user_id' => null,
+        ]);
+
+        AdminNotificationService::notifyAdjustmentRequested($review->fresh());
+
+        return $review->fresh([
+            'invoiceDocument',
+            'calculationDocument',
+            'events',
+        ]);
+    }
+
+    /**
+     * Logged-in driver: request an adjustment on the latest pending review package.
+     * Token expiry is skipped so the portal still works after the email link expires.
+     */
+    public static function requestAdjustmentForDriver(
+        Timesheet $timesheet,
+        int $driverId,
+        string $comment
+    ): TimesheetDocumentReview {
+        if ((int) $timesheet->driver_id !== $driverId) {
+            throw new RuntimeException('You can only request an adjustment on your own timesheet.');
+        }
+
+        $open = $timesheet->documentReviews()
+            ->where('driver_id', $driverId)
+            ->where('status', TimesheetDocumentReview::STATUS_ADJUSTMENT_REQUESTED)
+            ->where(function ($q) {
+                $q->whereIn('adjustment_status', [
+                    TimesheetDocumentReview::ADJUSTMENT_OPEN,
+                    TimesheetDocumentReview::ADJUSTMENT_IN_PROGRESS,
+                ])->orWhereNull('adjustment_status');
+            })
+            ->orderByDesc('id')
+            ->first();
+
+        if ($open) {
+            throw new RuntimeException('An adjustment request is already open for this timesheet.');
+        }
+
+        $pending = $timesheet->documentReviews()
+            ->where('driver_id', $driverId)
+            ->where('status', TimesheetDocumentReview::STATUS_PENDING)
+            ->orderByDesc('id')
+            ->first();
+
+        if ($pending) {
+            return self::requestAdjustment($pending, $comment, false);
+        }
+
+        return self::createDriverInitiatedAdjustment($timesheet, $driverId, $comment);
+    }
+
+    /**
+     * Driver starts an adjustment request from the timesheet (no pending review package required).
+     */
+    public static function createDriverInitiatedAdjustment(
+        Timesheet $timesheet,
+        int $driverId,
+        string $comment
+    ): TimesheetDocumentReview {
+        $comment = trim($comment);
+        if ($comment === '') {
+            throw new RuntimeException('Please describe what needs to be corrected.');
+        }
+
+        $timesheet->loadMissing(['driver.user']);
+        $driver = $timesheet->driver;
+        if (! $driver || (int) $driver->id !== $driverId) {
+            throw new RuntimeException('You can only request an adjustment on your own timesheet.');
+        }
+
+        $invoice = self::latestDocument($timesheet, TimesheetDocument::TYPE_INVOICE);
+        $calculation = self::latestDocument($timesheet, TimesheetDocument::TYPE_CALCULATION_SHEET);
+
+        $review = TimesheetDocumentReview::create([
+            'tenant_id' => $timesheet->tenant_id ?: tenant('id'),
+            'timesheet_id' => $timesheet->id,
+            'invoice_document_id' => $invoice?->id,
+            'calculation_document_id' => $calculation?->id,
+            'driver_id' => $driverId,
+            'token' => Str::random(64),
+            'status' => TimesheetDocumentReview::STATUS_ADJUSTMENT_REQUESTED,
+            'token_expires_at' => null,
+            'sent_at' => null,
+            'sent_by' => null,
+            'driver_name' => $driver->user?->name,
+            'driver_email' => $driver->user?->email,
+            'reviewed_at' => now(),
+            'adjustment_comment' => $comment,
+            'adjustment_status' => TimesheetDocumentReview::ADJUSTMENT_OPEN,
+            'resolved_at' => null,
+            'resolved_by' => null,
+            'admin_notes' => null,
+        ]);
+
+        self::recordEvent($review, TimesheetDocumentReviewEvent::ADJUSTMENT_REQUESTED, 'driver', $driverId, [
+            'comment' => $comment,
+            'driver_name' => $review->driver_name,
+            'driver_email' => $review->driver_email,
+            'initiated_from' => 'timesheet',
+        ]);
+
+        DriverNotification::create([
+            'tenant_id' => $review->tenant_id,
+            'driver_id' => $review->driver_id,
+            'type' => 'timesheet_adjustment_requested',
+            'title' => 'Adjustment request received',
+            'message' => 'Your adjustment request was submitted. Admin will review it.',
             'meta' => [
                 'timesheet_id' => $review->timesheet_id,
                 'review_id' => $review->id,
@@ -319,6 +443,21 @@ class TimesheetDocumentReviewService
                 'admin_notes' => $payload['admin_notes'] ?? $review->admin_notes,
             ]
         );
+
+        $statusLabel = $review->fresh()?->statusLabel() ?? $adjustmentStatus;
+        DriverNotification::create([
+            'tenant_id' => $review->tenant_id,
+            'driver_id' => $review->driver_id,
+            'type' => 'timesheet_adjustment_status',
+            'title' => 'Adjustment request updated',
+            'message' => 'Your timesheet adjustment is now: '.$statusLabel.'.',
+            'meta' => [
+                'timesheet_id' => $review->timesheet_id,
+                'review_id' => $review->id,
+                'adjustment_status' => $adjustmentStatus,
+            ],
+            'created_by_user_id' => $adminUserId,
+        ]);
 
         return $review->fresh([
             'timesheet.employer',
@@ -417,16 +556,18 @@ class TimesheetDocumentReviewService
 
         $fromName = $company !== '' ? $company : (string) config('app.name', 'R&B Services');
 
-        Mail::to($review->driver_email)->send(new TimesheetDocumentReviewMail(
-            emailSubject: $rendered['subject'],
-            htmlBody: $rendered['body_html'],
-            plainBody: $rendered['body_text'],
-            invoiceFilename: $invoice->original_filename,
-            invoiceBinary: $invoiceBinary,
-            calculationFilename: $calculation->original_filename,
-            calculationBinary: $calcBinary,
-            fromName: $fromName,
-        ));
+        AdminMail::send(function (Mailer $mailer) use ($review, $rendered, $invoice, $invoiceBinary, $calculation, $calcBinary, $fromName): void {
+            $mailer->to($review->driver_email)->send(new TimesheetDocumentReviewMail(
+                emailSubject: $rendered['subject'],
+                htmlBody: $rendered['body_html'],
+                plainBody: $rendered['body_text'],
+                invoiceFilename: $invoice->original_filename,
+                invoiceBinary: $invoiceBinary,
+                calculationFilename: $calculation->original_filename,
+                calculationBinary: $calcBinary,
+                fromName: $fromName,
+            ));
+        });
     }
 
     private static function periodLabel(Timesheet $timesheet): string

@@ -242,7 +242,14 @@ export default function DriverTimesheetsPage() {
                             ts.latest_document_review?.status ?? null
                           }
                           driverReviewLabel={
-                            ts.latest_document_review?.status_label ?? null
+                            ts.latest_document_review?.status ===
+                            'adjustment_requested'
+                              ? ts.latest_document_review.status_label ||
+                                (ts.latest_document_review.adjustment_status
+                                  ? `Adjustment ${ts.latest_document_review.adjustment_status.replace('_', ' ')}`
+                                  : 'Adjustment Requested')
+                              : (ts.latest_document_review?.status_label ??
+                                null)
                           }
                         />
                       </TableCell>

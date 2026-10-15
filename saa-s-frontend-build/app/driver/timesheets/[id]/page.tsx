@@ -35,6 +35,7 @@ import {
   Send,
   Save,
   Loader2,
+  ClipboardList,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import {
@@ -47,6 +48,7 @@ import {
 import { toast } from 'sonner';
 import { cn, getApiErrorMessage } from '@/lib/utils';
 import { DriverTimesheetDocumentsCard } from '@/components/driver/driver-timesheet-documents-card';
+import { DriverTimesheetAdjustmentCard } from '@/components/driver/driver-timesheet-adjustment-card';
 import { TimesheetStatusBadge } from '@/components/timesheet-status-badge';
 import {
   suggestNextTripDate,
@@ -219,6 +221,17 @@ export default function DriverTimesheetDetailPage() {
 
   const canEdit = timesheet?.status === 'draft'; // Only drivers can edit when draft; admin can edit when submitted/under_review (separate page)
   const canSubmit = timesheet?.status === 'draft';
+  const latestReview =
+    timesheet?.latest_document_review ??
+    timesheet?.document_reviews?.[0] ??
+    null;
+  const openAdjustmentHandling =
+    latestReview?.adjustment_status || 'open';
+  const hasOpenAdjustment =
+    latestReview?.status === 'adjustment_requested' &&
+    (openAdjustmentHandling === 'open' ||
+      openAdjustmentHandling === 'in_progress');
+  const canRequestAdjustment = !hasOpenAdjustment;
 
   const handleAddTrip = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -369,6 +382,25 @@ export default function DriverTimesheetDetailPage() {
               null
             }
           />
+          {canRequestAdjustment ? (
+            <Button
+              size='sm'
+              type='button'
+              variant='outline'
+              className={cn(TOOLBAR_SECONDARY)}
+              onClick={() => {
+                document
+                  .getElementById('driver-adjustment')
+                  ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                window.setTimeout(() => {
+                  document.getElementById('adjustment-comment')?.focus();
+                }, 300);
+              }}
+            >
+              <ClipboardList className='h-3.5 w-3.5' />
+              Request adjustment
+            </Button>
+          ) : null}
           {canSubmit && (
             <Button
               size='sm'
@@ -505,6 +537,12 @@ export default function DriverTimesheetDetailPage() {
         documents={timesheet.documents ?? []}
         canUpload={timesheet.status !== 'paid'}
         onDocumentsChange={fetchTimesheet}
+      />
+
+      <DriverTimesheetAdjustmentCard
+        timesheetId={timesheet.id}
+        review={latestReview}
+        onUpdated={fetchTimesheet}
       />
 
       {/* Add trip — step 1: date, step 2: pay item quantities */}

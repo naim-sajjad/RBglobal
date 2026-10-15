@@ -4,8 +4,9 @@ namespace App\Services\Financial;
 
 use App\Mail\DriverPayStubMail;
 use App\Models\Payslip;
+use App\Support\AdminMail;
+use Illuminate\Contracts\Mail\Mailer;
 use Illuminate\Mail\Mailables\Address;
-use Illuminate\Support\Facades\Mail;
 use Stancl\Tenancy\Database\Models\Tenant;
 
 class PayStubEmailService
@@ -149,10 +150,12 @@ class PayStubEmailService
             $rendered['body_html'],
         );
 
-        $mail = Mail::to([new Address($to, $recipientName)]);
-        if ($cc !== []) {
-            $mail->cc($cc);
-        }
-        $mail->send($mailable);
+        AdminMail::send(function (Mailer $mailer) use ($to, $recipientName, $cc, $mailable): void {
+            $pending = $mailer->to([new Address($to, $recipientName)]);
+            if ($cc !== []) {
+                $pending->cc($cc);
+            }
+            $pending->send($mailable);
+        });
     }
 }

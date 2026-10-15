@@ -71,6 +71,11 @@ export function Sidebar() {
           href: '/driver/timesheets',
           icon: <FileSpreadsheet className='w-5 h-5' />,
         },
+        {
+          label: 'Adjustment requests',
+          href: '/driver/timesheets/adjustment-requests',
+          icon: <ClipboardList className='w-5 h-5' />,
+        },
       ]
     : [
         {

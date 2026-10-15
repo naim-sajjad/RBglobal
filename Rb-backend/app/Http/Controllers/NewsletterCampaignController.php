@@ -8,8 +8,9 @@ use App\Models\NewsletterCampaign;
 use App\Support\BlogHtml;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use App\Support\AdminMail;
+use Illuminate\Contracts\Mail\Mailer;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rule;
 
 class NewsletterCampaignController extends Controller
@@ -38,7 +39,9 @@ class NewsletterCampaignController extends Controller
     public function test(Request $request, NewsletterCampaign $campaign): JsonResponse
     {
         $data = $request->validate(['email' => ['required', 'email', 'max:255']]);
-        Mail::to($data['email'])->send(new NewsletterPromotion('[TEST] '.$campaign->subject, $campaign->body));
+        AdminMail::send(function (Mailer $mailer) use ($data, $campaign): void {
+            $mailer->to($data['email'])->send(new NewsletterPromotion('[TEST] '.$campaign->subject, $campaign->body));
+        });
         return response()->json(['message' => 'Test email sent.']);
     }
 
