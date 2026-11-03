@@ -76,6 +76,12 @@ class TimesheetDocumentController extends Controller
             ->orderByDesc('created_at')
             ->get();
 
+        foreach ($documents as $document) {
+            if ($document->document_type === TimesheetDocument::TYPE_CALCULATION_SHEET) {
+                TimesheetDocumentService::previewPayload($document);
+            }
+        }
+
         return response()->json($documents);
     }
 
@@ -114,27 +120,104 @@ class TimesheetDocumentController extends Controller
         $this->assertTimesheetAccess($timesheet);
 
         $allowedTypes = $this->isStaff()
-            ? 'invoice,calculation_sheet'
-            : 'invoice';
+            ? 'invoice,calculation_sheet,timesheet'
+            : 'invoice,calculation_sheet,timesheet';
 
         $validated = $request->validate([
             'document_type' => 'required|in:'.$allowedTypes,
-            'file' => 'required|file|mimes:pdf|max:10240',
+            'file' => 'required|file|max:10240',
         ]);
 
-        if (! $this->isStaff() && $validated['document_type'] !== TimesheetDocument::TYPE_INVOICE) {
-            abort(403, 'Drivers can only upload invoices.');
+        $file = $request->file('file');
+        $ext = strtolower($file->getClientOriginalExtension() ?: '');
+        $isSpreadsheet = in_array($ext, TimesheetDocumentService::SPREADSHEET_EXTENSIONS, true);
+        $isPdf = $ext === 'pdf';
+        if (! $isPdf && ! $isSpreadsheet) {
+            return response()->json([
+                'message' => 'Upload a PDF or Excel file (.xlsx, .xls, or .csv).',
+            ], 422);
+        }
+        $type = $validated['document_type'];
+
+        if (! $this->isStaff()) {
+            if ($type === TimesheetDocument::TYPE_INVOICE && ! $isPdf) {
+                return response()->json([
+                    'message' => 'Invoices must be a PDF. Upload a calculation sheet, then request an invoice.',
+                ], 422);
+            }
+            if ($type === TimesheetDocument::TYPE_CALCULATION_SHEET && ! $isSpreadsheet) {
+                return response()->json([
+                    'message' => 'Calculation sheets must be Excel files (.xlsx, .xls, or .csv).',
+                ], 422);
+            }
+            if ($type === TimesheetDocument::TYPE_TIMESHEET && ! $isPdf && ! $isSpreadsheet) {
+                return response()->json([
+                    'message' => 'Timesheets must be a PDF or Excel file (.xlsx, .xls, or .csv).',
+                ], 422);
+            }
         }
 
         $document = TimesheetDocumentService::upload(
             $timesheet,
-            $validated['document_type'],
-            $request->file('file'),
+            $type,
+            $file,
             auth()->id(),
             true
         );
 
-        return response()->json($document->load('creator:id,name'), 201);
+        return response()->json([
+            'document' => $document->load('creator:id,name'),
+            'preview' => $document->parsed_payload,
+        ], 201);
+    }
+
+    public function requestInvoice(Timesheet $timesheet)
+    {
+        $this->assertTimesheetAccess($timesheet);
+
+        $calculation = $timesheet->documents()
+            ->where('document_type', TimesheetDocument::TYPE_CALCULATION_SHEET)
+            ->orderByDesc('created_at')
+            ->first();
+
+        if (! $calculation) {
+            return response()->json([
+                'message' => 'Upload a calculation sheet in Excel before requesting an invoice.',
+            ], 422);
+        }
+
+        try {
+            $invoice = TimesheetDocumentService::generateInvoiceFromCalculation(
+                $timesheet,
+                $calculation,
+                auth()->id()
+            )->load('creator:id,name');
+        } catch (\Throwable $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        }
+
+        return response()->json([
+            'invoice' => $invoice,
+            'preview' => $calculation->parsed_payload,
+        ], 201);
+    }
+
+    public function preview(Timesheet $timesheet, TimesheetDocument $document)
+    {
+        $this->assertTimesheetAccess($timesheet);
+        $this->assertDocumentBelongsToTimesheet($timesheet, $document);
+
+        try {
+            $preview = TimesheetDocumentService::previewPayload($document);
+        } catch (\Throwable $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        }
+
+        if ($preview === null) {
+            return response()->json(['message' => 'No spreadsheet preview is available for this file.'], 422);
+        }
+
+        return response()->json($preview);
     }
 
     public function download(Timesheet $timesheet, TimesheetDocument $document)
@@ -161,11 +244,17 @@ class TimesheetDocumentController extends Controller
             abort(404, 'File not found.');
         }
 
+        $filename = addslashes($document->original_filename);
+        $mime = $document->mime_type
+            ?: (TimesheetDocumentService::isSpreadsheetFilename($document->original_filename)
+                ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                : 'application/pdf');
+
         return new StreamedResponse(function () use ($document) {
             echo Storage::disk('public')->get($document->file_path);
         }, 200, [
-            'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'inline; filename="'.addslashes($document->original_filename).'"',
+            'Content-Type' => $mime,
+            'Content-Disposition' => 'inline; filename="'.$filename.'"',
         ]);
     }
 
@@ -174,11 +263,15 @@ class TimesheetDocumentController extends Controller
         $this->assertTimesheetAccess($timesheet);
         $this->assertDocumentBelongsToTimesheet($timesheet, $document);
 
-        // Drivers may only remove invoices they uploaded (not generated docs / calc sheets).
         if (! $this->isStaff()) {
-            if ($document->source !== TimesheetDocument::SOURCE_UPLOADED
-                || $document->document_type !== TimesheetDocument::TYPE_INVOICE) {
-                abort(403, 'You can only delete invoices you uploaded.');
+            $ownUpload = $document->source === TimesheetDocument::SOURCE_UPLOADED
+                && in_array($document->document_type, [
+                    TimesheetDocument::TYPE_INVOICE,
+                    TimesheetDocument::TYPE_CALCULATION_SHEET,
+                    TimesheetDocument::TYPE_TIMESHEET,
+                ], true);
+            if (! $ownUpload) {
+                abort(403, 'You can only delete files you uploaded.');
             }
         }
 

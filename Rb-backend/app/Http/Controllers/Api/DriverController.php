@@ -68,6 +68,7 @@ class DriverController extends Controller
             $query->where(function ($qry) use ($like) {
                 $qry->whereRaw('LOWER(name) LIKE ?', [$like])
                     ->orWhereRaw('LOWER(email) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(COALESCE(driver_number, "")) LIKE ?', [$like])
                     ->orWhereRaw('LOWER(license_number) LIKE ?', [$like])
                     ->orWhereHas('user', function ($userQuery) use ($like) {
                         $userQuery->whereRaw('LOWER(name) LIKE ?', [$like])
@@ -187,6 +188,7 @@ class DriverController extends Controller
             'tenant_id' => $tenantId,
             'name' => $validated['name'],
             'email' => strtolower(trim((string) $validated['email'])),
+            'driver_number' => Driver::normalizeDriverNumber($validated['driver_number'] ?? null),
             'license_number' => $validated['license_number'] ?? null,
             'license_type' => $validated['license_type'] ?? null,
             'license_other' => $validated['license_other'] ?? null,
@@ -310,11 +312,26 @@ class DriverController extends Controller
                     ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
                     ->first();
 
+                $driverNumber = Driver::normalizeDriverNumber($data['driver_number'] ?? null);
+                if ($driverNumber) {
+                    $numberTaken = Driver::query()
+                        ->where('driver_number', $driverNumber)
+                        ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
+                        ->when($driver, fn ($query) => $query->where('id', '!=', $driver->id))
+                        ->exists();
+                    if ($numberTaken) {
+                        $skipped++;
+                        $errors[] = "Row {$rowNumber}: Driver ID \"{$driverNumber}\" is already assigned.";
+                        continue;
+                    }
+                }
+
                 $driverAttributes = $this->filterToDriverTableColumns([
                     'user_id' => $user->id,
                     'tenant_id' => $driver?->tenant_id ?? $tenantId,
                     'name' => $name,
                     'email' => $email,
+                    'driver_number' => $driverNumber,
                     'license_number' => $this->blankToNull($data['license_number'] ?? null),
                     'license_type' => $this->normalizeLicenseType($data['license_type'] ?? null),
                     'license_other' => $this->blankToNull($data['license_other'] ?? null),
@@ -399,6 +416,7 @@ class DriverController extends Controller
             'tenant_id' => $tenantId,
             'name' => $validated['name'],
             'email' => strtolower(trim((string) $validated['email'])),
+            'driver_number' => Driver::normalizeDriverNumber($validated['driver_number'] ?? null),
             'license_number' => $validated['license_number'] ?? null,
             'license_type' => $validated['license_type'] ?? null,
             'license_other' => $validated['license_other'] ?? null,
@@ -452,6 +470,9 @@ class DriverController extends Controller
         }
 
         $validated = $this->validateDriverData($request, false, true, $driver);
+        if (array_key_exists('driver_number', $validated)) {
+            $validated['driver_number'] = Driver::normalizeDriverNumber($validated['driver_number']);
+        }
 
         // Handle document uploads
         $documentPaths = $this->handleDocumentUploads($request, $driver);
@@ -491,6 +512,7 @@ class DriverController extends Controller
         if ($driver->user_id === $currentUser->id && !$currentUser->is_global_admin) {
             unset($validated['status']); // Drivers can't change their own status
             unset($validated['reference_check_status']);
+            unset($validated['driver_number']);
         }
 
         $driver->update($this->filterToDriverTableColumns($validated));
@@ -803,6 +825,14 @@ class DriverController extends Controller
             'driver_name' => 'name',
             'email_address' => 'email',
             'licence_number' => 'license_number',
+            'driver_n' => 'driver_number',
+            'driver_no' => 'driver_number',
+            'driver_id' => 'driver_number',
+            'driver_code' => 'driver_number',
+            'new_a' => 'driver_number',
+            'a_number' => 'driver_number',
+            'employee_id' => 'driver_number',
+            'employee_no' => 'driver_number',
             'licence_type' => 'license_type',
             'licence_issue_date' => 'license_issue_date',
             'licence_expiry_date' => 'license_expiry_date',
@@ -929,6 +959,12 @@ class DriverController extends Controller
      */
     private function validateDriverData(Request $request, bool $isSelfRegister = false, bool $isUpdate = false, ?Driver $driver = null): array
     {
+        if ($request->exists('driver_number')) {
+            $request->merge([
+                'driver_number' => Driver::normalizeDriverNumber($request->input('driver_number')),
+            ]);
+        }
+
         $emailRules = ['required', 'string', 'email', 'max:255'];
 
         if ($isUpdate && $driver !== null) {
@@ -944,6 +980,23 @@ class DriverController extends Controller
             'password' => $isUpdate
                 ? 'sometimes|string|min:8'
                 : ($isSelfRegister ? 'required|string|min:8' : 'nullable|string|min:8'),
+
+            'driver_number' => [
+                'nullable',
+                'string',
+                'max:32',
+                'regex:/^[A-Za-z0-9\-]+$/',
+                Rule::unique('drivers', 'driver_number')
+                    ->where(function ($query) use ($request, $driver) {
+                        $tenantId = $driver?->tenant_id
+                            ?? $request->input('tenant_id')
+                            ?? tenant('id');
+                        if ($tenantId) {
+                            $query->where('tenant_id', $tenantId);
+                        }
+                    })
+                    ->ignore($driver?->id),
+            ],
 
             // License Information
             'license_number' => ($isUpdate ? 'sometimes|required' : 'required') . '|string|max:255',

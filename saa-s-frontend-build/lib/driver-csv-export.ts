@@ -135,7 +135,7 @@ export function buildDriverExportRow(
   return [
     String(srNo),
     name,
-    '', // New A # — not stored in app yet
+    driver.driver_number ?? '',
     '', // Old ID — not stored in app yet
     position,
     phone,

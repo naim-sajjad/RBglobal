@@ -71,7 +71,7 @@ class TimesheetDocumentReviewController extends Controller
         $review->makeHidden(['token']);
 
         return response()->json([
-            'message' => 'Adjustment request submitted. Admin will update the documents and send them again.',
+            'message' => 'Adjustment request submitted. Admin will create a new timesheet to handle it.',
             'review' => $review,
         ]);
     }
@@ -99,6 +99,7 @@ class TimesheetDocumentReviewController extends Controller
             ])
             ->with([
                 'timesheet.employer',
+                'handlingTimesheet.employer',
             ])
             ->orderByDesc('reviewed_at')
             ->orderByDesc('id');
@@ -149,6 +150,7 @@ class TimesheetDocumentReviewController extends Controller
             ->where('status', TimesheetDocumentReview::STATUS_ADJUSTMENT_REQUESTED)
             ->with([
                 'timesheet.employer',
+                'handlingTimesheet.employer',
                 'driver.user',
                 'sender:id,name',
                 'resolver:id,name',
@@ -198,6 +200,7 @@ class TimesheetDocumentReviewController extends Controller
 
         $review->load([
             'timesheet.employer',
+            'handlingTimesheet.employer',
             'driver.user',
             'sender:id,name',
             'resolver:id,name',
@@ -239,6 +242,41 @@ class TimesheetDocumentReviewController extends Controller
 
         return response()->json([
             'message' => 'Adjustment request updated.',
+            'review' => $review,
+        ]);
+    }
+
+    /**
+     * Admin: create a new timesheet to handle this adjustment request.
+     */
+    public function createHandlingTimesheet(TimesheetDocumentReview $review)
+    {
+        if (! auth()->user()?->hasPermissionTo('drivers.view')) {
+            abort(403, 'Unauthorized');
+        }
+        if ($review->tenant_id !== tenant('id')) {
+            abort(403, 'Unauthorized');
+        }
+
+        try {
+            $timesheet = TimesheetDocumentReviewService::createHandlingTimesheet(
+                $review,
+                auth()->id()
+            );
+        } catch (RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        $review->refresh()->load([
+            'timesheet.employer',
+            'handlingTimesheet.employer',
+            'driver.user',
+        ]);
+        $review->makeHidden(['token']);
+
+        return response()->json([
+            'message' => 'Timesheet created for this adjustment request.',
+            'timesheet' => $timesheet,
             'review' => $review,
         ]);
     }
@@ -402,7 +440,7 @@ class TimesheetDocumentReviewController extends Controller
         }
 
         return response()->json([
-            'message' => 'Adjustment request submitted. Admin will update the documents and send them again.',
+            'message' => 'Adjustment request submitted. Admin will create a new timesheet to handle it.',
             'status' => $review->status,
             'reviewed_at' => $review->reviewed_at,
             'adjustment_comment' => $review->adjustment_comment,

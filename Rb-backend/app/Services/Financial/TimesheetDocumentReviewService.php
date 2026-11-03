@@ -11,6 +11,7 @@ use App\Models\TimesheetDocumentReviewEvent;
 use App\Services\AdminNotificationService;
 use App\Support\AdminMail;
 use Illuminate\Contracts\Mail\Mailer;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -257,7 +258,7 @@ class TimesheetDocumentReviewService
             'driver_id' => $review->driver_id,
             'type' => 'timesheet_adjustment_requested',
             'title' => 'Adjustment request received',
-            'message' => 'Your adjustment request was submitted. Admin will update the documents and send them again for review.',
+            'message' => 'Your adjustment request was submitted. Admin will create a new timesheet to handle it.',
             'meta' => [
                 'timesheet_id' => $review->timesheet_id,
                 'review_id' => $review->id,
@@ -371,7 +372,7 @@ class TimesheetDocumentReviewService
             'driver_id' => $review->driver_id,
             'type' => 'timesheet_adjustment_requested',
             'title' => 'Adjustment request received',
-            'message' => 'Your adjustment request was submitted. Admin will review it.',
+            'message' => 'Your adjustment request was submitted. Admin will create a new timesheet to handle it.',
             'meta' => [
                 'timesheet_id' => $review->timesheet_id,
                 'review_id' => $review->id,
@@ -461,11 +462,103 @@ class TimesheetDocumentReviewService
 
         return $review->fresh([
             'timesheet.employer',
+            'handlingTimesheet.employer',
             'driver.user',
             'sender:id,name',
             'resolver:id,name',
             'events',
         ]);
+    }
+
+    /**
+     * Admin: create a new draft timesheet to handle the request (original stays unchanged).
+     */
+    public static function createHandlingTimesheet(
+        TimesheetDocumentReview $review,
+        ?int $adminUserId
+    ): Timesheet {
+        if ($review->status !== TimesheetDocumentReview::STATUS_ADJUSTMENT_REQUESTED) {
+            throw new RuntimeException('This review is not an adjustment request.');
+        }
+
+        if (in_array($review->adjustment_status, [
+            TimesheetDocumentReview::ADJUSTMENT_RESOLVED,
+            TimesheetDocumentReview::ADJUSTMENT_DISMISSED,
+        ], true)) {
+            throw new RuntimeException('This adjustment request is already closed.');
+        }
+
+        if ($review->handling_timesheet_id) {
+            $existing = Timesheet::query()
+                ->with(['driver.user', 'employer'])
+                ->find($review->handling_timesheet_id);
+            if ($existing) {
+                return $existing;
+            }
+        }
+
+        $source = $review->timesheet ?: Timesheet::query()->find($review->timesheet_id);
+        if (! $source) {
+            throw new RuntimeException('The original timesheet could not be found.');
+        }
+        if (! $source->employer_id) {
+            throw new RuntimeException('The original timesheet has no customer. Assign a customer before creating an adjustment timesheet.');
+        }
+
+        $comment = trim((string) $review->adjustment_comment);
+        $notes = 'Created to handle adjustment request #'.$review->id;
+        if ($comment !== '') {
+            $notes .= "\n\nDriver request:\n".$comment;
+        }
+
+        return DB::transaction(function () use ($review, $source, $notes, $adminUserId) {
+            $timesheet = Timesheet::create([
+                'driver_id' => $review->driver_id,
+                'employer_id' => $source->employer_id,
+                'tenant_id' => $review->tenant_id ?: tenant('id'),
+                'week_start_date' => $source->week_start_date?->format('Y-m-d'),
+                'week_end_date' => $source->week_end_date?->format('Y-m-d'),
+                'status' => 'draft',
+                'created_by_user_id' => $adminUserId,
+                'notes' => $notes,
+                'adjustment_review_id' => $review->id,
+            ]);
+
+            $review->update([
+                'handling_timesheet_id' => $timesheet->id,
+                'adjustment_status' => TimesheetDocumentReview::ADJUSTMENT_IN_PROGRESS,
+                'resolved_at' => null,
+                'resolved_by' => null,
+            ]);
+
+            self::recordEvent(
+                $review,
+                TimesheetDocumentReviewEvent::HANDLING_TIMESHEET_CREATED,
+                'admin',
+                $adminUserId,
+                [
+                    'handling_timesheet_id' => $timesheet->id,
+                    'source_timesheet_id' => $source->id,
+                ]
+            );
+
+            DriverNotification::create([
+                'tenant_id' => $review->tenant_id,
+                'driver_id' => $review->driver_id,
+                'type' => 'timesheet_adjustment_status',
+                'title' => 'Adjustment timesheet created',
+                'message' => 'Admin created a new timesheet to handle your adjustment request.',
+                'meta' => [
+                    'timesheet_id' => $timesheet->id,
+                    'source_timesheet_id' => $source->id,
+                    'review_id' => $review->id,
+                    'adjustment_status' => TimesheetDocumentReview::ADJUSTMENT_IN_PROGRESS,
+                ],
+                'created_by_user_id' => $adminUserId,
+            ]);
+
+            return $timesheet->fresh(['driver.user', 'employer']);
+        });
     }
 
     public static function documentForType(

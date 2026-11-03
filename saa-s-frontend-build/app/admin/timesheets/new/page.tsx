@@ -94,11 +94,14 @@ export default function AdminNewTimesheetPage() {
       const data = await apiClient.getDrivers({ search: query });
       if (signal.aborted) return [];
       const list = Array.isArray(data) ? (data as DriverWithDetails[]) : [];
-      return list.map((driver) => ({
-        value: String(driver.id),
-        label: driver.name ?? driver.user?.name ?? `Driver #${driver.id}`,
-        sublabel: driver.email ?? driver.user?.email ?? undefined,
-      }));
+      return list.map((driver) => {
+        const name = driver.name ?? driver.user?.name ?? `Driver #${driver.id}`;
+        return {
+          value: String(driver.id),
+          label: driver.driver_number ? `${name} (${driver.driver_number})` : name,
+          sublabel: driver.email ?? driver.user?.email ?? undefined,
+        };
+      });
     },
     [],
   );

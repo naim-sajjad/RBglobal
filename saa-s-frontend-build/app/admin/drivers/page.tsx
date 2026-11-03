@@ -145,6 +145,7 @@ export default function DriversPage() {
       setFormData({
         name: driver.name || driver.user?.name || '',
         email: driver.email || driver.user?.email || '',
+        driver_number: driver.driver_number || '',
         password: '',
         tenant_id: driver.tenant_id || '',
       });
@@ -153,6 +154,7 @@ export default function DriversPage() {
       setFormData({
         name: '',
         email: '',
+        driver_number: '',
         password: '',
         tenant_id: '',
       });
@@ -332,10 +334,12 @@ export default function DriversPage() {
       const name = (driver.name ?? driver.user?.name ?? '').toLowerCase();
       const email = (driver.email ?? driver.user?.email ?? '').toLowerCase();
       const license = String(driver.license_number ?? '').toLowerCase();
+      const driverNumber = String(driver.driver_number ?? '').toLowerCase();
       return (
         name.includes(query) ||
         email.includes(query) ||
-        license.includes(query)
+        license.includes(query) ||
+        driverNumber.includes(query)
       );
     });
   }, [drivers, searchQuery]);
@@ -467,7 +471,7 @@ export default function DriversPage() {
               <Search className='absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400' />
               <Input
                 type='text'
-                placeholder='Search drivers by name, email, or license number...'
+                placeholder='Search by name, email, driver ID, or license...'
                 value={searchQuery}
                 onChange={(e) => {
                   const next = e.target.value;
@@ -564,6 +568,7 @@ export default function DriversPage() {
                       />
                     </TableHead>
                     <TableHead className='text-slate-300'>Name</TableHead>
+                    <TableHead className='text-slate-300'>Driver ID</TableHead>
                     <TableHead className='text-slate-300'>Email</TableHead>
                     <TableHead className='text-slate-300'>
                       <button
@@ -620,6 +625,9 @@ export default function DriversPage() {
                         >
                           {driver.name || driver.user?.name || 'N/A'}
                         </button>
+                      </TableCell>
+                      <TableCell className='font-mono text-sm text-slate-200'>
+                        {driver.driver_number || '—'}
                       </TableCell>
                       <TableCell className='text-slate-300'>
                         {driver.email || driver.user?.email || 'N/A'}
@@ -714,6 +722,25 @@ export default function DriversPage() {
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
+
+            <div className='space-y-2'>
+              <Label htmlFor='driver_number' className='text-slate-200'>
+                Driver ID
+              </Label>
+              <Input
+                id='driver_number'
+                value={formData.driver_number ?? ''}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    driver_number: e.target.value.toUpperCase(),
+                  })
+                }
+                placeholder='A27048'
+                disabled={isSaving}
+                className='text-white bg-slate-700 border-slate-600 uppercase'
+              />
+            </div>
 
             {/* Basic User Info */}
             <div className='grid grid-cols-2 gap-4'>
@@ -874,8 +901,9 @@ export default function DriversPage() {
 
             <div className='rounded-md border border-slate-700 bg-slate-900/40 p-3 text-xs text-slate-300'>
               Required columns: name, email. Optional columns include
-              license_number, license_type, issuing_authority,
-              license_issue_date, license_expiry_date, status, vehicle_types.
+              driver_number (for example A27048), license_number, license_type,
+              issuing_authority, license_issue_date, license_expiry_date, status,
+              vehicle_types.
             </div>
 
             {uploadErrors.length > 0 && (

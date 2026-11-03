@@ -152,6 +152,8 @@ export interface Driver {
   name?: string | null;
   /** Stored on drivers table (source of truth for display) */
   email?: string | null;
+  /** External ID such as A27048 */
+  driver_number?: string | null;
   driver_class_id?: number | null;
   driver_class_effective_date?: string | null;
   // License Information
@@ -211,6 +213,7 @@ export interface CreateDriverData {
   email: string;
   password?: string;
   tenant_id?: string;
+  driver_number?: string;
   // License Information
   license_number?: string;
   license_type?: 'AZ' | 'DZ' | 'G-Class' | 'G1/G2' | 'Other';
@@ -511,6 +514,7 @@ export interface Timesheet {
   paid_by: number | null;
   reject_reason: string | null;
   notes: string | null;
+  adjustment_review_id?: number | null;
   created_by_user_id?: number | null;
   created_by?: { id: number; name: string } | null;
   weekly_total: number;
@@ -524,7 +528,30 @@ export interface Timesheet {
   updated_at: string;
 }
 
-export type TimesheetDocumentType = 'invoice' | 'calculation_sheet';
+export type TimesheetDocumentType = 'invoice' | 'calculation_sheet' | 'timesheet';
+
+export interface CalculationSheetLine {
+  label: string;
+  quantity?: number | null;
+  rate?: number | null;
+  amount: number;
+  is_tax?: boolean;
+}
+
+export interface CalculationSheetPreview {
+  sheet_name?: string;
+  headers?: string[];
+  display_rows?: string[][];
+  lines?: CalculationSheetLine[];
+  meta?: {
+    driver?: string | null;
+    employer?: string | null;
+    period?: string | null;
+  };
+  subtotal?: number;
+  tax?: number;
+  total?: number;
+}
 export type TimesheetDocumentSource = 'generated' | 'uploaded';
 
 export type TimesheetDocumentReviewStatus =
@@ -555,6 +582,7 @@ export interface TimesheetDocumentReview {
   id: number;
   tenant_id: string | null;
   timesheet_id: number;
+  handling_timesheet_id?: number | null;
   invoice_document_id: number;
   calculation_document_id: number;
   driver_id: number;
@@ -575,6 +603,7 @@ export interface TimesheetDocumentReview {
   resolver?: { id: number; name: string } | null;
   driver?: DriverWithDetails | null;
   timesheet?: Timesheet | null;
+  handling_timesheet?: Timesheet | null;
   events?: TimesheetDocumentReviewEvent[];
   invoice_document?: TimesheetDocument | null;
   calculation_document?: TimesheetDocument | null;
@@ -591,6 +620,8 @@ export interface TimesheetDocument {
   file_path: string;
   original_filename: string;
   file_size: number | null;
+  parsed_payload?: CalculationSheetPreview | null;
+  mime_type?: string | null;
   file_url?: string | null;
   created_by: number | null;
   creator?: { id: number; name: string } | null;

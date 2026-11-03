@@ -32,6 +32,7 @@ class TimesheetDocumentReview extends Model
     protected $fillable = [
         'tenant_id',
         'timesheet_id',
+        'handling_timesheet_id',
         'invoice_document_id',
         'calculation_document_id',
         'driver_id',
@@ -68,6 +69,11 @@ class TimesheetDocumentReview extends Model
     public function timesheet(): BelongsTo
     {
         return $this->belongsTo(Timesheet::class);
+    }
+
+    public function handlingTimesheet(): BelongsTo
+    {
+        return $this->belongsTo(Timesheet::class, 'handling_timesheet_id');
     }
 
     public function driver(): BelongsTo

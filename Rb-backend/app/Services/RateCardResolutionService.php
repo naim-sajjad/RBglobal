@@ -45,24 +45,12 @@ class RateCardResolutionService
         }
 
         $trip->load(['timesheet.driver.driverClass', 'employer']);
-        $driver = $trip->timesheet->driver;
-        if (! $driver) {
-            return;
-        }
-
-        $driverClassCode = $driver->driverClass?->code ?? null;
-        $rateCard = self::getActiveRateCardForDate($trip->employer_id, Carbon::parse($trip->trip_date));
-        if (! $rateCard || ! $rateCard->rates) {
-            $trip->update([
-                'rate_snapshot' => ['error' => 'No active rate card for this employer on trip date'],
-                'trip_total' => 0,
-                'total_agency_billing' => 0,
-                'minimum_applied' => false,
-            ]);
-            return;
-        }
-
-        $rates = $rateCard->rates;
+        $driver = $trip->timesheet?->driver;
+        $driverClassCode = $driver?->driverClass?->code ?? null;
+        $rateCard = $trip->employer_id
+            ? self::getActiveRateCardForDate((int) $trip->employer_id, Carbon::parse($trip->trip_date))
+            : null;
+        $rates = is_array($rateCard?->rates) ? $rateCard->rates : [];
         $distance = (float) ($trip->distance ?? 0);
         $additionalQuantities = is_array($trip->additional_quantities) ? $trip->additional_quantities : [];
         $rateOverrides = is_array($trip->rate_overrides) ? $trip->rate_overrides : [];
@@ -228,14 +216,19 @@ class RateCardResolutionService
             $minimumApplied = true;
         }
 
+        $snapshot = [
+            'rate_card_id' => $rateCard?->id,
+            'driver_class_code' => $driverClassCode,
+            'lines' => $lines,
+            'total_driver_pay' => round($totalDriverPay, 2),
+            'total_agency_billing' => round($totalAgencyBilling, 2),
+        ];
+        if (! $rateCard) {
+            $snapshot['error'] = 'No active rate card for this employer on trip date';
+        }
+
         $trip->update([
-            'rate_snapshot' => [
-                'rate_card_id' => $rateCard->id,
-                'driver_class_code' => $driverClassCode,
-                'lines' => $lines,
-                'total_driver_pay' => round($totalDriverPay, 2),
-                'total_agency_billing' => round($totalAgencyBilling, 2),
-            ],
+            'rate_snapshot' => $snapshot,
             'trip_total' => round($totalDriverPay, 2),
             'total_agency_billing' => round($totalAgencyBilling, 2),
             'minimum_applied' => $minimumApplied,

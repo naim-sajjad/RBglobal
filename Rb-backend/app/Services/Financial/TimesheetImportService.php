@@ -5,21 +5,25 @@ namespace App\Services\Financial;
 use App\Models\Driver;
 use App\Models\Employer;
 use App\Models\Timesheet;
+use App\Models\TimesheetDocument;
 use App\Models\TimesheetTrip;
 use Carbon\Carbon;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 use ZipArchive;
 
 class TimesheetImportService
 {
     /** @var array<string, list<string>> */
     private const HEADER_ALIASES = [
-        'driver_number' => ['driver no', 'driver no.', 'driver number', 'driver #', 'driver id'],
+        'driver_number' => ['driver no', 'driver no.', 'driver number', 'driver n', 'driver #', 'driver id'],
         'driver_name' => ['driver name', 'name'],
         'customer' => ['customer', 'employer', 'client'],
         'trip_number' => ['trip #', 'trip#', 'trip number', 'trip no', 'trip no.'],
         'trip_date' => ['trip date', 'date'],
+        'start_date' => ['start date', 'trip start', 'start', 'from date'],
+        'end_date' => ['end date', 'trip end', 'end', 'to date'],
         'pay_item' => ['pay item', 'payitem', 'item', 'description'],
         'quantity' => ['qty', 'quantity'],
         'rate' => ['rate'],
@@ -27,7 +31,13 @@ class TimesheetImportService
     ];
 
     /**
-     * @return array{timesheets: list<array{id:int,driver_id:int,week_start_date:string}>, trips_created: int, lines_imported: int, warnings: list<string>}
+     * @return array{
+     *   timesheets: list<array{id:int,driver_id:int,week_start_date:string,week_end_date:string}>,
+     *   trips_created: int,
+     *   lines_imported: int,
+     *   warnings: list<string>,
+     *   unmatched: list<array{row:int,driver_number:?string,driver_name:?string,customer:?string,trip_number:?string,trip_date:?string,reason:string}>
+     * }
      *
      * @throws \InvalidArgumentException
      */
@@ -39,20 +49,18 @@ class TimesheetImportService
         }
 
         $headerMap = self::mapHeaders($rows[0]);
-        $missing = [];
-        foreach (['driver_number', 'customer', 'trip_number', 'trip_date', 'pay_item', 'quantity', 'rate'] as $req) {
-            if (! isset($headerMap[$req])) {
-                $missing[] = $req;
-            }
-        }
-        if ($missing !== []) {
+        if (! isset($headerMap['pay_item']) || ! isset($headerMap['quantity']) || ! isset($headerMap['rate'])) {
             throw new \InvalidArgumentException(
-                'Missing required columns: '.implode(', ', $missing).'. Expected headers such as Driver No, Customer, Trip #, Trip Date, Pay Item, Qty, Rate.'
+                'Missing required columns. Expected Pay Item, Qty, and Rate, plus Driver Number or Driver Name, Customer, Trip #, and Trip Date (or Start Date).'
             );
         }
+        if (! isset($headerMap['trip_date']) && ! isset($headerMap['start_date'])) {
+            throw new \InvalidArgumentException('A Trip Date or Start Date column is required.');
+        }
 
-        $errors = [];
-        /** @var list<array{row:int,driver_number:string,driver_name:?string,customer:string,trip_number:string,trip_date:string,pay_item:string,quantity:float,rate:float,pay:float}> $parsed */
+        $unmatched = [];
+        $warnings = [];
+        /** @var list<array{row:int,driver_number:?string,driver_name:?string,customer:string,trip_number:string,trip_date:string,end_date:?string,pay_item:string,quantity:float,rate:float,pay:float,computed_pay:float}> $parsed */
         $parsed = [];
 
         for ($i = 1; $i < count($rows); $i++) {
@@ -62,131 +70,200 @@ class TimesheetImportService
                 continue;
             }
 
-            $driverNumber = trim((string) self::cell($raw, $headerMap['driver_number']));
+            $payItem = isset($headerMap['pay_item'])
+                ? trim((string) self::cell($raw, $headerMap['pay_item']))
+                : '';
+            if (self::isSummaryLabel($payItem) || self::isSummaryRow($raw)) {
+                continue;
+            }
+
+            $driverNumber = isset($headerMap['driver_number'])
+                ? trim((string) self::cell($raw, $headerMap['driver_number']))
+                : '';
             $driverName = isset($headerMap['driver_name'])
                 ? trim((string) self::cell($raw, $headerMap['driver_name']))
-                : null;
-            $customer = trim((string) self::cell($raw, $headerMap['customer']));
-            $tripNumber = trim((string) self::cell($raw, $headerMap['trip_number']));
-            $tripDateRaw = trim((string) self::cell($raw, $headerMap['trip_date']));
-            $payItem = trim((string) self::cell($raw, $headerMap['pay_item']));
+                : '';
+            $customer = isset($headerMap['customer'])
+                ? trim((string) self::cell($raw, $headerMap['customer']))
+                : '';
+            $tripNumber = isset($headerMap['trip_number'])
+                ? trim((string) self::cell($raw, $headerMap['trip_number']))
+                : '';
+            $startRaw = isset($headerMap['start_date'])
+                ? trim((string) self::cell($raw, $headerMap['start_date']))
+                : '';
+            $endRaw = isset($headerMap['end_date'])
+                ? trim((string) self::cell($raw, $headerMap['end_date']))
+                : '';
+            $tripDateRaw = isset($headerMap['trip_date'])
+                ? trim((string) self::cell($raw, $headerMap['trip_date']))
+                : $startRaw;
             $qtyRaw = self::cell($raw, $headerMap['quantity']);
             $rateRaw = self::cell($raw, $headerMap['rate']);
             $payRaw = isset($headerMap['pay']) ? self::cell($raw, $headerMap['pay']) : null;
 
-            if ($driverNumber === '') {
-                $errors[] = "Row {$excelRow}: Driver No is required.";
-            }
-            if ($customer === '') {
-                $errors[] = "Row {$excelRow}: Customer is required.";
-            }
-            if ($tripNumber === '') {
-                $errors[] = "Row {$excelRow}: Trip # is required.";
-            }
-            if ($payItem === '') {
-                $errors[] = "Row {$excelRow}: Pay Item is required.";
-            }
-
-            $tripDate = self::parseDate($tripDateRaw);
-            if ($tripDate === null) {
-                $errors[] = "Row {$excelRow}: Invalid trip date \"{$tripDateRaw}\".";
+            $tripDate = self::parseDate($startRaw !== '' ? $startRaw : $tripDateRaw);
+            $endDate = $endRaw !== '' ? self::parseDate($endRaw) : null;
+            if ($endDate === null && $tripDate !== null) {
+                $endDate = $tripDate;
             }
 
             $qty = self::parseNumber($qtyRaw);
-            if ($qty === null) {
-                $errors[] = "Row {$excelRow}: Qty must be numeric.";
-            }
             $rate = self::parseNumber($rateRaw);
+
+            $rowMeta = [
+                'row' => $excelRow,
+                'driver_number' => $driverNumber !== '' ? $driverNumber : null,
+                'driver_name' => $driverName !== '' ? $driverName : null,
+                'customer' => $customer !== '' ? $customer : null,
+                'trip_number' => $tripNumber !== '' ? $tripNumber : null,
+                'trip_date' => $tripDate,
+            ];
+
+            if ($driverNumber === '' && $driverName === '') {
+                $unmatched[] = $rowMeta + ['reason' => 'Driver ID and driver name are both missing.'];
+                continue;
+            }
+            if ($customer === '') {
+                $unmatched[] = $rowMeta + ['reason' => 'Customer is missing.'];
+                continue;
+            }
+            if ($tripNumber === '') {
+                $unmatched[] = $rowMeta + ['reason' => 'Trip # is missing.'];
+                continue;
+            }
+            if ($payItem === '') {
+                $unmatched[] = $rowMeta + ['reason' => 'Pay item is missing.'];
+                continue;
+            }
+            if ($tripDate === null) {
+                $unmatched[] = $rowMeta + ['reason' => 'Trip start date is missing or invalid.'];
+                continue;
+            }
+            if ($qty === null) {
+                $unmatched[] = $rowMeta + ['reason' => 'Qty must be numeric.'];
+                continue;
+            }
             if ($rate === null) {
-                $errors[] = "Row {$excelRow}: Rate must be numeric.";
+                $unmatched[] = $rowMeta + ['reason' => 'Rate must be numeric.'];
+                continue;
             }
 
-            $computedPay = ($qty !== null && $rate !== null)
-                ? round($qty * $rate, 2)
-                : null;
+            $computedPay = round($qty * $rate, 2);
             $excelPay = $payRaw !== null && trim((string) $payRaw) !== '' && trim((string) $payRaw) !== '-'
                 ? self::parseNumber($payRaw)
                 : $computedPay;
-
-            if ($excelPay === null && $computedPay !== null) {
+            if ($excelPay === null) {
                 $excelPay = $computedPay;
             }
-
-            if ($driverNumber === '' || $customer === '' || $tripNumber === '' || $payItem === '' || $tripDate === null || $qty === null || $rate === null) {
-                continue;
+            if (abs($excelPay - $computedPay) > 0.02) {
+                $warnings[] = "Row {$excelRow}: Pay {$excelPay} differs from Qty×Rate {$computedPay}; using Qty×Rate.";
             }
 
             $parsed[] = [
                 'row' => $excelRow,
-                'driver_number' => $driverNumber,
+                'driver_number' => $driverNumber !== '' ? $driverNumber : null,
                 'driver_name' => $driverName !== '' ? $driverName : null,
                 'customer' => $customer,
                 'trip_number' => $tripNumber,
                 'trip_date' => $tripDate,
+                'end_date' => $endDate,
                 'pay_item' => $payItem,
                 'quantity' => $qty,
                 'rate' => $rate,
-                'pay' => $excelPay ?? $computedPay ?? 0.0,
-                'computed_pay' => $computedPay ?? 0.0,
+                'pay' => $excelPay,
+                'computed_pay' => $computedPay,
             ];
         }
 
-        if ($errors !== []) {
-            throw new \InvalidArgumentException(implode("\n", array_slice($errors, 0, 40)));
-        }
-        if ($parsed === []) {
-            throw new \InvalidArgumentException('No valid data rows found after the header.');
+        if ($parsed === [] && $unmatched === []) {
+            throw new \InvalidArgumentException('No trip rows were found in the calculation sheet.');
         }
 
-        $warnings = [];
-        foreach ($parsed as $p) {
-            if (abs($p['pay'] - $p['computed_pay']) > 0.02) {
-                $warnings[] = "Row {$p['row']}: Pay {$p['pay']} differs from Qty×Rate {$p['computed_pay']}; using Qty×Rate.";
-            }
-        }
-
-        return DB::transaction(function () use ($parsed, $tenantId, $warnings) {
+        $result = DB::transaction(function () use ($parsed, $tenantId, $warnings, $unmatched, $userId) {
             $driverCache = [];
             $employerCache = [];
             $groups = [];
+            $periods = [];
+            $review = $unmatched;
 
             foreach ($parsed as $p) {
-                $driverKey = strtolower($p['driver_number']);
+                $driverKey = strtolower(trim((string) ($p['driver_number'] ?? '')).'|'.self::normalizePersonName((string) ($p['driver_name'] ?? '')));
                 if (! isset($driverCache[$driverKey])) {
-                    $driver = self::resolveDriver($p['driver_number'], $tenantId);
-                    if (! $driver) {
-                        throw new \InvalidArgumentException(
-                            "Row {$p['row']}: Driver \"{$p['driver_number']}\" not found (match license number or driver id)."
-                        );
-                    }
-                    $driverCache[$driverKey] = $driver;
+                    $resolved = self::resolveDriverForImport(
+                        $p['driver_number'] ?? null,
+                        $p['driver_name'] ?? null,
+                        $tenantId
+                    );
+                    $driverCache[$driverKey] = $resolved;
                 }
-                $driver = $driverCache[$driverKey];
+                $resolved = $driverCache[$driverKey];
+                if (($resolved['status'] ?? '') !== 'matched') {
+                    $review[] = [
+                        'row' => $p['row'],
+                        'driver_number' => $p['driver_number'],
+                        'driver_name' => $p['driver_name'],
+                        'customer' => $p['customer'],
+                        'trip_number' => $p['trip_number'],
+                        'trip_date' => $p['trip_date'],
+                        'reason' => $resolved['reason'] ?? 'Driver could not be matched.',
+                    ];
+                    continue;
+                }
+                /** @var Driver $driver */
+                $driver = $resolved['driver'];
+                if (($resolved['matched_by'] ?? '') === 'name') {
+                    $warnings[] = "Row {$p['row']}: Matched driver by name ({$driver->name}).";
+                }
 
                 $empKey = strtolower($p['customer']);
                 if (! isset($employerCache[$empKey])) {
-                    $employer = self::resolveEmployer($p['customer'], $tenantId);
-                    if (! $employer) {
-                        throw new \InvalidArgumentException(
-                            "Row {$p['row']}: Customer \"{$p['customer']}\" not found."
-                        );
-                    }
-                    $employerCache[$empKey] = $employer;
+                    $employerCache[$empKey] = self::resolveEmployerForImport($p['customer'], $tenantId);
                 }
-                $employer = $employerCache[$empKey];
-
-                $weekStart = Carbon::parse($p['trip_date'])->startOfWeek(Carbon::MONDAY)->format('Y-m-d');
-                $weekEnd = Carbon::parse($p['trip_date'])->endOfWeek(Carbon::SUNDAY)->format('Y-m-d');
-                $groupKey = $driver->id.'|'.$employer->id.'|'.$weekStart.'|'.$p['trip_number'].'|'.$p['trip_date'];
-
-                if (! isset($groups[$groupKey])) {
-                    $groups[$groupKey] = [
-                        'driver' => $driver,
-                        'employer' => $employer,
-                        'week_start' => $weekStart,
-                        'week_end' => $weekEnd,
+                $employerResolved = $employerCache[$empKey];
+                if (($employerResolved['status'] ?? '') !== 'matched') {
+                    $review[] = [
+                        'row' => $p['row'],
+                        'driver_number' => $p['driver_number'],
+                        'driver_name' => $p['driver_name'],
+                        'customer' => $p['customer'],
                         'trip_number' => $p['trip_number'],
                         'trip_date' => $p['trip_date'],
+                        'reason' => $employerResolved['reason'] ?? ('No customer matched name "'.$p['customer'].'".'),
+                    ];
+                    continue;
+                }
+                /** @var Employer $employer */
+                $employer = $employerResolved['employer'];
+
+                $periodKey = $driver->id.'|'.$employer->id;
+                $tripStart = $p['trip_date'];
+                $tripEnd = $p['end_date'] ?? $p['trip_date'];
+                if (! isset($periods[$periodKey])) {
+                    $periods[$periodKey] = [
+                        'driver' => $driver,
+                        'employer' => $employer,
+                        'start' => $tripStart,
+                        'end' => $tripEnd,
+                    ];
+                } else {
+                    if ($tripStart < $periods[$periodKey]['start']) {
+                        $periods[$periodKey]['start'] = $tripStart;
+                    }
+                    if ($tripEnd > $periods[$periodKey]['end']) {
+                        $periods[$periodKey]['end'] = $tripEnd;
+                    }
+                }
+
+                $groupKey = $periodKey.'|'.$p['trip_number'].'|'.$p['trip_date'];
+                if (! isset($groups[$groupKey])) {
+                    $groups[$groupKey] = [
+                        'period_key' => $periodKey,
+                        'driver' => $driver,
+                        'employer' => $employer,
+                        'trip_number' => $p['trip_number'],
+                        'trip_date' => $p['trip_date'],
+                        'end_date' => $tripEnd,
                         'lines' => [],
                     ];
                 }
@@ -202,7 +279,7 @@ class TimesheetImportService
                     'driver_amount' => $pay,
                     'agency_amount' => $pay,
                     'is_payable' => true,
-                    'is_billable' => $pay != 0.0,
+                    'is_billable' => true,
                 ];
             }
 
@@ -216,12 +293,16 @@ class TimesheetImportService
                 $driver = $g['driver'];
                 /** @var Employer $employer */
                 $employer = $g['employer'];
-                $tsKey = $driver->id.'|'.$employer->id.'|'.$g['week_start'];
+                $period = $periods[$g['period_key']];
+                $periodStart = $period['start'];
+                $periodEnd = $period['end'];
+                $tsKey = $g['period_key'];
 
                 if (! isset($timesheetCache[$tsKey])) {
                     $timesheet = Timesheet::query()
                         ->where('driver_id', $driver->id)
-                        ->where('week_start_date', $g['week_start'])
+                        ->whereDate('week_start_date', $periodStart)
+                        ->whereDate('week_end_date', $periodEnd)
                         ->where(function ($q) use ($employer) {
                             $q->where('employer_id', $employer->id)
                                 ->orWhereNull('employer_id');
@@ -233,8 +314,8 @@ class TimesheetImportService
                             'driver_id' => $driver->id,
                             'employer_id' => $employer->id,
                             'tenant_id' => $tenantId,
-                            'week_start_date' => $g['week_start'],
-                            'week_end_date' => $g['week_end'],
+                            'week_start_date' => $periodStart,
+                            'week_end_date' => $periodEnd,
                             'status' => 'draft',
                             'weekly_total' => 0,
                             'created_by_user_id' => $userId,
@@ -263,12 +344,18 @@ class TimesheetImportService
                     ->whereDate('trip_date', $g['trip_date'])
                     ->first();
 
+                $endDate = $g['end_date'] ?? $g['trip_date'];
+                $notes = ($endDate && $endDate !== $g['trip_date'])
+                    ? 'Trip dates: '.$g['trip_date'].' – '.$endDate
+                    : null;
+
                 if ($trip) {
                     $trip->update([
                         'employer_id' => $employer->id,
+                        'notes' => $notes ?? $trip->notes,
                         'is_adjusted' => true,
                         'adjusted_at' => now(),
-                        'adjusted_reason' => 'Imported from customer timesheet',
+                        'adjusted_reason' => 'Imported from calculation sheet',
                         'manual_rate_snapshot' => $snapshot,
                         'rate_snapshot' => $snapshot,
                         'trip_total' => $totalDriver,
@@ -282,10 +369,10 @@ class TimesheetImportService
                         'trip_date' => $g['trip_date'],
                         'trip_number' => $g['trip_number'],
                         'distance' => 0,
-                        'notes' => null,
+                        'notes' => $notes,
                         'is_adjusted' => true,
                         'adjusted_at' => now(),
-                        'adjusted_reason' => 'Imported from customer timesheet',
+                        'adjusted_reason' => 'Imported from calculation sheet',
                         'manual_rate_snapshot' => $snapshot,
                         'rate_snapshot' => $snapshot,
                         'trip_total' => $totalDriver,
@@ -320,6 +407,7 @@ class TimesheetImportService
                     'id' => (int) $timesheet->id,
                     'driver_id' => (int) $timesheet->driver_id,
                     'week_start_date' => Carbon::parse($timesheet->week_start_date)->format('Y-m-d'),
+                    'week_end_date' => Carbon::parse($timesheet->week_end_date)->format('Y-m-d'),
                 ];
             }
 
@@ -327,36 +415,232 @@ class TimesheetImportService
                 'timesheets' => $outTimesheets,
                 'trips_created' => $tripsCreated,
                 'lines_imported' => $linesImported,
-                'warnings' => $warnings,
+                'warnings' => array_values(array_unique($warnings)),
+                'unmatched' => $review,
             ];
         });
+
+        foreach ($result['timesheets'] as $ts) {
+            $timesheet = Timesheet::query()->find($ts['id']);
+            if ($timesheet) {
+                try {
+                    TimesheetDocumentService::upload(
+                        $timesheet,
+                        TimesheetDocument::TYPE_CALCULATION_SHEET,
+                        $file,
+                        $userId,
+                        true
+                    );
+                } catch (\Throwable) {
+                    // Timesheet rows already saved; document attach is optional.
+                }
+            }
+        }
+
+        return $result;
     }
 
-    private static function resolveDriver(string $driverNumber, ?string $tenantId): ?Driver
+    /**
+     * @return array{status: string, driver?: Driver, matched_by?: string, reason?: string}
+     */
+    private static function resolveDriverForImport(?string $driverNumber, ?string $driverName, ?string $tenantId): array
     {
-        $q = Driver::query();
+        $q = Driver::query()->with('user');
         if ($tenantId) {
             $q->where('tenant_id', $tenantId);
         }
-        $byLicense = (clone $q)->where('license_number', $driverNumber)->first();
-        if ($byLicense) {
-            return $byLicense;
-        }
-        if (ctype_digit($driverNumber)) {
-            return (clone $q)->where('id', (int) $driverNumber)->first();
+
+        $normalized = Driver::normalizeDriverNumber((string) $driverNumber);
+        if ($normalized) {
+            $byNumber = (clone $q)->whereRaw('UPPER(driver_number) = ?', [$normalized])->first();
+            if ($byNumber) {
+                return ['status' => 'matched', 'driver' => $byNumber, 'matched_by' => 'id'];
+            }
         }
 
-        return null;
+        $name = trim((string) $driverName);
+        if ($name !== '') {
+            $matches = self::matchDriversByName($name, $tenantId);
+            if (count($matches) === 1) {
+                return ['status' => 'matched', 'driver' => $matches[0], 'matched_by' => 'name'];
+            }
+            if (count($matches) > 1) {
+                return [
+                    'status' => 'unmatched',
+                    'reason' => 'Driver name "'.$name.'" matched more than one driver. Assign a unique Driver ID.',
+                ];
+            }
+        }
+
+        if ($normalized) {
+            return [
+                'status' => 'unmatched',
+                'reason' => 'No driver matched Driver ID '.$normalized
+                    .($name !== '' ? ' or name "'.$name.'"' : '').'.',
+            ];
+        }
+
+        return [
+            'status' => 'unmatched',
+            'reason' => $name !== ''
+                ? 'No driver matched name "'.$name.'".'
+                : 'Driver ID and name are missing.',
+        ];
     }
 
-    private static function resolveEmployer(string $name, ?string $tenantId): ?Employer
+    /**
+     * @return list<Driver>
+     */
+    private static function matchDriversByName(string $name, ?string $tenantId): array
     {
-        $q = Employer::query()->whereRaw('LOWER(name) = ?', [mb_strtolower($name)]);
-        if ($tenantId) {
-            $q->where('tenant_id', $tenantId);
+        $want = self::normalizePersonName($name);
+        if ($want === '') {
+            return [];
         }
 
-        return $q->first();
+        $drivers = Driver::query()
+            ->with('user')
+            ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
+            ->get();
+
+        $matches = [];
+        foreach ($drivers as $driver) {
+            $candidates = array_filter([
+                self::normalizePersonName((string) $driver->name),
+                self::normalizePersonName((string) ($driver->user?->name ?? '')),
+            ]);
+            if (in_array($want, $candidates, true)) {
+                $matches[] = $driver;
+            }
+        }
+
+        return $matches;
+    }
+
+    private static function normalizePersonName(string $name): string
+    {
+        $name = strtolower(trim(preg_replace('/\s+/', ' ', $name) ?? $name));
+        $name = str_replace('.', '', $name);
+        if (str_contains($name, ',')) {
+            [$last, $first] = array_map('trim', explode(',', $name, 2));
+
+            return trim($first.' '.$last);
+        }
+
+        return $name;
+    }
+
+    private static function isSummaryLabel(string $label): bool
+    {
+        $n = strtolower(trim($label));
+
+        return $n !== '' && preg_match('/^(sub[\s-]*total|grand\s*total|total|hst|gst|pst|qst|vat)$/', $n) === 1;
+    }
+
+    /**
+     * @param  list<string>  $row
+     */
+    private static function isSummaryRow(array $row): bool
+    {
+        $joined = strtolower(implode(' ', $row));
+
+        return preg_match('/\b(sub[\s-]*total|grand\s*total|\btotal\b|hst|gst)\b/', $joined) === 1
+            && ! preg_match('/\b(actual hours|delay|drops|kms|trip)\b/', $joined);
+    }
+
+    /**
+     * Match a calculation-sheet customer to an employer by name.
+     *
+     * @return array{status: string, employer?: Employer, reason?: string}
+     */
+    private static function resolveEmployerForImport(string $name, ?string $tenantId): array
+    {
+        $trimmed = trim($name);
+        if ($trimmed === '') {
+            return ['status' => 'unmatched', 'reason' => 'Customer name is missing.'];
+        }
+
+        $query = Employer::query()->when($tenantId, fn ($q) => $q->where('tenant_id', $tenantId));
+        $needle = mb_strtolower($trimmed);
+
+        $exact = (clone $query)->whereRaw('LOWER(name) = ?', [$needle])->get();
+        if ($exact->count() === 1) {
+            return ['status' => 'matched', 'employer' => $exact->first()];
+        }
+        if ($exact->count() > 1) {
+            return [
+                'status' => 'unmatched',
+                'reason' => 'Customer name "'.$trimmed.'" matched more than one customer.',
+            ];
+        }
+
+        $byCode = (clone $query)->whereRaw('LOWER(COALESCE(company_code, "")) = ?', [$needle])->first();
+        if ($byCode) {
+            return ['status' => 'matched', 'employer' => $byCode];
+        }
+
+        $want = self::normalizeOrgName($trimmed);
+        $all = (clone $query)->get();
+        $normalizedMatches = [];
+        $containsMatches = [];
+        foreach ($all as $employer) {
+            $candidate = self::normalizeOrgName((string) $employer->name);
+            if ($candidate === '') {
+                continue;
+            }
+            if ($candidate === $want) {
+                $normalizedMatches[] = $employer;
+            } elseif (str_contains($want, $candidate) || str_contains($candidate, $want)) {
+                $containsMatches[] = $employer;
+            }
+        }
+
+        if (count($normalizedMatches) === 1) {
+            return ['status' => 'matched', 'employer' => $normalizedMatches[0]];
+        }
+        if (count($normalizedMatches) > 1) {
+            return [
+                'status' => 'unmatched',
+                'reason' => 'Customer name "'.$trimmed.'" matched more than one customer.',
+            ];
+        }
+
+        if (count($containsMatches) === 1) {
+            return ['status' => 'matched', 'employer' => $containsMatches[0]];
+        }
+        if (count($containsMatches) > 1) {
+            usort(
+                $containsMatches,
+                fn (Employer $a, Employer $b) => strlen(self::normalizeOrgName((string) $b->name))
+                    <=> strlen(self::normalizeOrgName((string) $a->name))
+            );
+            $bestLen = strlen(self::normalizeOrgName((string) $containsMatches[0]->name));
+            $tied = array_values(array_filter(
+                $containsMatches,
+                fn (Employer $employer) => strlen(self::normalizeOrgName((string) $employer->name)) === $bestLen
+            ));
+            if (count($tied) === 1) {
+                return ['status' => 'matched', 'employer' => $tied[0]];
+            }
+
+            return [
+                'status' => 'unmatched',
+                'reason' => 'Customer name "'.$trimmed.'" matched more than one customer. Use the exact customer name.',
+            ];
+        }
+
+        return [
+            'status' => 'unmatched',
+            'reason' => 'No customer matched name "'.$trimmed.'".',
+        ];
+    }
+
+    private static function normalizeOrgName(string $name): string
+    {
+        $name = strtolower(trim(preg_replace('/\s+/', ' ', $name) ?? $name));
+        $name = preg_replace('/[^a-z0-9 ]+/', '', $name) ?? $name;
+
+        return trim($name);
     }
 
     /**
@@ -396,12 +680,36 @@ class TimesheetImportService
     }
 
     /**
-     * Minimal XLSX reader (first sheet) without PhpSpreadsheet.
-     *
      * @return list<list<string>>
      */
     private static function readXlsx(string $path): array
     {
+        if (class_exists(IOFactory::class)) {
+            try {
+                $reader = IOFactory::createReaderForFile($path);
+                $reader->setReadDataOnly(true);
+                $spreadsheet = $reader->load($path);
+                $raw = $spreadsheet->getActiveSheet()->toArray(null, true, true, false);
+                $spreadsheet->disconnectWorksheets();
+                $rows = [];
+                foreach ($raw as $row) {
+                    $cells = [];
+                    foreach ((array) $row as $cell) {
+                        if ($cell instanceof \DateTimeInterface) {
+                            $cells[] = $cell->format('Y-m-d');
+                            continue;
+                        }
+                        $cells[] = trim((string) ($cell ?? ''));
+                    }
+                    $rows[] = $cells;
+                }
+
+                return $rows;
+            } catch (\Throwable) {
+                // Fall through to the ZipArchive reader.
+            }
+        }
+
         $zip = new ZipArchive;
         if ($zip->open($path) !== true) {
             throw new \InvalidArgumentException('Could not open Excel file. Try exporting as CSV.');
@@ -558,6 +866,9 @@ class TimesheetImportService
         if ($raw === '') {
             return null;
         }
+        if (preg_match('/^(\d{4}-\d{2}-\d{2})/', $raw, $iso)) {
+            return $iso[1];
+        }
         // Excel serial date
         if (is_numeric($raw) && (float) $raw > 20000 && (float) $raw < 80000) {
             try {
@@ -569,7 +880,7 @@ class TimesheetImportService
             }
         }
 
-        $formats = ['n-j-Y', 'm-d-Y', 'n/j/Y', 'm/d/Y', 'Y-m-d', 'Y/m/d', 'd-m-Y', 'd/m/Y', 'M j, Y'];
+        $formats = ['n/j/Y', 'm/d/Y', 'n-j-Y', 'm-d-Y', 'Y-m-d', 'Y/m/d', 'M j, Y', 'd-m-Y', 'd/m/Y'];
         foreach ($formats as $fmt) {
             try {
                 $d = Carbon::createFromFormat($fmt, $raw);

@@ -26,6 +26,7 @@ class Timesheet extends Model
         'paid_by',
         'reject_reason',
         'notes',
+        'adjustment_review_id',
         'created_by_user_id',
         'weekly_total',
         'adjusted_at',
@@ -33,8 +34,8 @@ class Timesheet extends Model
     ];
 
     protected $casts = [
-        'week_start_date' => 'date',
-        'week_end_date' => 'date',
+        'week_start_date' => 'date:Y-m-d',
+        'week_end_date' => 'date:Y-m-d',
         'submitted_at' => 'datetime',
         'approved_at' => 'datetime',
         'paid_at' => 'datetime',
@@ -85,6 +86,11 @@ class Timesheet extends Model
     public function documentReviews(): HasMany
     {
         return $this->hasMany(TimesheetDocumentReview::class)->orderByDesc('id');
+    }
+
+    public function adjustmentReview(): BelongsTo
+    {
+        return $this->belongsTo(TimesheetDocumentReview::class, 'adjustment_review_id');
     }
 
     public function latestDocumentReview(): \Illuminate\Database\Eloquent\Relations\HasOne
