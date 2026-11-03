@@ -32,7 +32,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { ArrowLeft, ClipboardList, ExternalLink } from 'lucide-react';
+import { ArrowLeft, ClipboardList, ExternalLink, Plus } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import {
   TimesheetAdjustmentHandlingStatus,
@@ -93,6 +93,7 @@ export default function AdjustmentRequestsPage() {
     useState<TimesheetAdjustmentHandlingStatus>('open');
   const [editNotes, setEditNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  const [creatingTimesheet, setCreatingTimesheet] = useState(false);
   /** Prevents URL sync from reopening the dialog while Close is in flight. */
   const closingRef = useRef(false);
   const loadedDetailIdRef = useRef<string | null>(null);
@@ -211,6 +212,27 @@ export default function AdjustmentRequestsPage() {
     };
   }, [detailId, items, loading, detailOpen, applyDetail, closeDetail]);
 
+  const handlingTimesheetId = (review: TimesheetDocumentReview) =>
+    review.handling_timesheet_id || review.handling_timesheet?.id || null;
+
+  const createHandlingTimesheet = async (review: TimesheetDocumentReview) => {
+    const existing = handlingTimesheetId(review);
+    if (existing) {
+      router.push(`/admin/timesheets/${existing}`);
+      return;
+    }
+    setCreatingTimesheet(true);
+    try {
+      const res = await apiClient.createAdjustmentHandlingTimesheet(review.id);
+      toast.success(res.message);
+      router.push(`/admin/timesheets/${res.timesheet.id}`);
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Could not create timesheet'));
+    } finally {
+      setCreatingTimesheet(false);
+    }
+  };
+
   const saveEdit = async () => {
     if (!editing) return;
     setSaving(true);
@@ -229,8 +251,9 @@ export default function AdjustmentRequestsPage() {
     }
   };
 
-  const timesheetHref = editing
-    ? `/admin/timesheets/${editing.timesheet_id}`
+  const handlingId = editing ? handlingTimesheetId(editing) : null;
+  const timesheetHref = handlingId
+    ? `/admin/timesheets/${handlingId}`
     : '#';
 
   return (
@@ -249,9 +272,8 @@ export default function AdjustmentRequestsPage() {
             Adjustment requests
           </h1>
           <p className='text-slate-400 mt-1'>
-            Driver-submitted correction requests from document review. Click a
-            row to view details, open the timesheet to fix trips, then mark
-            resolved and resend documents.
+            Driver-submitted correction requests. Create a new timesheet to
+            handle each request — do not change the original timesheet.
           </p>
         </div>
         <div className='space-y-1.5 w-full sm:w-56'>
@@ -364,19 +386,33 @@ export default function AdjustmentRequestsPage() {
                           >
                             View
                           </Button>
-                          <Button
-                            type='button'
-                            size='sm'
-                            variant='ghost'
-                            className='text-slate-300 h-8'
-                            asChild
-                          >
-                            <Link
-                              href={`/admin/timesheets/${review.timesheet_id}`}
+                          {handlingTimesheetId(review) ? (
+                            <Button
+                              type='button'
+                              size='sm'
+                              variant='ghost'
+                              className='text-slate-300 h-8'
+                              asChild
                             >
-                              <ExternalLink className='h-3.5 w-3.5' />
-                            </Link>
-                          </Button>
+                              <Link
+                                href={`/admin/timesheets/${handlingTimesheetId(review)}`}
+                              >
+                                <ExternalLink className='h-3.5 w-3.5' />
+                              </Link>
+                            </Button>
+                          ) : (
+                            <Button
+                              type='button'
+                              size='sm'
+                              variant='ghost'
+                              className='text-slate-300 h-8'
+                              onClick={() =>
+                                void createHandlingTimesheet(review)
+                              }
+                            >
+                              <Plus className='h-3.5 w-3.5' />
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -410,8 +446,8 @@ export default function AdjustmentRequestsPage() {
               ) : null}
             </DialogTitle>
             <DialogDescription className='text-slate-400'>
-              Review the driver&apos;s comment, open the timesheet to make
-              changes, then update status when done.
+              Review the driver&apos;s comment, then create a new timesheet to
+              handle the correction. The original timesheet is not changed.
             </DialogDescription>
           </DialogHeader>
 
@@ -448,6 +484,16 @@ export default function AdjustmentRequestsPage() {
                     Pay week
                   </p>
                   <p className='text-slate-200'>{weekLabel(editing)}</p>
+                </div>
+                <div>
+                  <p className='text-xs text-slate-500 uppercase tracking-wide'>
+                    Handling timesheet
+                  </p>
+                  <p className='text-slate-200'>
+                    {handlingId
+                      ? `#${handlingId}`
+                      : 'Not created yet'}
+                  </p>
                 </div>
                 <div>
                   <p className='text-xs text-slate-500 uppercase tracking-wide'>
@@ -502,22 +548,36 @@ export default function AdjustmentRequestsPage() {
           ) : null}
 
           <DialogFooter className='gap-2 sm:gap-0 flex-col sm:flex-row sm:justify-between'>
-            <Button
-              type='button'
-              variant='outline'
-              className='border-slate-600 text-slate-200 w-full sm:w-auto'
-              disabled={!editing}
-              asChild={!!editing}
-            >
-              {editing ? (
+            {editing && handlingId ? (
+              <Button
+                type='button'
+                variant='outline'
+                className='border-slate-600 text-slate-200 w-full sm:w-auto'
+                asChild
+              >
                 <Link href={timesheetHref}>
                   <ExternalLink className='h-4 w-4 mr-2' />
-                  Open timesheet
+                  Open adjustment timesheet
                 </Link>
-              ) : (
-                <span>Open timesheet</span>
-              )}
-            </Button>
+              </Button>
+            ) : (
+              <Button
+                type='button'
+                variant='outline'
+                className='border-slate-600 text-slate-200 w-full sm:w-auto'
+                disabled={!editing || creatingTimesheet}
+                onClick={() =>
+                  editing ? void createHandlingTimesheet(editing) : undefined
+                }
+              >
+                {creatingTimesheet ? (
+                  <Spinner className='h-4 w-4 mr-2' />
+                ) : (
+                  <Plus className='h-4 w-4 mr-2' />
+                )}
+                Create timesheet
+              </Button>
+            )}
             <div className='flex gap-2 w-full sm:w-auto'>
               <Button
                 type='button'

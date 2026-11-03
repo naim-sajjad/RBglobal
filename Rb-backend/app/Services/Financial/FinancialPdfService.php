@@ -513,6 +513,45 @@ class FinancialPdfService
     }
 
     /**
+     * Build an invoice PDF from calculation-sheet line items (Excel upload).
+     *
+     * @param  list<array{label: string, quantity?: float|null, rate?: float|null, amount: float}>  $lines
+     * @return array{content: string, filename: string}
+     */
+    public static function timesheetInvoicePdfBinaryFromLines(
+        Timesheet $timesheet,
+        array $lines,
+        float $subtotal
+    ): array {
+        $hourRows = [];
+        foreach ($lines as $line) {
+            $amount = round((float) ($line['amount'] ?? 0), 2);
+            if (abs($amount) < 0.0001) {
+                continue;
+            }
+            $label = trim((string) ($line['label'] ?? 'Line item'));
+            $qty = $line['quantity'] ?? null;
+            $rate = $line['rate'] ?? null;
+            if ($qty !== null && $rate !== null) {
+                $label .= ' ('.rtrim(rtrim(number_format((float) $qty, 2, '.', ''), '0'), '.').' × $'
+                    .number_format((float) $rate, 2).')';
+            }
+            $hourRows[] = ['description' => $label !== '' ? $label : 'Line item', 'amount' => $amount];
+        }
+
+        if ($hourRows === [] && $subtotal > 0.0001) {
+            $hourRows[] = ['description' => 'Calculation sheet total', 'amount' => round($subtotal, 2)];
+        }
+
+        [$pdf, $filename] = self::renderTimesheetInvoicePdf($timesheet, $hourRows, round($subtotal, 2));
+
+        return [
+            'content' => $pdf->output(),
+            'filename' => $filename,
+        ];
+    }
+
+    /**
      * @return array{content: string, filename: string}
      */
     public static function timesheetCalculationPdfBinary(Timesheet $timesheet): array
@@ -528,8 +567,15 @@ class FinancialPdfService
     /**
      * @return array{0: mixed, 1: string}
      */
-    private static function renderTimesheetInvoicePdf(Timesheet $timesheet): array
-    {
+    /**
+     * @param  list<array{description: string, amount: float}>|null  $hourRowsOverride
+     * @return array{0: mixed, 1: string}
+     */
+    private static function renderTimesheetInvoicePdf(
+        Timesheet $timesheet,
+        ?array $hourRowsOverride = null,
+        ?float $subtotalOverride = null
+    ): array {
         $timesheet->load(['driver.user', 'employer', 'trips.employer']);
         $driver = $timesheet->driver;
         $driverRef = $driver && $driver->license_number
@@ -538,15 +584,26 @@ class FinancialPdfService
         $driverName = $driver?->user?->name ?? ('Driver #'.$timesheet->driver_id);
 
         $trips = $timesheet->trips ?? collect();
-        // Match timesheet UI + calculation sheet: driver pay amounts, not agency billing.
-        $hourRows = self::aggregatePayableAmountsByLabel($trips);
-        $subtotal = 0.0;
-        foreach ($hourRows as $row) {
-            $subtotal += round((float) ($row['amount'] ?? 0), 2);
-        }
-        $subtotal = round($subtotal, 2);
-        if ($hourRows === [] && $subtotal > 0.0001) {
-            $hourRows[] = ['description' => 'Trip billing', 'amount' => $subtotal];
+        if ($hourRowsOverride !== null) {
+            $hourRows = $hourRowsOverride;
+            $subtotal = round((float) ($subtotalOverride ?? 0), 2);
+            if ($subtotal < 0.0001) {
+                foreach ($hourRows as $row) {
+                    $subtotal += round((float) ($row['amount'] ?? 0), 2);
+                }
+                $subtotal = round($subtotal, 2);
+            }
+        } else {
+            // Match timesheet UI + calculation sheet: driver pay amounts, not agency billing.
+            $hourRows = self::aggregatePayableAmountsByLabel($trips);
+            $subtotal = 0.0;
+            foreach ($hourRows as $row) {
+                $subtotal += round((float) ($row['amount'] ?? 0), 2);
+            }
+            $subtotal = round($subtotal, 2);
+            if ($hourRows === [] && $subtotal > 0.0001) {
+                $hourRows[] = ['description' => 'Trip billing', 'amount' => $subtotal];
+            }
         }
 
         $billToName = '';

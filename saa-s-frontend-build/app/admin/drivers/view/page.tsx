@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Spinner } from '@/components/ui/spinner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
@@ -37,6 +38,9 @@ import {
   IdCard,
   ClipboardList,
   GraduationCap,
+  Pencil,
+  Check,
+  X,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { DriverWithDetails, DriverClass } from '@/lib/types';
@@ -270,6 +274,9 @@ export default function DriverDetailPage() {
   const [isUpdatingReferenceCheck, setIsUpdatingReferenceCheck] =
     useState(false);
   const [updatingDriverClass, setUpdatingDriverClass] = useState(false);
+  const [editingDriverNumber, setEditingDriverNumber] = useState(false);
+  const [driverNumberDraft, setDriverNumberDraft] = useState('');
+  const [savingDriverNumber, setSavingDriverNumber] = useState(false);
   const [showSensitiveData, setShowSensitiveData] = useState<
     Record<string, boolean>
   >({});
@@ -394,6 +401,36 @@ export default function DriverDetailPage() {
       toast.error(err.response?.data?.message || 'Failed to approve driver');
     } finally {
       setIsUpdating(false);
+    }
+  };
+
+  const startEditDriverNumber = () => {
+    if (!driver) return;
+    setDriverNumberDraft(driver.driver_number || '');
+    setEditingDriverNumber(true);
+  };
+
+  const handleSaveDriverNumber = async () => {
+    if (!driver) return;
+    const next = driverNumberDraft.trim().toUpperCase();
+    if (next && !/^[A-Z0-9-]+$/.test(next)) {
+      toast.error('Driver ID must be letters, numbers, or hyphens (e.g. A27048)');
+      return;
+    }
+    setSavingDriverNumber(true);
+    try {
+      await apiClient.updateDriver(driver.id, { driver_number: next });
+      toast.success(next ? `Driver ID saved as ${next}` : 'Driver ID cleared');
+      setEditingDriverNumber(false);
+      await fetchDriver();
+    } catch (err: any) {
+      toast.error(
+        err.response?.data?.message ||
+          err.response?.data?.errors?.driver_number?.[0] ||
+          'Failed to update driver ID',
+      );
+    } finally {
+      setSavingDriverNumber(false);
     }
   };
 
@@ -2553,6 +2590,14 @@ export default function DriverDetailPage() {
               <h1 className='text-3xl font-bold text-white'>
                 {driver.user?.name || 'Driver'}
               </h1>
+              {driver.driver_number ? (
+                <Badge
+                  variant='outline'
+                  className='border-slate-500 font-mono text-slate-200'
+                >
+                  {driver.driver_number}
+                </Badge>
+              ) : null}
               {getStatusBadge(driver.status)}
               {isInvoiceReady && (
                 <Badge
@@ -2646,6 +2691,74 @@ export default function DriverDetailPage() {
             </CardHeader>
             <CardContent className='space-y-4'>
               <div className='grid grid-cols-2 gap-4'>
+                <div>
+                  <p className='text-slate-400 text-sm'>Driver ID</p>
+                  {editingDriverNumber ? (
+                    <div className='mt-1 flex items-center gap-1'>
+                      <Input
+                        value={driverNumberDraft}
+                        onChange={(e) =>
+                          setDriverNumberDraft(e.target.value.toUpperCase())
+                        }
+                        placeholder='A27048'
+                        disabled={savingDriverNumber}
+                        autoFocus
+                        className='h-8 max-w-[10rem] border-slate-600 bg-slate-700 font-mono text-white uppercase'
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            void handleSaveDriverNumber();
+                          }
+                          if (e.key === 'Escape') {
+                            setEditingDriverNumber(false);
+                          }
+                        }}
+                      />
+                      <Button
+                        type='button'
+                        variant='ghost'
+                        size='sm'
+                        className='h-8 w-8 p-0 text-emerald-400 hover:text-emerald-300'
+                        disabled={savingDriverNumber}
+                        onClick={() => void handleSaveDriverNumber()}
+                        aria-label='Save driver ID'
+                      >
+                        {savingDriverNumber ? (
+                          <Spinner className='h-4 w-4' />
+                        ) : (
+                          <Check className='h-4 w-4' />
+                        )}
+                      </Button>
+                      <Button
+                        type='button'
+                        variant='ghost'
+                        size='sm'
+                        className='h-8 w-8 p-0 text-slate-400 hover:text-white'
+                        disabled={savingDriverNumber}
+                        onClick={() => setEditingDriverNumber(false)}
+                        aria-label='Cancel'
+                      >
+                        <X className='h-4 w-4' />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className='flex items-center gap-2'>
+                      <p className='text-white font-medium font-mono'>
+                        {driver.driver_number || 'N/A'}
+                      </p>
+                      <Button
+                        type='button'
+                        variant='ghost'
+                        size='sm'
+                        onClick={startEditDriverNumber}
+                        className='h-6 w-6 p-0 text-slate-400 hover:text-white'
+                        aria-label='Edit driver ID'
+                      >
+                        <Pencil className='h-4 w-4' />
+                      </Button>
+                    </div>
+                  )}
+                </div>
                 <div>
                   <p className='text-slate-400 text-sm'>Full Name</p>
                   <p className='text-white font-medium'>

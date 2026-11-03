@@ -17,6 +17,7 @@ export function formatTimesheetStatusLabel(status: TimesheetStatus) {
 type TimesheetStatusBadgeProps = {
   status: TimesheetStatus;
   adjusted?: boolean;
+  isAdjustmentEntry?: boolean;
   driverReviewStatus?: string | null;
   driverReviewLabel?: string | null;
   className?: string;
@@ -29,6 +30,7 @@ type TimesheetStatusBadgeProps = {
 export function TimesheetStatusBadge({
   status,
   adjusted,
+  isAdjustmentEntry,
   driverReviewStatus,
   driverReviewLabel,
   className,
@@ -75,7 +77,12 @@ export function TimesheetStatusBadge({
         {icon}
         <span>{formatTimesheetStatusLabel(status)}</span>
       </Badge>
-      {adjusted ? (
+      {isAdjustmentEntry ? (
+        <span className='inline-flex items-center gap-1 text-xs text-amber-300'>
+          <PencilLine className='h-3 w-3' aria-hidden />
+          Adjustment timesheet
+        </span>
+      ) : adjusted ? (
         <span className='inline-flex items-center gap-1 text-xs text-violet-300'>
           <PencilLine className='h-3 w-3' aria-hidden />
           Adjusted

@@ -239,8 +239,9 @@ export default function DriverAdjustmentRequestsPage() {
               </div>
               {detail.status === 'pending' ? (
                 <p className='text-sm text-slate-300'>
-                  Admin sent documents for review. Open the timesheet to send an
-                  adjustment request.
+                  Admin sent documents for review. Open that timesheet to send an
+                  adjustment request. Admin will then create a new timesheet to
+                  handle it.
                 </p>
               ) : (
                 <>
@@ -269,13 +270,24 @@ export default function DriverAdjustmentRequestsPage() {
             </div>
           ) : null}
           <DialogFooter className='gap-2 sm:justify-between'>
-            {detail ? (
+            {detail?.status === 'pending' ? (
               <Button
                 asChild
                 className='bg-emerald-600 hover:bg-emerald-500 text-white'
               >
                 <Link href={`/driver/timesheets/${detail.timesheet_id}`}>
                   Open timesheet
+                </Link>
+              </Button>
+            ) : detail?.handling_timesheet_id || detail?.handling_timesheet?.id ? (
+              <Button
+                asChild
+                className='bg-emerald-600 hover:bg-emerald-500 text-white'
+              >
+                <Link
+                  href={`/driver/timesheets/${detail.handling_timesheet_id || detail.handling_timesheet?.id}`}
+                >
+                  Open adjustment timesheet
                 </Link>
               </Button>
             ) : null}

@@ -93,8 +93,8 @@ export function DriverTimesheetAdjustmentCard({
           Adjustment request
         </CardTitle>
         <CardDescription className='text-slate-400'>
-          Describe what needs to be corrected on this timesheet. Admin will see
-          it in Adjustment requests.
+          Describe what needs to be corrected. Admin will create a new timesheet
+          to handle this request — this timesheet stays as-is.
         </CardDescription>
       </CardHeader>
       <CardContent className='space-y-4'>

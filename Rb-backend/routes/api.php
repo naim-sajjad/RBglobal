@@ -163,12 +163,15 @@ Route::prefix('v1/tenant')->middleware([
     Route::get('/timesheets/{timesheet}/documents', [TimesheetDocumentController::class, 'index']);
     Route::post('/timesheets/{timesheet}/documents/generate', [TimesheetDocumentController::class, 'generate']);
     Route::post('/timesheets/{timesheet}/documents/upload', [TimesheetDocumentController::class, 'upload']);
+    Route::post('/timesheets/{timesheet}/documents/request-invoice', [TimesheetDocumentController::class, 'requestInvoice']);
+    Route::get('/timesheets/{timesheet}/documents/{document}/preview', [TimesheetDocumentController::class, 'preview']);
     Route::get('/timesheets/{timesheet}/documents/{document}/download', [TimesheetDocumentController::class, 'download']);
     Route::get('/timesheets/{timesheet}/documents/{document}/view', [TimesheetDocumentController::class, 'view']);
     Route::delete('/timesheets/{timesheet}/documents/{document}', [TimesheetDocumentController::class, 'destroy']);
     Route::get('/timesheet-document-adjustment-requests', [TimesheetDocumentReviewController::class, 'listAdjustmentRequests']);
     Route::get('/driver/timesheet-document-adjustment-requests', [TimesheetDocumentReviewController::class, 'listMyAdjustmentRequests']);
     Route::get('/timesheet-document-adjustment-requests/{review}', [TimesheetDocumentReviewController::class, 'showAdjustmentRequest']);
+    Route::post('/timesheet-document-adjustment-requests/{review}/create-timesheet', [TimesheetDocumentReviewController::class, 'createHandlingTimesheet']);
     Route::put('/timesheet-document-reviews/{review}/adjustment', [TimesheetDocumentReviewController::class, 'updateAdjustment']);
     Route::get('/timesheets/{timesheet}/document-reviews', [TimesheetDocumentReviewController::class, 'index']);
     Route::post('/timesheets/{timesheet}/document-reviews/send', [TimesheetDocumentReviewController::class, 'send']);

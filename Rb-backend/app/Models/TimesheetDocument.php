@@ -15,6 +15,8 @@ class TimesheetDocument extends Model
 
     public const TYPE_CALCULATION_SHEET = 'calculation_sheet';
 
+    public const TYPE_TIMESHEET = 'timesheet';
+
     public const SOURCE_GENERATED = 'generated';
 
     public const SOURCE_UPLOADED = 'uploaded';
@@ -27,7 +29,13 @@ class TimesheetDocument extends Model
         'file_path',
         'original_filename',
         'file_size',
+        'parsed_payload',
+        'mime_type',
         'created_by',
+    ];
+
+    protected $casts = [
+        'parsed_payload' => 'array',
     ];
 
     protected $appends = ['file_url'];

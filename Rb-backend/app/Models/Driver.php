@@ -16,6 +16,7 @@ class Driver extends Model
         'tenant_id',
         'name',
         'email',
+        'driver_number',
         'driver_class_id',
         'driver_class_effective_date',
         // License Information
@@ -64,6 +65,13 @@ class Driver extends Model
         'drug_alcohol_test' => 'boolean',
         'years_of_experience' => 'integer',
     ];
+
+    public static function normalizeDriverNumber(mixed $value): ?string
+    {
+        $value = strtoupper(preg_replace('/\s+/', '', trim((string) $value)) ?? '');
+
+        return $value === '' ? null : $value;
+    }
 
     /** Public browser URLs for document paths (NEXT_PUBLIC_STORAGE_BASE_URL alternative). */
     protected $appends = [

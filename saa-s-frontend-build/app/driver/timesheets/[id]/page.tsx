@@ -55,6 +55,7 @@ import {
   resolveClassDriverRate,
   resolveDistanceBandRates,
   DISTANCE_RATE_OVERRIDE_KEY,
+  toDateOnly,
   type PayRateDraft,
 } from '@/lib/timesheet-lines';
 
@@ -63,7 +64,10 @@ const TOOLBAR_SECONDARY =
   'h-8 shrink-0 gap-1 px-2.5 text-xs font-medium border-slate-600 bg-slate-700 text-white hover:bg-slate-600 hover:text-white';
 
 function formatDate(d: string) {
-  return new Date(d).toLocaleDateString('en-CA', {
+  const ymd = toDateOnly(d);
+  if (!ymd) return d || '—';
+  const [y, m, day] = ymd.split('-').map(Number);
+  return new Date(y, m - 1, day).toLocaleDateString('en-CA', {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
@@ -143,7 +147,8 @@ export default function DriverTimesheetDetailPage() {
     const employerNumeric = newTripEmployerId
       ? Number(newTripEmployerId)
       : null;
-    if (!employerNumeric || !newTripDate) {
+    const tripDay = toDateOnly(newTripDate);
+    if (!employerNumeric || !tripDay) {
       setActiveRateConfig(null);
       return;
     }
@@ -160,16 +165,11 @@ export default function DriverTimesheetDetailPage() {
             [employerNumeric]: cards,
           }));
         }
-        const date = new Date(`${newTripDate}T12:00:00`);
         const active = cards.find((c) => {
           if (c.status !== 'active' && c.status !== 'scheduled') return false;
-          const from = c.effective_from
-            ? new Date(`${String(c.effective_from).slice(0, 10)}T12:00:00`)
-            : null;
-          const to = c.effective_to
-            ? new Date(`${String(c.effective_to).slice(0, 10)}T12:00:00`)
-            : null;
-          const inRange = (!from || date >= from) && (!to || date <= to);
+          const from = toDateOnly(c.effective_from);
+          const to = toDateOnly(c.effective_to);
+          const inRange = (!from || tripDay >= from) && (!to || tripDay <= to);
           return inRange;
         });
         setActiveRateConfig((active?.rates as RateCardRatesConfig) || null);
@@ -239,8 +239,15 @@ export default function DriverTimesheetDetailPage() {
       newTripEmployerId ||
       (timesheet?.employer_id ? String(timesheet.employer_id) : '');
     const distance = parseFloat(newTripDistance);
-    if (!id || !employerId || !newTripDate || isNaN(distance) || distance < 0)
+    const tripDate = toDateOnly(newTripDate);
+    if (!id || !employerId || !tripDate) {
+      toast.error('Select a trip date');
       return;
+    }
+    if (isNaN(distance) || distance < 0) {
+      toast.error('Enter a valid distance');
+      return;
+    }
     setSaving(true);
     try {
       const additional_quantities = Object.fromEntries(
@@ -251,7 +258,7 @@ export default function DriverTimesheetDetailPage() {
 
       await apiClient.createTimesheetTrip(id, {
         employer_id: parseInt(employerId, 10),
-        trip_date: newTripDate,
+        trip_date: tripDate,
         trip_number: newTripNumber || undefined,
         distance,
         notes: newTripNotes || undefined,
@@ -334,7 +341,7 @@ export default function DriverTimesheetDetailPage() {
   const trips = timesheet.trips ?? [];
   const tripsByDate = trips.reduce<Record<string, TimesheetTrip[]>>(
     (acc, t) => {
-      const d = t.trip_date;
+      const d = toDateOnly(t.trip_date) || t.trip_date;
       if (!acc[d]) acc[d] = [];
       acc[d].push(t);
       return acc;
@@ -371,6 +378,7 @@ export default function DriverTimesheetDetailPage() {
           <TimesheetStatusBadge
             status={timesheet.status}
             adjusted={Boolean(timesheet.adjusted_at)}
+            isAdjustmentEntry={Boolean(timesheet.adjustment_review_id)}
             driverReviewStatus={
               timesheet.latest_document_review?.status ??
               timesheet.document_reviews?.[0]?.status ??
@@ -591,10 +599,10 @@ export default function DriverTimesheetDetailPage() {
                   <Label className='text-slate-300'>Trip date</Label>
                   <Input
                     type='date'
-                    value={newTripDate}
+                    value={toDateOnly(newTripDate)}
                     onChange={(e) => setNewTripDate(e.target.value)}
-                    min={timesheet?.week_start_date}
-                    max={timesheet?.week_end_date}
+                    min={toDateOnly(timesheet?.week_start_date)}
+                    max={toDateOnly(timesheet?.week_end_date)}
                     required
                     className='h-9 bg-slate-700 border-slate-600 text-white'
                   />

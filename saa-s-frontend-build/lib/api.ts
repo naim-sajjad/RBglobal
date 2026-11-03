@@ -488,10 +488,24 @@ class ApiClient {
     });
     return response.data as {
       message: string;
-      timesheets: Array<{ id: number; driver_id: number; week_start_date: string }>;
+      timesheets: Array<{
+        id: number;
+        driver_id: number;
+        week_start_date: string;
+        week_end_date?: string;
+      }>;
       trips_created: number;
       lines_imported: number;
       warnings?: string[];
+      unmatched?: Array<{
+        row: number;
+        driver_number?: string | null;
+        driver_name?: string | null;
+        customer?: string | null;
+        trip_number?: string | null;
+        trip_date?: string | null;
+        reason: string;
+      }>;
     };
   }
 
@@ -648,7 +662,7 @@ class ApiClient {
 
   async uploadTimesheetDocument(
     timesheetId: string | number,
-    documentType: 'invoice' | 'calculation_sheet',
+    documentType: 'invoice' | 'calculation_sheet' | 'timesheet',
     file: File
   ) {
     const formData = new FormData();
@@ -659,7 +673,30 @@ class ApiClient {
       formData,
       { headers: { 'Content-Type': 'multipart/form-data' } }
     );
-    return response.data;
+    return response.data as {
+      document?: import('./types').TimesheetDocument;
+      preview?: import('./types').CalculationSheetPreview | null;
+    } & Partial<import('./types').TimesheetDocument>;
+  }
+
+  async requestTimesheetInvoice(timesheetId: string | number) {
+    const response = await this.client.post(
+      `/tenant/timesheets/${timesheetId}/documents/request-invoice`,
+    );
+    return response.data as {
+      invoice: import('./types').TimesheetDocument;
+      preview?: import('./types').CalculationSheetPreview | null;
+    };
+  }
+
+  async getTimesheetDocumentPreview(
+    timesheetId: string | number,
+    documentId: string | number,
+  ) {
+    const response = await this.client.get(
+      `/tenant/timesheets/${timesheetId}/documents/${documentId}/preview`,
+    );
+    return response.data as import('./types').CalculationSheetPreview;
   }
 
   async deleteTimesheetDocument(timesheetId: string | number, documentId: string | number) {
@@ -674,7 +711,7 @@ class ApiClient {
     documentId: string | number,
     fallbackFilename: string
   ) {
-    await this.downloadPdf(
+    await this.downloadBlob(
       `/tenant/timesheets/${timesheetId}/documents/${documentId}/download`,
       fallbackFilename
     );
@@ -783,6 +820,17 @@ class ApiClient {
     };
   }
 
+  async createAdjustmentHandlingTimesheet(reviewId: string | number) {
+    const response = await this.client.post(
+      `/tenant/timesheet-document-adjustment-requests/${reviewId}/create-timesheet`,
+    );
+    return response.data as {
+      message: string;
+      timesheet: import('./types').Timesheet;
+      review: import('./types').TimesheetDocumentReview;
+    };
+  }
+
   // Client billing (employer invoices)
   async previewClientInvoice(data: {
     employer_id: number;
@@ -849,6 +897,39 @@ class ApiClient {
     const simple = /filename=([^;\s]+)/i.exec(header);
     if (simple?.[1]) return simple[1].replace(/^["']|["']$/g, '');
     return null;
+  }
+
+  private async downloadBlob(path: string, fallbackFilename: string): Promise<void> {
+    try {
+      const response = await this.client.get(path, { responseType: 'blob' });
+      const blob = response.data as Blob;
+      const cd = response.headers['content-disposition'] as string | undefined;
+      const filename = this.parseFilenameFromContentDisposition(cd) ?? fallbackFilename;
+      const url = window.URL.createObjectURL(blob);
+      try {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      } finally {
+        window.URL.revokeObjectURL(url);
+      }
+    } catch (err: unknown) {
+      if (isAxiosError(err) && err.response?.data instanceof Blob) {
+        const t = await err.response.data.text();
+        let msg = 'Download failed';
+        try {
+          const j = JSON.parse(t) as { message?: string };
+          if (j.message) msg = j.message;
+        } catch {
+          /* ignore */
+        }
+        throw new Error(msg);
+      }
+      throw err;
+    }
   }
 
   private async downloadPdf(path: string, fallbackFilename: string): Promise<void> {

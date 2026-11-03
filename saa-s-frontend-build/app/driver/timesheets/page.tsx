@@ -238,6 +238,7 @@ export default function DriverTimesheetsPage() {
                         <TimesheetStatusBadge
                           status={ts.status}
                           adjusted={Boolean(ts.adjusted_at)}
+                          isAdjustmentEntry={Boolean(ts.adjustment_review_id)}
                           driverReviewStatus={
                             ts.latest_document_review?.status ?? null
                           }

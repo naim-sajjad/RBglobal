@@ -185,21 +185,27 @@ export function formatPayDisplay(pay: number) {
   return `$${pay.toFixed(2)}`;
 }
 
+/** Calendar date (YYYY-MM-DD) from an API date or ISO datetime. */
+export function toDateOnly(value?: string | null): string {
+  if (!value) return '';
+  const match = String(value).match(/^(\d{4}-\d{2}-\d{2})/);
+  return match?.[1] ?? '';
+}
+
 /** Day after the latest trip date, clamped to the timesheet week. Falls back to week start. */
 export function suggestNextTripDate(
   trips: Pick<TimesheetTrip, 'trip_date'>[] | undefined,
   weekStart?: string | null,
   weekEnd?: string | null,
 ): string {
+  const start = toDateOnly(weekStart);
+  const end = toDateOnly(weekEnd);
   const dates = (trips ?? [])
-    .map((t) => t.trip_date)
-    .filter(
-      (d): d is string =>
-        typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d),
-    )
+    .map((t) => toDateOnly(t.trip_date))
+    .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))
     .sort();
   const last = dates[dates.length - 1];
-  let candidate = weekStart ?? '';
+  let candidate = start;
   if (last) {
     const [y, m, d] = last.split('-').map(Number);
     const next = new Date(y, m - 1, d + 1);
@@ -209,8 +215,8 @@ export function suggestNextTripDate(
       String(next.getDate()).padStart(2, '0'),
     ].join('-');
   }
-  if (weekStart && candidate && candidate < weekStart) candidate = weekStart;
-  if (weekEnd && candidate && candidate > weekEnd) candidate = weekEnd;
+  if (start && candidate && candidate < start) candidate = start;
+  if (end && candidate && candidate > end) candidate = end;
   return candidate;
 }
 

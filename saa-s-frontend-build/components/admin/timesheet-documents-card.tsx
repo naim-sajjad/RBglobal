@@ -44,19 +44,24 @@ import {
   FileUp,
   Send,
   Loader2,
+  User,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import {
+  CalculationSheetPreview,
   TimesheetDocument,
   TimesheetDocumentReview,
   TimesheetDocumentType,
 } from '@/lib/types';
 import { toast } from 'sonner';
 import { cn, formatApiDate, getApiErrorMessage } from '@/lib/utils';
+import { CalculationSheetPreviewView } from '@/components/driver/calculation-sheet-preview';
 
 const DOCUMENT_TYPE_LABELS: Record<TimesheetDocumentType, string> = {
   invoice: 'Invoice',
   calculation_sheet: 'Calculation Sheet',
+  timesheet: 'Timesheet',
 };
 
 const REVIEW_STATUS_LABELS: Record<string, string> = {
@@ -87,6 +92,56 @@ function documentSortKey(doc: TimesheetDocument) {
   const typeOrder = doc.document_type === 'invoice' ? 0 : 1;
   const sourceOrder = doc.source === 'generated' ? 0 : 1;
   return `${typeOrder}-${sourceOrder}-${doc.created_at}`;
+}
+
+function isSpreadsheet(doc: TimesheetDocument) {
+  return /\.(xlsx|xls|csv)$/i.test(doc.original_filename || '');
+}
+
+function isUploadedOrDriverInvoice(
+  doc: TimesheetDocument,
+  driverUserId?: number | null,
+) {
+  if (doc.source === 'uploaded') {
+    return true;
+  }
+  return (
+    doc.source === 'generated' &&
+    doc.document_type === 'invoice' &&
+    !!driverUserId &&
+    doc.created_by === driverUserId
+  );
+}
+
+function isExcelFile(file: File) {
+  return /\.(xlsx|xls|csv)$/i.test(file.name);
+}
+
+function isPdfFile(file: File) {
+  return file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+}
+
+function uploadAccept(type: TimesheetDocumentType) {
+  if (type === 'invoice') {
+    return '.pdf,application/pdf';
+  }
+  if (type === 'calculation_sheet') {
+    return '.pdf,.xlsx,.xls,.csv,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv';
+  }
+  return '.pdf,.xlsx,.xls,.csv,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv';
+}
+
+function isAllowedUploadFile(type: TimesheetDocumentType, file: File) {
+  if (type === 'invoice') return isPdfFile(file);
+  return isPdfFile(file) || isExcelFile(file);
+}
+
+function uploadHint(type: TimesheetDocumentType) {
+  if (type === 'invoice') return 'PDF only, max 10 MB';
+  if (type === 'calculation_sheet') {
+    return 'Excel preferred (.xlsx) or PDF, max 10 MB';
+  }
+  return 'PDF or Excel (.pdf, .xlsx, .xls, .csv), max 10 MB';
 }
 
 /** Generate + Upload dropdowns for the timesheet top action row. */
@@ -180,14 +235,19 @@ export function TimesheetDocumentActions({
 
   const handleUploadSubmit = async () => {
     if (!selectedFile) {
-      toast.error('Select a PDF file to upload');
+      toast.error(
+        uploadDocumentType === 'invoice'
+          ? 'Select a PDF file to upload'
+          : 'Select a PDF or Excel file to upload',
+      );
       return;
     }
-    if (
-      selectedFile.type !== 'application/pdf' &&
-      !selectedFile.name.toLowerCase().endsWith('.pdf')
-    ) {
-      toast.error('Only PDF files are supported');
+    if (!isAllowedUploadFile(uploadDocumentType, selectedFile)) {
+      toast.error(
+        uploadDocumentType === 'invoice'
+          ? 'Invoices must be a PDF'
+          : 'Use a PDF or Excel file (.xlsx, .xls, or .csv)',
+      );
       return;
     }
 
@@ -212,8 +272,12 @@ export function TimesheetDocumentActions({
 
   const handleFileSelect = (file: File | undefined) => {
     if (!file) return;
-    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
-      toast.error('Only PDF files are supported');
+    if (!isAllowedUploadFile(uploadDocumentType, file)) {
+      toast.error(
+        uploadDocumentType === 'invoice'
+          ? 'Invoices must be a PDF'
+          : 'Use a PDF or Excel file (.xlsx, .xls, or .csv)',
+      );
       return;
     }
     setSelectedFile(file);
@@ -314,11 +378,11 @@ export function TimesheetDocumentActions({
         >
           <DropdownMenuItem
             className='focus:bg-slate-700 focus:text-white cursor-pointer'
-            onClick={() => openUploadDialog('invoice')}
+            onClick={() => openUploadDialog('timesheet')}
           >
-            <FileText className='h-4 w-4 mr-2 text-emerald-400' />
-            Upload Invoice
-            {hasUploaded('invoice') ? (
+            <FileSpreadsheet className='h-4 w-4 mr-2 text-sky-400' />
+            Upload Timesheet
+            {hasUploaded('timesheet') ? (
               <span className='ml-auto text-xs text-slate-400'>Replace</span>
             ) : null}
           </DropdownMenuItem>
@@ -329,6 +393,16 @@ export function TimesheetDocumentActions({
             <Calculator className='h-4 w-4 mr-2 text-blue-400' />
             Upload Calculation Sheet
             {hasUploaded('calculation_sheet') ? (
+              <span className='ml-auto text-xs text-slate-400'>Replace</span>
+            ) : null}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className='focus:bg-slate-700 focus:text-white cursor-pointer'
+            onClick={() => openUploadDialog('invoice')}
+          >
+            <FileText className='h-4 w-4 mr-2 text-emerald-400' />
+            Upload Invoice
+            {hasUploaded('invoice') ? (
               <span className='ml-auto text-xs text-slate-400'>Replace</span>
             ) : null}
           </DropdownMenuItem>
@@ -368,25 +442,27 @@ export function TimesheetDocumentActions({
           if (!open) resetUploadForm();
         }}
       >
-        <DialogContent className='bg-slate-800 border-slate-700 sm:max-w-md'>
+        <DialogContent className='max-w-[calc(100vw-2rem)] overflow-hidden bg-slate-800 border-slate-700 sm:max-w-md'>
           <DialogHeader>
             <DialogTitle className='text-white'>Upload document</DialogTitle>
             <DialogDescription className='text-slate-400'>
-              Choose the document type and select a PDF file. Uploading replaces
-              any existing uploaded file of the same type.
+              Timesheet and calculation sheet: PDF or Excel. Invoice: PDF.
+              Uploading replaces any existing uploaded file of the same type.
             </DialogDescription>
           </DialogHeader>
 
-          <div className='space-y-4 py-1'>
+          <div className='min-w-0 space-y-4 py-1'>
             <div className='space-y-2'>
               <Label htmlFor='upload-document-type' className='text-slate-300'>
                 Document type
               </Label>
               <Select
                 value={uploadDocumentType}
-                onValueChange={(value) =>
-                  setUploadDocumentType(value as TimesheetDocumentType)
-                }
+                onValueChange={(value) => {
+                  setUploadDocumentType(value as TimesheetDocumentType);
+                  setSelectedFile(null);
+                  if (uploadInputRef.current) uploadInputRef.current.value = '';
+                }}
               >
                 <SelectTrigger
                   id='upload-document-type'
@@ -395,18 +471,21 @@ export function TimesheetDocumentActions({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className='bg-slate-800 border-slate-700 text-white'>
-                  <SelectItem value='invoice'>Invoice</SelectItem>
+                  <SelectItem value='timesheet'>Timesheet</SelectItem>
                   <SelectItem value='calculation_sheet'>Calculation Sheet</SelectItem>
+                  <SelectItem value='invoice'>Invoice</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className='space-y-2'>
-              <Label className='text-slate-300'>PDF file</Label>
+              <Label className='text-slate-300'>
+                {uploadDocumentType === 'invoice' ? 'PDF file' : 'PDF or Excel file'}
+              </Label>
               <input
                 ref={uploadInputRef}
                 type='file'
-                accept='application/pdf,.pdf'
+                accept={uploadAccept(uploadDocumentType)}
                 className='hidden'
                 onChange={(e) => handleFileSelect(e.target.files?.[0])}
               />
@@ -428,7 +507,10 @@ export function TimesheetDocumentActions({
                 />
                 {selectedFile ? (
                   <>
-                    <span className='text-sm font-medium text-white text-center break-all'>
+                    <span
+                      className='w-full max-w-full break-all text-center text-sm font-medium text-white'
+                      title={selectedFile.name}
+                    >
                       {selectedFile.name}
                     </span>
                     <span className='text-xs text-slate-400'>
@@ -438,9 +520,11 @@ export function TimesheetDocumentActions({
                 ) : (
                   <>
                     <span className='text-sm font-medium text-slate-200'>
-                      Click to choose a PDF
+                      Click to choose a file
                     </span>
-                    <span className='text-xs text-slate-500'>PDF only, max 10 MB</span>
+                    <span className='text-xs text-slate-500'>
+                      {uploadHint(uploadDocumentType)}
+                    </span>
                   </>
                 )}
               </button>
@@ -557,6 +641,18 @@ export function TimesheetDocumentsCard({
   };
 
   const handleView = async (doc: TimesheetDocument) => {
+    if (isSpreadsheet(doc)) {
+      try {
+        await apiClient.downloadTimesheetDocument(
+          timesheetId,
+          doc.id,
+          doc.original_filename,
+        );
+      } catch (err: unknown) {
+        toast.error(getApiErrorMessage(err, 'Failed to open document'));
+      }
+      return;
+    }
     try {
       await apiClient.openTimesheetDocument(timesheetId, doc.id);
     } catch (err: unknown) {
@@ -746,5 +842,252 @@ export function TimesheetDocumentsCard({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+const DRIVER_DOC_ORDER: Record<string, number> = {
+  timesheet: 0,
+  calculation_sheet: 1,
+  invoice: 2,
+};
+
+/** Always-visible staff view of files the driver uploaded or generated. */
+export function DriverUploadedDocumentsSection({
+  timesheetId,
+  documents,
+  driverUserId,
+  onDocumentsChange,
+}: {
+  timesheetId: string | number;
+  documents: TimesheetDocument[];
+  driverUserId?: number | null;
+  onDocumentsChange: () => Promise<void> | void;
+}) {
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [preview, setPreview] = useState<CalculationSheetPreview | null>(null);
+  const [previewTitle, setPreviewTitle] = useState('Calculation sheet');
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  const uploadedDocs = [...documents]
+    .filter((doc) => isUploadedOrDriverInvoice(doc, driverUserId))
+    .sort((a, b) => {
+      const typeDelta =
+        (DRIVER_DOC_ORDER[a.document_type] ?? 9) -
+        (DRIVER_DOC_ORDER[b.document_type] ?? 9);
+      if (typeDelta !== 0) return typeDelta;
+      return a.created_at < b.created_at ? 1 : -1;
+    });
+
+  const calcPreview = uploadedDocs.find(
+    (doc) =>
+      doc.document_type === 'calculation_sheet' &&
+      (doc.parsed_payload?.lines?.length || doc.parsed_payload?.headers?.length),
+  );
+
+  const handleView = async (doc: TimesheetDocument) => {
+    if (isSpreadsheet(doc) || doc.parsed_payload?.headers || doc.parsed_payload?.lines) {
+      setPreviewLoading(true);
+      setPreviewTitle(DOCUMENT_TYPE_LABELS[doc.document_type] || 'Document');
+      try {
+        const data =
+          doc.parsed_payload?.lines || doc.parsed_payload?.headers
+            ? doc.parsed_payload
+            : await apiClient.getTimesheetDocumentPreview(timesheetId, doc.id);
+        setPreview(data);
+      } catch (err: unknown) {
+        toast.error(getApiErrorMessage(err, 'Could not preview this file'));
+      } finally {
+        setPreviewLoading(false);
+      }
+      return;
+    }
+    try {
+      await apiClient.openTimesheetDocument(timesheetId, doc.id);
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Failed to open document'));
+    }
+  };
+
+  const handleDownload = async (doc: TimesheetDocument) => {
+    try {
+      await apiClient.downloadTimesheetDocument(
+        timesheetId,
+        doc.id,
+        doc.original_filename,
+      );
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Failed to download document'));
+    }
+  };
+
+  const handleDelete = async (doc: TimesheetDocument) => {
+    const label = DOCUMENT_TYPE_LABELS[doc.document_type];
+    if (!confirm(`Delete this ${label} (${doc.original_filename})?`)) return;
+    setDeletingId(doc.id);
+    try {
+      await apiClient.deleteTimesheetDocument(timesheetId, doc.id);
+      toast.success('Document deleted');
+      await onDocumentsChange();
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Failed to delete document'));
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  return (
+    <>
+      <Card
+        id='driver-uploads'
+        className='min-w-0 overflow-hidden border-slate-700 bg-slate-800'
+      >
+        <CardHeader className='pb-3'>
+          <CardTitle className='flex items-center gap-2 text-base text-white'>
+            <User className='h-4 w-4' />
+            Uploaded documents
+            <Badge
+              variant='outline'
+              className={cn(
+                'font-normal',
+                uploadedDocs.length > 0
+                  ? 'border-sky-700 text-sky-200'
+                  : 'border-slate-600 text-slate-400',
+              )}
+            >
+              {uploadedDocs.length}
+            </Badge>
+          </CardTitle>
+          <CardDescription className='text-slate-400'>
+            Timesheet and calculation sheet files uploaded by the driver or by
+            staff. Use Upload in the toolbar to add files.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className='space-y-4'>
+          {uploadedDocs.length === 0 ? (
+            <p className='rounded-md border border-dashed border-slate-600 py-6 text-center text-sm text-slate-400'>
+              No timesheet or calculation sheet uploaded yet. The driver can
+              upload from the portal, or use Upload above.
+            </p>
+          ) : (
+            <ul className='space-y-2'>
+              {uploadedDocs.map((doc) => (
+                <li
+                  key={doc.id}
+                  className='flex flex-col gap-2 rounded-md border border-slate-700 bg-slate-900/50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between'
+                >
+                  <div className='min-w-0 space-y-1'>
+                    <div className='flex flex-wrap items-center gap-2'>
+                      <p className='text-sm font-medium text-white'>
+                        {DOCUMENT_TYPE_LABELS[doc.document_type]}
+                      </p>
+                      <Badge
+                        className={cn(
+                          'text-[10px] font-normal',
+                          doc.source === 'generated'
+                            ? 'bg-violet-800 text-violet-100'
+                            : driverUserId && doc.created_by === driverUserId
+                              ? 'bg-sky-700 text-white'
+                              : 'bg-slate-600 text-slate-100',
+                        )}
+                      >
+                        {doc.source === 'generated'
+                          ? 'Generated'
+                          : driverUserId && doc.created_by === driverUserId
+                            ? 'Driver'
+                            : 'Staff'}
+                      </Badge>
+                    </div>
+                    <p
+                      className='truncate text-xs text-slate-400'
+                      title={doc.original_filename}
+                    >
+                      {doc.original_filename}
+                      {formatFileSize(doc.file_size)
+                        ? ` · ${formatFileSize(doc.file_size)}`
+                        : ''}
+                      {doc.created_at ? ` · ${formatApiDate(doc.created_at)}` : ''}
+                      {doc.creator?.name ? ` · ${doc.creator.name}` : ''}
+                    </p>
+                  </div>
+                  <div className='flex shrink-0 items-center gap-1'>
+                    <Button
+                      type='button'
+                      variant='ghost'
+                      size='sm'
+                      className='text-slate-300 hover:text-white'
+                      onClick={() => void handleView(doc)}
+                    >
+                      <Eye className='h-4 w-4 mr-1' />
+                      View
+                    </Button>
+                    <Button
+                      type='button'
+                      variant='ghost'
+                      size='sm'
+                      className='text-slate-300 hover:text-white'
+                      onClick={() => void handleDownload(doc)}
+                    >
+                      <Download className='h-4 w-4 mr-1' />
+                      Download
+                    </Button>
+                    <Button
+                      type='button'
+                      variant='ghost'
+                      size='sm'
+                      className='text-red-400 hover:text-red-300'
+                      disabled={deletingId === doc.id}
+                      onClick={() => void handleDelete(doc)}
+                    >
+                      {deletingId === doc.id ? (
+                        <Spinner className='h-4 w-4' />
+                      ) : (
+                        <Trash2 className='h-4 w-4' />
+                      )}
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {calcPreview?.parsed_payload ? (
+            <div className='min-w-0 max-w-full space-y-2'>
+              <h3 className='text-sm font-medium text-white'>
+                Calculation sheet preview
+              </h3>
+              <CalculationSheetPreviewView preview={calcPreview.parsed_payload} />
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      <Dialog
+        open={preview !== null || previewLoading}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPreview(null);
+            setPreviewLoading(false);
+          }
+        }}
+      >
+        <DialogContent className='max-w-[calc(100vw-2rem)] min-w-0 overflow-hidden border-slate-700 bg-slate-800 sm:max-w-3xl'>
+          <DialogHeader>
+            <DialogTitle className='text-white'>{previewTitle}</DialogTitle>
+            <DialogDescription className='text-slate-400'>
+              File uploaded by the driver.
+            </DialogDescription>
+          </DialogHeader>
+          {previewLoading ? (
+            <div className='flex justify-center py-10'>
+              <Spinner className='h-8 w-8 text-white' />
+            </div>
+          ) : preview ? (
+            <div className='min-w-0 max-w-full'>
+              <CalculationSheetPreviewView preview={preview} />
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

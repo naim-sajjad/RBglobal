@@ -73,6 +73,7 @@ import {
 import { toast } from 'sonner';
 import { cn, getApiErrorMessage } from '@/lib/utils';
 import {
+  DriverUploadedDocumentsSection,
   TimesheetDocumentActions,
   TimesheetDocumentsCard,
 } from '@/components/admin/timesheet-documents-card';
@@ -84,6 +85,7 @@ import {
   resolveDistanceBandRates,
   createCustomPayLineDraft,
   DISTANCE_RATE_OVERRIDE_KEY,
+  toDateOnly,
   type CustomPayLineDraft,
   type PayRateDraft,
 } from '@/lib/timesheet-lines';
@@ -110,7 +112,10 @@ const STATUS_COLORS: Record<TimesheetStatus, string> = {
 };
 
 function formatDate(d: string) {
-  return new Date(d).toLocaleDateString('en-CA', {
+  const ymd = toDateOnly(d);
+  if (!ymd) return d || '—';
+  const [y, m, day] = ymd.split('-').map(Number);
+  return new Date(y, m - 1, day).toLocaleDateString('en-CA', {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
@@ -406,7 +411,8 @@ export default function AdminTimesheetDetailPage() {
     const employerNumeric = newTripEmployerId
       ? Number(newTripEmployerId)
       : null;
-    if (!employerNumeric || !newTripDate) {
+    const tripDay = toDateOnly(newTripDate);
+    if (!employerNumeric || !tripDay) {
       setActiveRateConfig(null);
       return;
     }
@@ -423,12 +429,11 @@ export default function AdminTimesheetDetailPage() {
             [employerNumeric]: cards,
           }));
         }
-        const date = new Date(newTripDate);
         const active = cards.find((c) => {
           if (c.status !== 'active' && c.status !== 'scheduled') return false;
-          const from = c.effective_from ? new Date(c.effective_from) : null;
-          const to = c.effective_to ? new Date(c.effective_to) : null;
-          const inRange = (!from || date >= from) && (!to || date <= to);
+          const from = toDateOnly(c.effective_from);
+          const to = toDateOnly(c.effective_to);
+          const inRange = (!from || tripDay >= from) && (!to || tripDay <= to);
           return inRange;
         });
         setActiveRateConfig((active?.rates as RateCardRatesConfig) || null);
@@ -514,14 +519,15 @@ export default function AdminTimesheetDetailPage() {
   const handleAddTrip = async (e: React.FormEvent) => {
     e.preventDefault();
     const distance = parseFloat(newTripDistance);
-    if (
-      !id ||
-      !newTripEmployerId ||
-      !newTripDate ||
-      isNaN(distance) ||
-      distance < 0
-    )
+    const tripDate = toDateOnly(newTripDate);
+    if (!id || !newTripEmployerId || !tripDate) {
+      toast.error('Select a customer and trip date');
       return;
+    }
+    if (isNaN(distance) || distance < 0) {
+      toast.error('Enter a valid distance');
+      return;
+    }
     const blankCustom = customPayLines.some(
       (line) => Number(line.quantity) > 0 && !line.label.trim(),
     );
@@ -574,7 +580,7 @@ export default function AdminTimesheetDetailPage() {
 
       await apiClient.createTimesheetTrip(id, {
         employer_id: parseInt(newTripEmployerId, 10),
-        trip_date: newTripDate,
+        trip_date: tripDate,
         trip_number: newTripNumber || undefined,
         distance,
         notes: newTripNotes || undefined,
@@ -733,7 +739,7 @@ export default function AdminTimesheetDetailPage() {
   const trips = timesheet.trips ?? [];
   const tripsByDate = trips.reduce<Record<string, TimesheetTrip[]>>(
     (acc, t) => {
-      const d = t.trip_date;
+      const d = toDateOnly(t.trip_date) || t.trip_date;
       if (!acc[d]) acc[d] = [];
       acc[d].push(t);
       return acc;
@@ -765,6 +771,21 @@ export default function AdminTimesheetDetailPage() {
 
   return (
     <div className='max-w-5xl mx-auto space-y-6'>
+      {timesheet.adjustment_review_id ? (
+        <Alert className='border-amber-700/60 bg-amber-950/30 text-amber-100'>
+          <PencilLine className='h-4 w-4' />
+          <AlertDescription className='flex flex-wrap items-center gap-x-2 gap-y-1'>
+            This timesheet was created to handle an adjustment request. The
+            original timesheet is unchanged.
+            <Link
+              href={`/admin/timesheets/adjustment-requests?id=${timesheet.adjustment_review_id}`}
+              className='underline underline-offset-2 text-amber-200 hover:text-white'
+            >
+              View request
+            </Link>
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
         <Button
           variant='ghost'
@@ -1033,6 +1054,13 @@ export default function AdminTimesheetDetailPage() {
         </div>
       </div>
 
+      <DriverUploadedDocumentsSection
+        timesheetId={id}
+        documents={timesheet.documents ?? []}
+        driverUserId={timesheet.driver?.user?.id ?? timesheet.driver?.user_id}
+        onDocumentsChange={fetchTimesheet}
+      />
+
       {showDocuments ? (
         <TimesheetDocumentsCard
           timesheetId={id}
@@ -1282,10 +1310,10 @@ export default function AdminTimesheetDetailPage() {
                   <Label className='text-slate-300'>Trip date</Label>
                   <Input
                     type='date'
-                    value={newTripDate}
+                    value={toDateOnly(newTripDate)}
                     onChange={(e) => setNewTripDate(e.target.value)}
-                    min={timesheet?.week_start_date}
-                    max={timesheet?.week_end_date}
+                    min={toDateOnly(timesheet?.week_start_date)}
+                    max={toDateOnly(timesheet?.week_end_date)}
                     required
                     className='h-9 bg-slate-700 border-slate-600 text-white'
                   />

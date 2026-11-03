@@ -64,6 +64,7 @@ export default function CreateDriverPage() {
     email: '',
     password: '',
     tenant_id: '',
+    driver_number: '',
     license_number: '',
     license_type: undefined,
     license_other: '',
@@ -131,6 +132,7 @@ export default function CreateDriverPage() {
         email: driver.user?.email || '',
         password: '', // Don't populate password
         tenant_id: driver.tenant_id || '',
+        driver_number: driver.driver_number || '',
         license_number: driver.license_number || '',
         license_type: driver.license_type as CreateDriverData['license_type'],
         license_other: driver.license_other || '',
@@ -224,6 +226,7 @@ export default function CreateDriverPage() {
         safety_certificate: documentFiles.safety_certificate,
       };
 
+      submitData.driver_number = formData.driver_number?.trim() || '';
       submitData.payee_business_name = formData.payee_business_name?.trim() || '';
       submitData.payee_address = formData.payee_address?.trim() || '';
       submitData.background_check_status = formData.background_check_status;
@@ -398,6 +401,26 @@ export default function CreateDriverPage() {
                 <h3 className='text-lg font-semibold text-white'>
                   Account &amp; personal
                 </h3>
+
+                <div className='grid gap-4 sm:grid-cols-2'>
+                  <div className='space-y-2'>
+                    <Label htmlFor='driver_number' className='text-slate-200'>
+                      Driver ID
+                    </Label>
+                    <Input
+                      id='driver_number'
+                      name='driver_number'
+                      value={formData.driver_number ?? ''}
+                      onChange={handleChange}
+                      placeholder='A27048'
+                      disabled={isLoading}
+                      className='border-slate-600 bg-slate-700 text-white uppercase'
+                    />
+                    <p className='text-xs text-slate-400'>
+                      External ID used on timesheets (for example A27048).
+                    </p>
+                  </div>
+                </div>
 
                 <div className='grid gap-4 sm:grid-cols-2'>
                   <div className='space-y-2'>

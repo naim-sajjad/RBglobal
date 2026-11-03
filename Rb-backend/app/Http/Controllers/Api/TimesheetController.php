@@ -198,7 +198,8 @@ class TimesheetController extends Controller
 
         $existsQuery = Timesheet::where('driver_id', $driverId)
             ->where('week_start_date', $validated['week_start_date'])
-            ->where('employer_id', $employerId);
+            ->where('employer_id', $employerId)
+            ->whereNull('adjustment_review_id');
         if ($existsQuery->exists()) {
             return response()->json([
                 'message' => 'A timesheet for this driver, employer, and week already exists.',
@@ -248,9 +249,9 @@ class TimesheetController extends Controller
 
         $file = $request->file('file');
         $ext = strtolower($file->getClientOriginalExtension() ?: '');
-        if (! in_array($ext, ['csv', 'xlsx', 'txt'], true)) {
+        if (! in_array($ext, ['csv', 'xlsx', 'xls', 'txt'], true)) {
             return response()->json([
-                'message' => 'Unsupported file type. Upload a .csv or .xlsx customer timesheet.',
+                'message' => 'Unsupported file type. Upload a .csv or .xlsx calculation sheet.',
             ], 422);
         }
 

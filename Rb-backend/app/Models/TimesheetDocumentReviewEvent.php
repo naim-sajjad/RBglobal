@@ -18,6 +18,8 @@ class TimesheetDocumentReviewEvent extends Model
 
     public const ADJUSTMENT_STATUS_UPDATED = 'adjustment_status_updated';
 
+    public const HANDLING_TIMESHEET_CREATED = 'handling_timesheet_created';
+
     public const SUPERSEDED = 'superseded';
 
     public const DOCUMENT_VIEWED = 'document_viewed';

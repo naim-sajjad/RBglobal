@@ -34,7 +34,7 @@ class TimesheetTrip extends Model
     ];
 
     protected $casts = [
-        'trip_date' => 'date',
+        'trip_date' => 'date:Y-m-d',
         'trip_total' => 'decimal:2',
         'total_agency_billing' => 'decimal:2',
         'minimum_applied' => 'boolean',

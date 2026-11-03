@@ -140,9 +140,10 @@ function driverName(ts: Timesheet) {
 }
 
 function driverToOption(driver: DriverWithDetails): SearchableFilterOption {
+  const name = driver.name ?? driver.user?.name ?? `Driver #${driver.id}`;
   return {
     value: String(driver.id),
-    label: driver.name ?? driver.user?.name ?? `Driver #${driver.id}`,
+    label: driver.driver_number ? `${name} (${driver.driver_number})` : name,
     sublabel: driver.email ?? driver.user?.email ?? undefined,
   };
 }
@@ -651,7 +652,7 @@ export default function AdminTimesheetsPage() {
             onClick={() => setImportOpen(true)}
           >
             <Upload className='h-4 w-4 mr-2' />
-            Import Excel
+            Upload calculation sheet
           </Button>
           <Button asChild className='bg-emerald-600 hover:bg-emerald-500'>
             <Link href='/admin/timesheets/new'>
@@ -967,6 +968,7 @@ export default function AdminTimesheetsPage() {
                         <TimesheetStatusBadge
                           status={ts.status}
                           adjusted={Boolean(ts.adjusted_at)}
+                          isAdjustmentEntry={Boolean(ts.adjustment_review_id)}
                           driverReviewStatus={
                             ts.latest_document_review?.status ?? null
                           }
