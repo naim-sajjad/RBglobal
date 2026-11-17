@@ -3,12 +3,19 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
+import { BlockingLoader } from '@/components/ui/blocking-loader';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Table,
@@ -50,12 +57,16 @@ import { cn, getApiErrorMessage } from '@/lib/utils';
 import { DriverTimesheetDocumentsCard } from '@/components/driver/driver-timesheet-documents-card';
 import { DriverTimesheetAdjustmentCard } from '@/components/driver/driver-timesheet-adjustment-card';
 import { TimesheetStatusBadge } from '@/components/timesheet-status-badge';
+import { TimesheetLineItemsTable } from '@/components/admin/timesheet-line-items-table';
 import {
   suggestNextTripDate,
   resolveClassDriverRate,
   resolveDistanceBandRates,
   DISTANCE_RATE_OVERRIDE_KEY,
   toDateOnly,
+  parseBillingTaxRules,
+  timesheetTotalWithTax,
+  type BillingTaxRule,
   type PayRateDraft,
 } from '@/lib/timesheet-lines';
 
@@ -88,6 +99,8 @@ export default function DriverTimesheetDetailPage() {
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [updatingTripId, setUpdatingTripId] = useState<number | null>(null);
+  const [tripsView, setTripsView] = useState<'lines' | 'trips'>('lines');
+  const [taxRules, setTaxRules] = useState<BillingTaxRule[]>([]);
 
   // Add trip form (contract-driven: distance + per-pay-item quantities from Rate Card)
   const [newTripEmployerId, setNewTripEmployerId] = useState<string>('');
@@ -134,6 +147,18 @@ export default function DriverTimesheetDetailPage() {
       );
     }
   }, [id, fetchTimesheet]);
+
+  useEffect(() => {
+    const loadTax = async () => {
+      try {
+        const taxRes = await apiClient.getPayrollBillingTaxSettings();
+        setTaxRules(parseBillingTaxRules(taxRes));
+      } catch {
+        setTaxRules([]);
+      }
+    };
+    void loadTax();
+  }, []);
 
   // Keep trip employer locked to the timesheet employer.
   useEffect(() => {
@@ -328,13 +353,14 @@ export default function DriverTimesheetDetailPage() {
 
   if (loading || !timesheet) {
     return (
-      <div className='flex justify-center items-center min-h-[200px]'>
-        {loading ? (
-          <Spinner className='h-8 w-8 text-white' />
-        ) : (
-          <p className='text-slate-400'>{error || 'Not found'}</p>
-        )}
-      </div>
+      <>
+        <BlockingLoader open={loading} label='Loading timesheet…' />
+        {!loading ? (
+          <div className='flex justify-center items-center min-h-[200px]'>
+            <p className='text-slate-400'>{error || 'Not found'}</p>
+          </div>
+        ) : null}
+      </>
     );
   }
 
@@ -360,6 +386,8 @@ export default function DriverTimesheetDetailPage() {
     typeof timesheet.weekly_total === 'number'
       ? timesheet.weekly_total
       : dailyTotals.reduce((s, d) => s + d.total, 0);
+  const weeklyTotalInclTax =
+    timesheetTotalWithTax(weeklyTotal, taxRules) ?? weeklyTotal;
 
   return (
     <div className='max-w-5xl mx-auto space-y-6'>
@@ -441,15 +469,15 @@ export default function DriverTimesheetDetailPage() {
             {formatDate(timesheet.week_start_date)} –{' '}
             {formatDate(timesheet.week_end_date)}
           </CardTitle>
-          <p className='text-sm text-slate-400'>
+          <CardDescription className='text-slate-400'>
             {timesheet.employer?.name
               ? `Customer: ${timesheet.employer.name} — `
               : ''}
-            Weekly total:{' '}
+            Weekly total (incl. tax):{' '}
             <span className='font-semibold text-white'>
-              ${Number(weeklyTotal).toFixed(2)}
+              ${Number(weeklyTotalInclTax).toFixed(2)}
             </span>
-          </p>
+          </CardDescription>
           {timesheet.reject_reason ? (
             <Alert variant='destructive' className='mt-3'>
               <AlertCircle className='h-4 w-4' />
@@ -468,14 +496,43 @@ export default function DriverTimesheetDetailPage() {
             </Alert>
           )}
 
-          {canEdit && (
-            <div className='flex gap-2'>
+          <div className='flex flex-wrap items-center justify-between gap-2'>
+            <div className='inline-flex rounded-md border border-slate-600 bg-slate-900/50 p-0.5'>
+              <Button
+                type='button'
+                size='sm'
+                variant='ghost'
+                className={cn(
+                  'h-8 px-3 text-xs',
+                  tripsView === 'lines'
+                    ? 'bg-slate-700 text-white'
+                    : 'text-slate-400 hover:text-white',
+                )}
+                onClick={() => setTripsView('lines')}
+              >
+                Line items
+              </Button>
+              <Button
+                type='button'
+                size='sm'
+                variant='ghost'
+                className={cn(
+                  'h-8 px-3 text-xs',
+                  tripsView === 'trips'
+                    ? 'bg-slate-700 text-white'
+                    : 'text-slate-400 hover:text-white',
+                )}
+                onClick={() => setTripsView('trips')}
+              >
+                Trips
+              </Button>
+            </div>
+            {canEdit ? (
               <Button
                 onClick={() => {
                   if (timesheet.employer_id) {
                     setNewTripEmployerId(String(timesheet.employer_id));
                   }
-                  // No trips yet → week start; otherwise day after last trip.
                   setNewTripDate(
                     suggestNextTripDate(
                       timesheet.trips,
@@ -497,10 +554,19 @@ export default function DriverTimesheetDetailPage() {
                 <Plus className='h-4 w-4 mr-2' />
                 Add trip
               </Button>
-            </div>
-          )}
+            ) : null}
+          </div>
 
-          {trips.length === 0 ? (
+          {tripsView === 'lines' ? (
+            <TimesheetLineItemsTable
+              timesheet={timesheet}
+              taxRules={taxRules}
+              canManageTrips={canEdit}
+              onDeleteTrip={handleDeleteTrip}
+              onFocusTrip={() => setTripsView('trips')}
+              emptyMessage='No line items yet. Add a trip to start logging pay items.'
+            />
+          ) : trips.length === 0 ? (
             <p className='text-slate-400 py-8 text-center border border-dashed border-slate-600 rounded-md'>
               No trips yet. Add a trip to start logging pay items.
             </p>
@@ -532,7 +598,7 @@ export default function DriverTimesheetDetailPage() {
 
               <div className='border-t border-slate-700 pt-4 flex justify-end'>
                 <p className='text-lg font-semibold text-white'>
-                  Weekly total: ${Number(weeklyTotal).toFixed(2)}
+                  Weekly total (incl. tax): ${Number(weeklyTotalInclTax).toFixed(2)}
                 </p>
               </div>
             </div>
@@ -850,6 +916,9 @@ export default function DriverTimesheetDetailPage() {
           )}
         </DialogContent>
       </Dialog>
+      <BlockingLoader open={loading} label='Loading timesheet…' />
+      <BlockingLoader open={saving} label='Saving trip…' />
+      <BlockingLoader open={submitting} label='Submitting timesheet…' />
     </div>
   );
 }

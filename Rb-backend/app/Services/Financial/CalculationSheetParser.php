@@ -3,8 +3,13 @@
 namespace App\Services\Financial;
 
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Reader\Csv as CsvReader;
+use PhpOffice\PhpSpreadsheet\Reader\Xls as XlsReader;
+use PhpOffice\PhpSpreadsheet\Reader\Xlsx as XlsxReader;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use RuntimeException;
 use Throwable;
+use ZipArchive;
 
 class CalculationSheetParser
 {
@@ -25,13 +30,15 @@ class CalculationSheetParser
         if (! is_file($absolutePath)) {
             throw new RuntimeException('Spreadsheet file was not found.');
         }
+        if (filesize($absolutePath) === 0) {
+            throw new RuntimeException('The uploaded spreadsheet is empty.');
+        }
 
         try {
-            $reader = IOFactory::createReaderForFile($absolutePath);
-            $reader->setReadDataOnly(true);
-            $spreadsheet = $reader->load($absolutePath);
+            $spreadsheet = self::loadSpreadsheet($absolutePath);
         } catch (Throwable $exception) {
-            throw new RuntimeException('Could not read the Excel file. Use .xlsx, .xls, or .csv.');
+            $hint = self::readFailureHint($absolutePath, $exception);
+            throw new RuntimeException($hint, 0, $exception);
         }
 
         $sheet = $spreadsheet->getActiveSheet();
@@ -660,6 +667,91 @@ class CalculationSheetParser
         }
 
         return $out === [] ? ['Item'] : $out;
+    }
+
+    private static function loadSpreadsheet(string $absolutePath): Spreadsheet
+    {
+        $kind = self::detectSpreadsheetKind($absolutePath);
+        $readers = match ($kind) {
+            'csv' => ['csv', 'xlsx', 'xls'],
+            'xls' => ['xls', 'xlsx', 'csv'],
+            default => ['xlsx', 'xls', 'csv'],
+        };
+
+        $last = null;
+        foreach ($readers as $type) {
+            try {
+                $reader = match ($type) {
+                    'csv' => new CsvReader,
+                    'xls' => new XlsReader,
+                    default => new XlsxReader,
+                };
+                if (method_exists($reader, 'setReadDataOnly')) {
+                    $reader->setReadDataOnly(true);
+                }
+                if ($reader instanceof CsvReader) {
+                    $reader->setInputEncoding('UTF-8');
+                    $reader->setDelimiter(',');
+                }
+
+                return $reader->load($absolutePath);
+            } catch (Throwable $exception) {
+                $last = $exception;
+            }
+        }
+
+        try {
+            $reader = IOFactory::createReaderForFile($absolutePath);
+            if (method_exists($reader, 'setReadDataOnly')) {
+                $reader->setReadDataOnly(true);
+            }
+
+            return $reader->load($absolutePath);
+        } catch (Throwable $exception) {
+            throw $last ?? $exception;
+        }
+    }
+
+    private static function detectSpreadsheetKind(string $absolutePath): string
+    {
+        $ext = strtolower(pathinfo($absolutePath, PATHINFO_EXTENSION));
+        $fh = fopen($absolutePath, 'rb');
+        $magic = $fh ? (string) fread($fh, 8) : '';
+        if ($fh) {
+            fclose($fh);
+        }
+
+        if (str_starts_with($magic, 'PK')) {
+            return 'xlsx';
+        }
+        if (str_starts_with($magic, "\xD0\xCF\x11\xE0")) {
+            return 'xls';
+        }
+        if (in_array($ext, ['xlsx', 'xls', 'csv'], true)) {
+            return $ext;
+        }
+
+        return 'xlsx';
+    }
+
+    private static function readFailureHint(string $absolutePath, Throwable $exception): string
+    {
+        $fh = fopen($absolutePath, 'rb');
+        $magic = $fh ? (string) fread($fh, 8) : '';
+        if ($fh) {
+            fclose($fh);
+        }
+
+        if (str_starts_with($magic, 'PK') && ! class_exists(ZipArchive::class)) {
+            return 'Could not read the .xlsx file because PHP zip support is not enabled on the server. Enable ext-zip, or re-upload the sheet as .csv.';
+        }
+
+        $message = strtolower($exception->getMessage());
+        if (str_contains($message, 'zip') || str_contains($message, 'ole')) {
+            return 'Could not open the spreadsheet. Re-save it in Excel as .xlsx (or .csv) and upload again.';
+        }
+
+        return 'Could not read the Excel file. Use .xlsx, .xls, or .csv.';
     }
 
     /**

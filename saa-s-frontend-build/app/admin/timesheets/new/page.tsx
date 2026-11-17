@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
+import { BlockingLoader } from '@/components/ui/blocking-loader';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ArrowLeft, AlertCircle, FileSpreadsheet } from 'lucide-react';
 import {
@@ -311,6 +312,7 @@ export default function AdminNewTimesheetPage() {
           </form>
         </CardContent>
       </Card>
+      <BlockingLoader open={isSubmitting} label="Creating timesheet…" />
     </div>
   );
 }

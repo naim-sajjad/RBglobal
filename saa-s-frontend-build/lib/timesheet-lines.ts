@@ -56,6 +56,7 @@ export function flattenTimesheetLineItems(
   timesheet: Timesheet,
 ): TimesheetLineItemRow[] {
   const driverNo =
+    timesheet.driver?.driver_number?.trim() ||
     timesheet.driver?.license_number?.trim() ||
     String(timesheet.driver_id ?? '');
   const driverName =
@@ -167,6 +168,47 @@ export function applyBillingTaxToSubtotal(
     taxRows,
     total: roundMoney(subtotal + taxAmount),
   };
+}
+
+export function parseBillingTaxRules(payload: unknown): BillingTaxRule[] {
+  const raw =
+    payload &&
+    typeof payload === 'object' &&
+    Array.isArray((payload as { taxes?: unknown }).taxes)
+      ? ((payload as { taxes: unknown[] }).taxes ?? [])
+      : Array.isArray(payload)
+        ? payload
+        : [];
+
+  return raw.map((item) => {
+    const row = (item ?? {}) as {
+      name?: string;
+      type?: string;
+      value?: number;
+    };
+    return {
+      name: String(row.name ?? 'Tax'),
+      type: row.type === 'fixed' ? 'fixed' : ('percentage' as const),
+      value: Number(row.value ?? 0),
+    };
+  });
+}
+
+export function timesheetTotalWithTax(
+  weeklyTotal: number | string | null | undefined,
+  rules: BillingTaxRule[],
+): number | null {
+  const subtotal = Number(weeklyTotal);
+  if (!Number.isFinite(subtotal)) return null;
+  return applyBillingTaxToSubtotal(subtotal, rules).total;
+}
+
+export function formatTimesheetTotalWithTax(
+  weeklyTotal: number | string | null | undefined,
+  rules: BillingTaxRule[],
+): string {
+  const total = timesheetTotalWithTax(weeklyTotal, rules);
+  return total == null ? '—' : `$${total.toFixed(2)}`;
 }
 
 export function formatTripDateDisplay(ymd: string) {

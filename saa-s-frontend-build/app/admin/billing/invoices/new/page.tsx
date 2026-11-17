@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Spinner } from '@/components/ui/spinner';
+import { BlockingLoader } from '@/components/ui/blocking-loader';
 import { apiClient } from '@/lib/api';
 import { DriverWithDetails, Employer, InvoicePreviewResponse } from '@/lib/types';
 import { toast } from 'sonner';
@@ -288,6 +289,8 @@ export default function NewClientInvoicePage() {
           </CardContent>
         </Card>
       )}
+      <BlockingLoader open={previewLoading} label="Loading invoice preview…" />
+      <BlockingLoader open={createLoading} label="Creating invoice…" />
     </div>
   );
 }

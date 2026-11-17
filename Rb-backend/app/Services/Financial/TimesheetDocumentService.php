@@ -76,7 +76,10 @@ class TimesheetDocumentService
         }
 
         $originalName = $file->getClientOriginalName() ?: self::defaultFilename($timesheet, $documentType);
-        $ext = strtolower($file->getClientOriginalExtension() ?: 'bin');
+        $ext = strtolower($file->getClientOriginalExtension() ?: '');
+        if ($ext === '') {
+            $ext = strtolower((string) pathinfo($originalName, PATHINFO_EXTENSION));
+        }
         if ($ext === '') {
             $ext = 'bin';
         }
@@ -125,16 +128,22 @@ class TimesheetDocumentService
         TimesheetDocument $calculation,
         ?int $userId = null
     ): TimesheetDocument {
-        $parsed = null;
+        $parsed = is_array($calculation->parsed_payload) ? $calculation->parsed_payload : null;
+        $parseError = null;
         if ($calculation->file_path && Storage::disk('public')->exists($calculation->file_path)
-            && self::isSpreadsheetFilename($calculation->original_filename)) {
-            $parsed = CalculationSheetParser::parseFile(Storage::disk('public')->path($calculation->file_path));
-            $calculation->update(['parsed_payload' => $parsed]);
-        } elseif (is_array($calculation->parsed_payload)) {
-            $parsed = $calculation->parsed_payload;
+            && (self::isSpreadsheetFilename($calculation->original_filename)
+                || self::isSpreadsheetFilename($calculation->file_path))) {
+            try {
+                $parsed = CalculationSheetParser::parseFile(Storage::disk('public')->path($calculation->file_path));
+                $calculation->update(['parsed_payload' => $parsed]);
+            } catch (RuntimeException $exception) {
+                $parseError = $exception;
+            }
         }
         if (! is_array($parsed)) {
-            throw new RuntimeException('The calculation sheet could not be read. Check the Excel columns (item, qty, rate, amount).');
+            throw $parseError ?? new RuntimeException(
+                'The calculation sheet could not be read. Check the Excel columns (item, qty, rate, amount).'
+            );
         }
 
         $lines = is_array($parsed['lines'] ?? null) ? $parsed['lines'] : [];

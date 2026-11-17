@@ -41,7 +41,11 @@ class TimesheetController extends Controller
 
     protected function isStaff(): bool
     {
-        return (bool) auth()->user()?->hasPermissionTo('drivers.view');
+        try {
+            return (bool) auth()->user()?->hasPermissionTo('drivers.view');
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     public function index(Request $request)
@@ -239,10 +243,37 @@ class TimesheetController extends Controller
 
     public function import(Request $request)
     {
-        if (! $this->isStaff()) {
-            abort(403, 'Unauthorized');
+        $driverId = $this->getCurrentDriverId();
+        $staff = $this->isStaff();
+
+        // Same endpoint as admin. Drivers always import against their own profile.
+        if ($request->boolean('as_driver') || ($driverId && ! $staff)) {
+            if (! $driverId) {
+                return response()->json([
+                    'message' => 'Driver profile required to upload a calculation sheet.',
+                ], 403);
+            }
+
+            return $this->runCalculationSheetImport($request, $driverId);
         }
 
+        return $this->runCalculationSheetImport($request, null);
+    }
+
+    public function importAsDriver(Request $request)
+    {
+        $driverId = $this->getCurrentDriverId();
+        if (! $driverId) {
+            return response()->json([
+                'message' => 'Driver profile required to upload a calculation sheet.',
+            ], 403);
+        }
+
+        return $this->runCalculationSheetImport($request, $driverId);
+    }
+
+    private function runCalculationSheetImport(Request $request, ?int $restrictDriverId)
+    {
         $request->validate([
             'file' => 'required|file|max:10240',
         ]);
@@ -259,7 +290,8 @@ class TimesheetController extends Controller
             $result = TimesheetImportService::import(
                 $file,
                 tenant('id'),
-                auth()->id()
+                auth()->id(),
+                $restrictDriverId
             );
         } catch (\InvalidArgumentException $e) {
             return response()->json([

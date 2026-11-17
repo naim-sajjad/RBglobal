@@ -20,6 +20,16 @@ class User extends Authenticatable
      *
      * @var list<string>
      */
+    public const ROLE_SUPER_ADMIN = 'super_admin';
+
+    public const ROLE_ADMIN = 'admin';
+
+    public const ROLE_EDITOR = 'editor';
+
+    public const STATUS_ACTIVE = 'active';
+
+    public const STATUS_INACTIVE = 'inactive';
+
     protected $fillable = [
         'name',
         'email',
@@ -27,6 +37,9 @@ class User extends Authenticatable
         'tenant_id',
         'is_global_admin', // For super admin access across tenants
         'status', // User status: active or inactive
+        'role',
+        'must_change_password',
+        'last_login_at',
     ];
 
     /**
@@ -50,6 +63,8 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_global_admin' => 'boolean',
+            'must_change_password' => 'boolean',
+            'last_login_at' => 'datetime',
         ];
     }
 
@@ -99,6 +114,30 @@ class User extends Authenticatable
 
         // Use the trait's methods to check permissions
         return $this->hasDirectPermission($permission) || $this->hasPermissionViaRole($permission);
+    }
+
+    public function isSuperAdmin(): bool
+    {
+        return (bool) $this->is_global_admin
+            || (string) $this->role === self::ROLE_SUPER_ADMIN;
+    }
+
+    public function isWebsiteAdmin(): bool
+    {
+        if ($this->isSuperAdmin()) {
+            return true;
+        }
+
+        return in_array((string) $this->role, [
+            self::ROLE_SUPER_ADMIN,
+            self::ROLE_ADMIN,
+            self::ROLE_EDITOR,
+        ], true);
+    }
+
+    public function adminApiTokens()
+    {
+        return $this->tokens()->where('name', 'admin-api-token');
     }
 
     /**

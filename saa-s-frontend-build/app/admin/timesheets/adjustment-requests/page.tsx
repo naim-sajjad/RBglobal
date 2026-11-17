@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Spinner } from '@/components/ui/spinner';
+import { BlockingLoader, TimesheetTableSkeleton } from '@/components/ui/blocking-loader';
 import {
   Select,
   SelectContent,
@@ -218,6 +219,7 @@ export default function AdjustmentRequestsPage() {
   const createHandlingTimesheet = async (review: TimesheetDocumentReview) => {
     const existing = handlingTimesheetId(review);
     if (existing) {
+      setCreatingTimesheet(true);
       router.push(`/admin/timesheets/${existing}`);
       return;
     }
@@ -228,7 +230,6 @@ export default function AdjustmentRequestsPage() {
       router.push(`/admin/timesheets/${res.timesheet.id}`);
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'Could not create timesheet'));
-    } finally {
       setCreatingTimesheet(false);
     }
   };
@@ -302,9 +303,7 @@ export default function AdjustmentRequestsPage() {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className='flex justify-center py-16'>
-              <Spinner className='h-8 w-8 text-white' />
-            </div>
+            <TimesheetTableSkeleton />
           ) : items.length === 0 ? (
             <p className='text-sm text-slate-400 py-10 text-center border border-dashed border-slate-600 rounded-md'>
               No adjustment requests in this filter.
@@ -600,6 +599,11 @@ export default function AdjustmentRequestsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <BlockingLoader
+        open={creatingTimesheet}
+        label='Opening timesheet…'
+      />
+      <BlockingLoader open={saving} label='Saving request…' />
     </div>
   );
 }

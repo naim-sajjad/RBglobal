@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Spinner } from '@/components/ui/spinner';
+import { BlockingLoader, TimesheetTableSkeleton } from '@/components/ui/blocking-loader';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Table,
@@ -20,6 +20,7 @@ import {
   AlertCircle,
   ChevronRight,
   Calendar,
+  Upload,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { DriverWithDetails, Timesheet } from '@/lib/types';
@@ -27,6 +28,12 @@ import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
 import { getApiErrorMessage } from '@/lib/utils';
 import { TimesheetStatusBadge } from '@/components/timesheet-status-badge';
+import { TimesheetImportDialog } from '@/components/admin/timesheet-import-dialog';
+import {
+  formatTimesheetTotalWithTax,
+  parseBillingTaxRules,
+  type BillingTaxRule,
+} from '@/lib/timesheet-lines';
 
 function formatCompactWeek(start: string, end: string) {
   const s = new Date(start);
@@ -54,6 +61,9 @@ export default function DriverTimesheetsPage() {
   const [timesheets, setTimesheets] = useState<Timesheet[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [importOpen, setImportOpen] = useState(false);
+  const [navigatingId, setNavigatingId] = useState<number | null>(null);
+  const [taxRules, setTaxRules] = useState<BillingTaxRule[]>([]);
 
   const fetchTimesheets = useCallback(async () => {
     setIsLoading(true);
@@ -88,6 +98,22 @@ export default function DriverTimesheetsPage() {
     void fetchTimesheets();
   }, [authLoading, isAuthenticated, fetchTimesheets]);
 
+  useEffect(() => {
+    if (authLoading || !isAuthenticated) return;
+    let cancelled = false;
+    apiClient
+      .getPayrollBillingTaxSettings()
+      .then((res) => {
+        if (!cancelled) setTaxRules(parseBillingTaxRules(res));
+      })
+      .catch(() => {
+        if (!cancelled) setTaxRules([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, isAuthenticated]);
+
   const counts = useMemo(() => {
     const draft = timesheets.filter((t) => t.status === 'draft').length;
     const submitted = timesheets.filter((t) => t.status === 'submitted').length;
@@ -96,11 +122,7 @@ export default function DriverTimesheetsPage() {
   }, [timesheets]);
 
   if (authLoading) {
-    return (
-      <div className='flex justify-center py-16'>
-        <Spinner className='h-8 w-8 text-white' />
-      </div>
-    );
+    return <BlockingLoader open label='Loading timesheets…' />;
   }
 
   return (
@@ -112,7 +134,8 @@ export default function DriverTimesheetsPage() {
             My Timesheets
           </h1>
           <p className='text-slate-400 mt-0.5 text-sm'>
-            Create, review, and submit your weekly timesheets
+            Create, review, and submit your weekly timesheets. You can also
+            upload a calculation sheet to generate timesheets.
           </p>
           <dl className='mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm text-slate-400'>
             <div className='flex items-baseline gap-1.5'>
@@ -142,6 +165,15 @@ export default function DriverTimesheetsPage() {
           </dl>
         </div>
         <div className='flex items-center gap-2 shrink-0'>
+          <Button
+            type='button'
+            variant='outline'
+            className='border-slate-600 bg-slate-800 text-slate-100 hover:bg-slate-700'
+            onClick={() => setImportOpen(true)}
+          >
+            <Upload className='h-4 w-4 mr-2' />
+            Upload calculation sheet
+          </Button>
           <Button asChild className='bg-emerald-600 hover:bg-emerald-500 text-white'>
             <Link href='/driver/timesheets/new'>
               <Plus className='h-4 w-4 mr-2' />
@@ -167,27 +199,36 @@ export default function DriverTimesheetsPage() {
           </p>
         </CardHeader>
         <CardContent className='pt-0'>
-          {isLoading ? (
-            <div className='flex flex-col items-center justify-center gap-3 py-10'>
-              <Spinner className='h-8 w-8 text-white' />
-              <p className='text-slate-400 text-sm'>Loading timesheets…</p>
-            </div>
+          {isLoading && timesheets.length === 0 ? (
+            <TimesheetTableSkeleton />
           ) : timesheets.length === 0 ? (
             <div className='py-10 text-center space-y-3'>
               <Calendar className='h-10 w-10 mx-auto text-slate-500 opacity-60' />
               <p className='text-white font-medium'>No timesheets yet</p>
               <p className='text-slate-400 text-sm'>
-                Create a timesheet to start logging trips for the week.
+                Upload a calculation sheet to generate timesheets, or create one
+                and add trips.
               </p>
-              <Button
-                asChild
-                className='bg-emerald-600 hover:bg-emerald-500 text-white'
-              >
-                <Link href='/driver/timesheets/new'>
-                  <Plus className='h-4 w-4 mr-2' />
-                  Create timesheet
-                </Link>
-              </Button>
+              <div className='flex flex-wrap items-center justify-center gap-2'>
+                <Button
+                  type='button'
+                  variant='outline'
+                  className='border-slate-600 bg-slate-800 text-slate-100 hover:bg-slate-700'
+                  onClick={() => setImportOpen(true)}
+                >
+                  <Upload className='h-4 w-4 mr-2' />
+                  Upload calculation sheet
+                </Button>
+                <Button
+                  asChild
+                  className='bg-emerald-600 hover:bg-emerald-500 text-white'
+                >
+                  <Link href='/driver/timesheets/new'>
+                    <Plus className='h-4 w-4 mr-2' />
+                    Create timesheet
+                  </Link>
+                </Button>
+              </div>
             </div>
           ) : (
             <Table>
@@ -197,7 +238,7 @@ export default function DriverTimesheetsPage() {
                   <TableHead className='text-slate-300'>Customer</TableHead>
                   <TableHead className='text-slate-300'>Status</TableHead>
                   <TableHead className='text-slate-300 text-right'>
-                    Weekly total
+                    Weekly total (incl. tax)
                   </TableHead>
                   <TableHead className='w-12' />
                 </TableRow>
@@ -215,12 +256,14 @@ export default function DriverTimesheetsPage() {
                       role='link'
                       aria-label={`Open timesheet ${formatCompactWeek(ts.week_start_date, ts.week_end_date)}`}
                       className='border-slate-700 hover:bg-slate-700/60 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-inset'
-                      onClick={() =>
-                        router.push(`/driver/timesheets/${ts.id}`)
-                      }
+                      onClick={() => {
+                        setNavigatingId(ts.id);
+                        router.push(`/driver/timesheets/${ts.id}`);
+                      }}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
                           e.preventDefault();
+                          setNavigatingId(ts.id);
                           router.push(`/driver/timesheets/${ts.id}`);
                         }
                       }}
@@ -255,9 +298,7 @@ export default function DriverTimesheetsPage() {
                         />
                       </TableCell>
                       <TableCell className='text-right text-white font-semibold tabular-nums'>
-                        {Number.isFinite(Number(ts.weekly_total))
-                          ? `$${Number(ts.weekly_total).toFixed(2)}`
-                          : '—'}
+                        {formatTimesheetTotalWithTax(ts.weekly_total, taxRules)}
                       </TableCell>
                       <TableCell>
                         <ChevronRight
@@ -273,6 +314,23 @@ export default function DriverTimesheetsPage() {
           )}
         </CardContent>
       </Card>
+
+      <TimesheetImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        onImported={() => void fetchTimesheets()}
+        timesheetPathPrefix='/driver/timesheets'
+        asDriver
+        description='Upload an Excel or CSV calculation sheet. Every imported row is applied to your timesheet. If Driver ID is missing or does not match yours, you will see a validation message — the sheet is still imported.'
+      />
+      <BlockingLoader
+        open={isLoading && timesheets.length > 0}
+        label='Loading timesheets…'
+      />
+      <BlockingLoader
+        open={navigatingId != null}
+        label='Opening timesheet…'
+      />
     </div>
   );
 }

@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Spinner } from '@/components/ui/spinner';
+import { BlockingLoader } from '@/components/ui/blocking-loader';
 import { apiClient } from '@/lib/api';
 import { ClientInvoice, ClientInvoiceStatus } from '@/lib/types';
 import { toast } from 'sonner';
@@ -110,11 +110,7 @@ export default function ClientInvoiceDetailPage() {
   };
 
   if (loading) {
-    return (
-      <div className="flex justify-center py-24">
-        <Spinner className="h-8 w-8 text-white" />
-      </div>
-    );
+    return <BlockingLoader open label="Loading invoice…" />;
   }
 
   if (!inv) {
@@ -294,6 +290,7 @@ export default function ClientInvoiceDetailPage() {
           </Button>
         </CardContent>
       </Card>
+      <BlockingLoader open={pdfLoading} label="Preparing invoice PDF…" />
     </div>
   );
 }

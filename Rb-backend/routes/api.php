@@ -141,13 +141,15 @@ Route::prefix('v1/tenant')->middleware([
     Route::put('/pay-item-templates/{payItemTemplate}', [PayItemTemplateController::class, 'update']);
     Route::delete('/pay-item-templates/{payItemTemplate}', [PayItemTemplateController::class, 'destroy']);
 
-    // Timesheets
+    // Timesheets — import paths must not sit under /timesheets/{id}
     Route::get('/timesheets', [TimesheetController::class, 'index']);
     Route::post('/timesheets', [TimesheetController::class, 'store']);
     Route::post('/timesheets/import', [TimesheetController::class, 'import']);
-    Route::get('/timesheets/{timesheet}', [TimesheetController::class, 'show']);
-    Route::put('/timesheets/{timesheet}', [TimesheetController::class, 'update']);
-    Route::delete('/timesheets/{timesheet}', [TimesheetController::class, 'destroy']);
+    Route::post('/timesheet-imports', [TimesheetController::class, 'import']);
+    Route::post('/timesheet-imports/driver', [TimesheetController::class, 'importAsDriver']);
+    Route::get('/timesheets/{timesheet}', [TimesheetController::class, 'show'])->whereNumber('timesheet');
+    Route::put('/timesheets/{timesheet}', [TimesheetController::class, 'update'])->whereNumber('timesheet');
+    Route::delete('/timesheets/{timesheet}', [TimesheetController::class, 'destroy'])->whereNumber('timesheet');
     Route::post('/timesheets/{timesheet}/submit', [TimesheetController::class, 'submit']);
     Route::post('/timesheets/{timesheet}/approve', [TimesheetController::class, 'approve']);
     Route::post('/timesheets/{timesheet}/reject', [TimesheetController::class, 'reject']);
