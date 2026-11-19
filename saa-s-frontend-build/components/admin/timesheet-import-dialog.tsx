@@ -12,11 +12,13 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
+import { BlockingLoader } from '@/components/ui/blocking-loader';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { FileUp, Upload, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Upload, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { apiClient } from '@/lib/api';
-import { cn, getApiErrorMessage } from '@/lib/utils';
+import { getApiErrorMessage } from '@/lib/utils';
 import { toast } from 'sonner';
+import { FileDropzone } from '@/components/ui/file-dropzone';
 
 type UnmatchedRow = {
   row: number;
@@ -40,12 +42,18 @@ type TimesheetImportDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onImported?: () => void;
+  timesheetPathPrefix?: string;
+  description?: string;
+  asDriver?: boolean;
 };
 
 export function TimesheetImportDialog({
   open,
   onOpenChange,
   onImported,
+  timesheetPathPrefix = '/admin/timesheets',
+  description,
+  asDriver = false,
 }: TimesheetImportDialogProps) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -53,6 +61,17 @@ export function TimesheetImportDialog({
   const [uploading, setUploading] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
   const [result, setResult] = useState<ImportResult | null>(null);
+  const [openingTimesheet, setOpeningTimesheet] = useState(false);
+
+  const acceptSheet = (next: File) => {
+    if (!/\.(xlsx|xls|csv)$/i.test(next.name)) {
+      toast.error('Use an Excel or CSV file (.xlsx, .xls, or .csv)');
+      return;
+    }
+    setFile(next);
+    setErrors([]);
+    setResult(null);
+  };
 
   const reset = () => {
     setFile(null);
@@ -70,7 +89,7 @@ export function TimesheetImportDialog({
     setErrors([]);
     setResult(null);
     try {
-      const data = await apiClient.importTimesheets(file);
+      const data = await apiClient.importTimesheets(file, { asDriver });
       const unmatched = data.unmatched ?? [];
       const count = data.timesheets?.length ?? 0;
       setResult({
@@ -111,6 +130,15 @@ export function TimesheetImportDialog({
   const firstTimesheetId = result?.timesheets?.[0]?.id;
 
   return (
+    <>
+    <BlockingLoader
+      open={uploading}
+      label='Generating timesheets…'
+    />
+    <BlockingLoader
+      open={openingTimesheet}
+      label='Opening timesheet…'
+    />
     <Dialog
       open={open}
       onOpenChange={(next) => {
@@ -118,54 +146,39 @@ export function TimesheetImportDialog({
         if (!next) reset();
       }}
     >
-      <DialogContent className='max-h-[90vh] overflow-y-auto bg-slate-800 border-slate-700 sm:max-w-2xl'>
+      <DialogContent
+        className='max-h-[90vh] overflow-y-auto bg-slate-800 border-slate-700 sm:max-w-2xl'
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'copy';
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          const dropped = e.dataTransfer.files?.[0];
+          if (dropped) acceptSheet(dropped);
+        }}
+      >
         <DialogHeader>
           <DialogTitle className='text-white'>
             Upload calculation sheet
           </DialogTitle>
           <DialogDescription className='text-slate-400'>
-            Upload an Excel or CSV calculation sheet. Drivers are matched by
-            Driver ID first, then by name. Unmatched rows are listed for manual
-            review. Trips are added to weekly timesheets using each trip start
-            and end date.
+            {description ??
+              'Upload an Excel or CSV calculation sheet. Drivers are matched by Driver ID first, then by name. Unmatched rows are listed for manual review. Trips are added to weekly timesheets using each trip start and end date.'}
           </DialogDescription>
         </DialogHeader>
 
         <div className='min-w-0 space-y-3 py-1'>
-          <input
-            ref={inputRef}
-            type='file'
-            accept='.csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-            className='hidden'
-            onChange={(e) => {
-              setFile(e.target.files?.[0] ?? null);
-              setErrors([]);
-              setResult(null);
-            }}
+          <FileDropzone
+            file={file}
+            onFile={acceptSheet}
+            inputRef={inputRef}
+            disabled={uploading}
+            accept='.csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel'
+            emptyTitle='Drag and drop a calculation sheet, or click to browse'
+            emptyHint='Excel or CSV (.xlsx, .xls, .csv)'
+            selectedHint='Drop a new sheet or click to replace'
           />
-          <button
-            type='button'
-            onClick={() => inputRef.current?.click()}
-            className={cn(
-              'flex w-full min-w-0 flex-col items-center justify-center gap-2 rounded-md border border-dashed px-4 py-8 transition-colors',
-              file
-                ? 'border-emerald-600/60 bg-emerald-950/20'
-                : 'border-slate-600 bg-slate-900/40 hover:border-slate-500',
-            )}
-          >
-            <FileUp
-              className={cn('h-8 w-8', file ? 'text-emerald-400' : 'text-slate-400')}
-            />
-            {file ? (
-              <span className='w-full break-all text-center text-sm font-medium text-white'>
-                {file.name}
-              </span>
-            ) : (
-              <span className='text-sm text-slate-300'>
-                Click to choose a calculation sheet
-              </span>
-            )}
-          </button>
 
           {errors.length > 0 ? (
             <Alert variant='destructive' className='max-h-40 overflow-y-auto'>
@@ -190,9 +203,21 @@ export function TimesheetImportDialog({
                 </p>
               </div>
               {result.warnings && result.warnings.length > 0 ? (
-                <p className='text-xs text-amber-200'>
-                  {result.warnings.slice(0, 5).join(' ')}
-                </p>
+                <div className='space-y-1.5'>
+                  <p className='text-sm font-medium text-amber-200'>
+                    Validation
+                  </p>
+                  <ul className='max-h-40 space-y-1 overflow-y-auto text-xs text-amber-100/90'>
+                    {result.warnings.map((warning) => (
+                      <li
+                        key={warning}
+                        className='rounded border border-amber-800/50 bg-amber-950/20 px-2 py-1.5'
+                      >
+                        {warning}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               ) : null}
               {result.unmatched && result.unmatched.length > 0 ? (
                 <div className='space-y-2'>
@@ -240,8 +265,9 @@ export function TimesheetImportDialog({
               type='button'
               className='bg-slate-700 text-white hover:bg-slate-600'
               onClick={() => {
+                setOpeningTimesheet(true);
                 onOpenChange(false);
-                router.push(`/admin/timesheets/${firstTimesheetId}`);
+                router.push(`${timesheetPathPrefix}/${firstTimesheetId}`);
               }}
             >
               Open timesheet
@@ -267,5 +293,6 @@ export function TimesheetImportDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    </>
   );
 }

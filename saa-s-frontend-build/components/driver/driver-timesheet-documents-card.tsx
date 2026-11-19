@@ -12,6 +12,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
+import { BlockingLoader } from '@/components/ui/blocking-loader';
+import { FileDropzone } from '@/components/ui/file-dropzone';
 import {
   Dialog,
   DialogContent,
@@ -88,6 +90,7 @@ export function DriverTimesheetDocumentsCard({
   const [previewTitle, setPreviewTitle] = useState('Calculation sheet');
   const [previewLoading, setPreviewLoading] = useState(false);
   const [requestingInvoice, setRequestingInvoice] = useState(false);
+  const [busyLabel, setBusyLabel] = useState<string | null>(null);
 
   const timesheetDoc = useMemo(
     () => latestOf(documents, 'timesheet'),
@@ -129,6 +132,7 @@ export function DriverTimesheetDocumentsCard({
       return;
     }
     setUploading(true);
+    setBusyLabel('Uploading document…');
     try {
       const res = await apiClient.uploadTimesheetDocument(
         timesheetId,
@@ -147,29 +151,30 @@ export function DriverTimesheetDocumentsCard({
       toast.error(getApiErrorMessage(err, 'Failed to upload file'));
     } finally {
       setUploading(false);
+      setBusyLabel(null);
     }
   };
 
   const handleRequestInvoice = async () => {
-    if (!calcDoc) {
-      toast.error('Upload a calculation sheet first');
-      return;
-    }
     if (
       invoiceDoc &&
-      !confirm('An invoice already exists. Generate a new one from the calculation sheet?')
+      !confirm('An invoice already exists. Generate a new one from this timesheet?')
     ) {
       return;
     }
     setRequestingInvoice(true);
+    setBusyLabel(
+      invoiceDoc ? 'Generating new invoice…' : 'Generating invoice…',
+    );
     try {
       await apiClient.requestTimesheetInvoice(timesheetId);
-      toast.success('Invoice generated from the calculation sheet');
+      toast.success('Invoice generated from the timesheet');
       await onDocumentsChange();
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'Failed to generate invoice'));
     } finally {
       setRequestingInvoice(false);
+      setBusyLabel(null);
     }
   };
 
@@ -190,14 +195,24 @@ export function DriverTimesheetDocumentsCard({
       }
       return;
     }
+    setBusyLabel(
+      doc.document_type === 'invoice' ? 'Opening invoice…' : 'Opening document…',
+    );
     try {
       await apiClient.openTimesheetDocument(timesheetId, doc.id);
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'Failed to open document'));
+    } finally {
+      setBusyLabel(null);
     }
   };
 
   const handleDownload = async (doc: TimesheetDocument) => {
+    setBusyLabel(
+      doc.document_type === 'invoice'
+        ? 'Downloading invoice…'
+        : 'Downloading document…',
+    );
     try {
       await apiClient.downloadTimesheetDocument(
         timesheetId,
@@ -206,6 +221,8 @@ export function DriverTimesheetDocumentsCard({
       );
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'Failed to download document'));
+    } finally {
+      setBusyLabel(null);
     }
   };
 
@@ -233,6 +250,10 @@ export function DriverTimesheetDocumentsCard({
 
   return (
     <>
+      <BlockingLoader
+        open={!!busyLabel || deletingId != null}
+        label={busyLabel ?? 'Deleting document…'}
+      />
       <Card className='min-w-0 overflow-hidden bg-slate-800 border-slate-700'>
         <CardHeader>
           <CardTitle className='flex items-center gap-2 text-white'>
@@ -248,8 +269,8 @@ export function DriverTimesheetDocumentsCard({
             ) : null}
           </CardTitle>
           <CardDescription className='text-slate-400'>
-            Upload your timesheet (PDF or Excel) and calculation sheet (Excel),
-            then request an invoice from the calculation amounts.
+            Upload supporting files if needed, then request an invoice generated
+            from this timesheet&apos;s line items.
           </CardDescription>
         </CardHeader>
         <CardContent className='space-y-4'>
@@ -293,7 +314,7 @@ export function DriverTimesheetDocumentsCard({
                 >
                   {calcDoc
                     ? calcDoc.original_filename
-                    : 'Required for invoice (.xlsx)'}
+                    : 'Optional Excel (.xlsx)'}
                 </p>
                 <Button
                   type='button'
@@ -312,17 +333,15 @@ export function DriverTimesheetDocumentsCard({
                 <p className='text-sm font-medium text-white mt-1'>Invoice</p>
                 <p className='text-xs text-slate-400 mt-1'>
                   {invoiceDoc
-                    ? 'Generated from the calculation sheet'
-                    : calcDoc
-                      ? 'Ready to generate from the calculation sheet'
-                      : 'Upload a calculation sheet first'}
+                    ? 'Generated from this timesheet'
+                    : 'Generated from timesheet line items'}
                 </p>
                 <div className='mt-3 space-y-2'>
                   <Button
                     type='button'
                     size='sm'
                     className='w-full bg-emerald-600 hover:bg-emerald-500 text-white'
-                    disabled={!calcDoc || requestingInvoice}
+                    disabled={requestingInvoice}
                     onClick={() => void handleRequestInvoice()}
                   >
                     {requestingInvoice ? (
@@ -475,65 +494,49 @@ export function DriverTimesheetDocumentsCard({
             <DialogDescription className='text-slate-400'>
               {uploadKind === 'timesheet'
                 ? 'PDF or Excel (.pdf, .xlsx, .xls, or .csv), max 10 MB.'
-                : 'Excel only (.xlsx, .xls, or .csv), max 10 MB. After upload, use Request invoice.'}
+                : 'Excel only (.xlsx, .xls, or .csv), max 10 MB. Optional supporting file.'}
             </DialogDescription>
           </DialogHeader>
           <div className='min-w-0 space-y-2 py-1'>
             <Label className='text-slate-300'>
               {uploadKind === 'timesheet' ? 'PDF or Excel file' : 'Excel file'}
             </Label>
-            <input
-              ref={uploadInputRef}
-              type='file'
+            <FileDropzone
+              file={selectedFile}
+              onFile={(next) => {
+                const isExcel = /\.(xlsx|xls|csv)$/i.test(next.name);
+                const isPdf = /\.pdf$/i.test(next.name);
+                if (uploadKind === 'timesheet' && !isExcel && !isPdf) {
+                  toast.error(
+                    'Timesheets must be a PDF or Excel file (.xlsx, .xls, or .csv)',
+                  );
+                  return;
+                }
+                if (uploadKind === 'calculation_sheet' && !isExcel) {
+                  toast.error('Use an Excel file (.xlsx, .xls, or .csv)');
+                  return;
+                }
+                setSelectedFile(next);
+              }}
+              inputRef={uploadInputRef}
+              disabled={uploading}
               accept={
                 uploadKind === 'timesheet'
                   ? '.pdf,.xlsx,.xls,.csv,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv'
                   : '.xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv'
               }
-              className='sr-only'
-              onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
-            />
-            <button
-              type='button'
-              onClick={() => uploadInputRef.current?.click()}
-              className={cn(
-                'flex w-full min-w-0 flex-col items-center justify-center gap-2 rounded-md border border-dashed px-3 py-6 text-center transition-colors',
+              emptyTitle='Drag and drop a file, or click to browse'
+              emptyHint={
+                uploadKind === 'timesheet'
+                  ? 'PDF or Excel, max 10 MB'
+                  : 'Excel or CSV, max 10 MB'
+              }
+              selectedHint={
                 selectedFile
-                  ? 'border-emerald-600/60 bg-emerald-950/20'
-                  : 'border-slate-600 bg-slate-900/40 hover:border-slate-500 hover:bg-slate-900/60',
-              )}
-            >
-              <FileUp
-                className={cn(
-                  'h-7 w-7 shrink-0',
-                  selectedFile ? 'text-emerald-400' : 'text-slate-400',
-                )}
-              />
-              {selectedFile ? (
-                <>
-                  <span
-                    className='w-full max-w-full break-all text-sm font-medium text-white'
-                    title={selectedFile.name}
-                  >
-                    {selectedFile.name}
-                  </span>
-                  <span className='text-xs text-slate-400'>
-                    {formatFileSize(selectedFile.size)} · Click to change file
-                  </span>
-                </>
-              ) : (
-                <>
-                  <span className='text-sm font-medium text-slate-200'>
-                    Click to choose a file
-                  </span>
-                  <span className='text-xs text-slate-500'>
-                    {uploadKind === 'timesheet'
-                      ? 'PDF or Excel, max 10 MB'
-                      : 'Excel only, max 10 MB'}
-                  </span>
-                </>
-              )}
-            </button>
+                  ? `${formatFileSize(selectedFile.size)} · Drop a new file or click to replace`
+                  : 'Drop a new file or click to replace'
+              }
+            />
           </div>
           <DialogFooter>
             <Button

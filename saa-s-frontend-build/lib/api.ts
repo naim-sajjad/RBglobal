@@ -36,7 +36,12 @@ class ApiClient {
     // Add request interceptor
     this.client.interceptors.request.use((config) => {
       if (config.data instanceof FormData) {
-        delete config.headers['Content-Type'];
+        const headers = config.headers as { delete?: (key: string) => void } & Record<string, unknown>;
+        if (typeof headers?.delete === 'function') {
+          headers.delete('Content-Type');
+        } else {
+          delete headers['Content-Type'];
+        }
       }
       if (this.token) {
         config.headers.Authorization = `Bearer ${this.token}`;
@@ -480,12 +485,13 @@ class ApiClient {
     return response.data;
   }
 
-  async importTimesheets(file: File) {
+  async importTimesheets(file: File, options?: { asDriver?: boolean }) {
     const formData = new FormData();
     formData.append('file', file);
-    const response = await this.client.post('/tenant/timesheets/import', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
+    if (options?.asDriver) {
+      formData.append('as_driver', '1');
+    }
+    const response = await this.client.post('/tenant/timesheets/import', formData);
     return response.data as {
       message: string;
       timesheets: Array<{

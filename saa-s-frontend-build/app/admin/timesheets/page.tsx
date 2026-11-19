@@ -33,6 +33,7 @@ import {
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Spinner } from '@/components/ui/spinner';
+import { BlockingLoader, TimesheetTableSkeleton } from '@/components/ui/blocking-loader';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Popover,
@@ -65,6 +66,12 @@ import {
 } from '@/lib/types';
 import { toast } from 'sonner';
 import { cn, formatApiDate, getApiErrorMessage } from '@/lib/utils';
+import {
+  formatTimesheetTotalWithTax,
+  parseBillingTaxRules,
+  timesheetTotalWithTax,
+  type BillingTaxRule,
+} from '@/lib/timesheet-lines';
 import { TimesheetImportDialog } from '@/components/admin/timesheet-import-dialog';
 import {
   TimesheetStatusBadge,
@@ -368,6 +375,9 @@ export default function AdminTimesheetsPage() {
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [bulkLoading, setBulkLoading] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [navigatingId, setNavigatingId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [taxRules, setTaxRules] = useState<BillingTaxRule[]>([]);
 
   const needsReviewFilter = statusFilter === 'needs_review';
 
@@ -440,6 +450,21 @@ export default function AdminTimesheetsPage() {
     void fetchTimesheets();
   }, [fetchTimesheets]);
 
+  useEffect(() => {
+    let cancelled = false;
+    apiClient
+      .getPayrollBillingTaxSettings()
+      .then((res) => {
+        if (!cancelled) setTaxRules(parseBillingTaxRules(res));
+      })
+      .catch(() => {
+        if (!cancelled) setTaxRules([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const searchDrivers = useCallback(
     async (query: string, signal: AbortSignal) => {
       const data = await apiClient.getDrivers({ search: query });
@@ -507,12 +532,14 @@ export default function AdminTimesheetsPage() {
       } else if (sortKey === 'status') {
         cmp = STATUS_SORT_ORDER[a.status] - STATUS_SORT_ORDER[b.status];
       } else {
-        cmp = Number(a.weekly_total || 0) - Number(b.weekly_total || 0);
+        cmp =
+          (timesheetTotalWithTax(a.weekly_total, taxRules) ?? 0) -
+          (timesheetTotalWithTax(b.weekly_total, taxRules) ?? 0);
       }
       return cmp * dir;
     });
     return rows;
-  }, [timesheets, sortKey, sortDir]);
+  }, [timesheets, sortKey, sortDir, taxRules]);
 
   const counts = useMemo(
     () => ({
@@ -571,6 +598,7 @@ export default function AdminTimesheetsPage() {
   };
 
   const handleRowNavigate = (timesheetId: number) => {
+    setNavigatingId(timesheetId);
     router.push(`/admin/timesheets/${timesheetId}`);
   };
 
@@ -583,6 +611,7 @@ export default function AdminTimesheetsPage() {
     ) {
       return;
     }
+    setDeletingId(ts.id);
     try {
       await apiClient.deleteTimesheet(ts.id);
       toast.success('Timesheet deleted');
@@ -590,6 +619,8 @@ export default function AdminTimesheetsPage() {
       await fetchTimesheets();
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'Failed to delete timesheet'));
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -854,11 +885,8 @@ export default function AdminTimesheetsPage() {
             </div>
           )}
 
-          {loading ? (
-            <div className='flex flex-col items-center justify-center gap-3 py-10'>
-              <Spinner className='h-8 w-8 text-white' />
-              <p className='text-slate-400 text-sm'>Loading timesheets…</p>
-            </div>
+          {loading && timesheets.length === 0 ? (
+            <TimesheetTableSkeleton />
           ) : sortedTimesheets.length === 0 ? (
             <div className='py-10 text-center space-y-1'>
               <p className='text-white font-medium'>No timesheets found</p>
@@ -904,7 +932,7 @@ export default function AdminTimesheetsPage() {
                     onSort={handleSort}
                   />
                   <SortableHead
-                    label='Weekly total'
+                    label='Weekly total (incl. tax)'
                     column='total'
                     sortKey={sortKey}
                     sortDir={sortDir}
@@ -978,9 +1006,7 @@ export default function AdminTimesheetsPage() {
                         />
                       </TableCell>
                       <TableCell className='text-right text-white font-semibold tabular-nums'>
-                        {Number.isFinite(Number(ts.weekly_total))
-                          ? `$${Number(ts.weekly_total).toFixed(2)}`
-                          : '—'}
+                        {formatTimesheetTotalWithTax(ts.weekly_total, taxRules)}
                       </TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
                         <div className='flex items-center justify-end gap-0.5'>
@@ -990,7 +1016,10 @@ export default function AdminTimesheetsPage() {
                             asChild
                             title='Open timesheet (adjust)'
                           >
-                            <Link href={`/admin/timesheets/${ts.id}?adjust=1`}>
+                            <Link
+                              href={`/admin/timesheets/${ts.id}?adjust=1`}
+                              onClick={() => setNavigatingId(ts.id)}
+                            >
                               <PencilLine className='h-4 w-4 text-slate-400' />
                             </Link>
                           </Button>
@@ -1017,6 +1046,16 @@ export default function AdminTimesheetsPage() {
           )}
         </CardContent>
       </Card>
+      <BlockingLoader
+        open={loading && timesheets.length > 0}
+        label='Loading timesheets…'
+      />
+      <BlockingLoader
+        open={navigatingId != null}
+        label='Opening timesheet…'
+      />
+      <BlockingLoader open={deletingId != null} label='Deleting timesheet…' />
+      <BlockingLoader open={bulkLoading} label='Approving timesheets…' />
     </div>
   );
 }

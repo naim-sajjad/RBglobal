@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
+import { BlockingLoader } from '@/components/ui/blocking-loader';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -86,6 +87,8 @@ import {
   createCustomPayLineDraft,
   DISTANCE_RATE_OVERRIDE_KEY,
   toDateOnly,
+  parseBillingTaxRules,
+  timesheetTotalWithTax,
   type CustomPayLineDraft,
   type PayRateDraft,
 } from '@/lib/timesheet-lines';
@@ -219,6 +222,7 @@ export default function AdminTimesheetDetailPage() {
   const [actionLoading, setActionLoading] = useState<
     'approve' | 'reject' | 'paid' | 'submit' | 'delete' | null
   >(null);
+  const [invoiceNavigating, setInvoiceNavigating] = useState(false);
   const [showDocuments, setShowDocuments] = useState(false);
   const [tripsView, setTripsView] = useState<'lines' | 'trips'>('lines');
   const [taxRules, setTaxRules] = useState<
@@ -385,20 +389,7 @@ export default function AdminTimesheetDetailPage() {
       }
       try {
         const taxRes = await apiClient.getPayrollBillingTaxSettings();
-        const taxes = Array.isArray(taxRes?.taxes)
-          ? taxRes.taxes
-          : Array.isArray(taxRes)
-            ? taxRes
-            : [];
-        setTaxRules(
-          taxes.map(
-            (t: { name?: string; type?: string; value?: number }) => ({
-              name: String(t.name ?? 'Tax'),
-              type: t.type === 'fixed' ? 'fixed' : 'percentage',
-              value: Number(t.value ?? 0),
-            }),
-          ),
-        );
+        setTaxRules(parseBillingTaxRules(taxRes));
       } catch {
         setTaxRules([]);
       }
@@ -726,13 +717,14 @@ export default function AdminTimesheetDetailPage() {
 
   if (loading || !timesheet) {
     return (
-      <div className='flex justify-center items-center min-h-[200px]'>
-        {loading ? (
-          <Spinner className='h-8 w-8 text-white' />
-        ) : (
-          <p className='text-slate-400'>{error || 'Not found'}</p>
-        )}
-      </div>
+      <>
+        <BlockingLoader open={loading} label='Loading timesheet…' />
+        {!loading ? (
+          <div className='flex justify-center items-center min-h-[200px]'>
+            <p className='text-slate-400'>{error || 'Not found'}</p>
+          </div>
+        ) : null}
+      </>
     );
   }
 
@@ -758,6 +750,7 @@ export default function AdminTimesheetDetailPage() {
     typeof timesheet.weekly_total === 'number'
       ? timesheet.weekly_total
       : dailyTotals.reduce((s, d) => s + d.total, 0);
+  const weeklyTotalInclTax = timesheetTotalWithTax(weeklyTotal, taxRules) ?? weeklyTotal;
   const adjustmentPreviewLines = adjustmentDraft.lines.map((line) => ({
     ...line,
     ...computeLineAmounts(line),
@@ -933,16 +926,17 @@ export default function AdminTimesheetDetailPage() {
             <Button
               size='sm'
               variant='outline'
-              asChild
               className={cn(
                 TOOLBAR_BTN,
                 'hidden border-emerald-700 bg-emerald-950/40 text-emerald-200 hover:text-white md:inline-flex',
               )}
+              onClick={() => {
+                setInvoiceNavigating(true);
+                router.push(invoicePrefillHref);
+              }}
             >
-              <Link href={invoicePrefillHref}>
-                <Receipt className='h-3.5 w-3.5' />
-                Invoice
-              </Link>
+              <Receipt className='h-3.5 w-3.5' />
+              Invoice
             </Button>
           )}
 
@@ -1032,12 +1026,13 @@ export default function AdminTimesheetDetailPage() {
               {canCreateInvoice && (
                 <DropdownMenuItem
                   className='focus:bg-slate-700 focus:text-white cursor-pointer'
-                  asChild
+                  onClick={() => {
+                    setInvoiceNavigating(true);
+                    router.push(invoicePrefillHref);
+                  }}
                 >
-                  <Link href={invoicePrefillHref}>
-                    <Receipt className='h-4 w-4 mr-2' />
-                    Invoice
-                  </Link>
+                  <Receipt className='h-4 w-4 mr-2' />
+                  Invoice
                 </DropdownMenuItem>
               )}
               <DropdownMenuSeparator className='bg-slate-700' />
@@ -1082,9 +1077,9 @@ export default function AdminTimesheetDetailPage() {
             {timesheet.employer?.name
               ? ` — Customer: ${timesheet.employer.name}`
               : ''}{' '}
-            — Weekly total:{' '}
+            — Weekly total (incl. tax):{' '}
             <span className='font-semibold text-white'>
-              ${Number(weeklyTotal).toFixed(2)}
+              ${Number(weeklyTotalInclTax).toFixed(2)}
             </span>
             {timesheet.document_reviews?.[0] ? (
               <>
@@ -1262,7 +1257,7 @@ export default function AdminTimesheetDetailPage() {
               ))}
               <div className='border-t border-slate-700 pt-4 flex justify-end'>
                 <p className='text-lg font-semibold text-white'>
-                  Weekly total: ${Number(weeklyTotal).toFixed(2)}
+                  Weekly total (incl. tax): ${Number(weeklyTotalInclTax).toFixed(2)}
                 </p>
               </div>
             </div>
@@ -1974,6 +1969,24 @@ export default function AdminTimesheetDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <BlockingLoader
+        open={!!actionLoading}
+        label={
+          actionLoading === 'submit'
+            ? 'Submitting timesheet…'
+            : actionLoading === 'approve'
+              ? 'Approving timesheet…'
+              : actionLoading === 'reject'
+                ? 'Rejecting timesheet…'
+                : actionLoading === 'paid'
+                  ? 'Marking as paid…'
+                  : actionLoading === 'delete'
+                    ? 'Deleting timesheet…'
+                    : 'Working…'
+        }
+      />
+      <BlockingLoader open={saving} label='Saving trip…' />
+      <BlockingLoader open={invoiceNavigating} label='Opening invoice…' />
     </div>
   );
 }

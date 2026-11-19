@@ -41,7 +41,7 @@ class TimesheetImportService
      *
      * @throws \InvalidArgumentException
      */
-    public static function import(UploadedFile $file, ?string $tenantId, ?int $userId = null): array
+    public static function import(UploadedFile $file, ?string $tenantId, ?int $userId = null, ?int $restrictDriverId = null): array
     {
         $rows = self::readRows($file);
         if ($rows === []) {
@@ -120,7 +120,7 @@ class TimesheetImportService
                 'trip_date' => $tripDate,
             ];
 
-            if ($driverNumber === '' && $driverName === '') {
+            if ($driverNumber === '' && $driverName === '' && ! $restrictDriverId) {
                 $unmatched[] = $rowMeta + ['reason' => 'Driver ID and driver name are both missing.'];
                 continue;
             }
@@ -180,7 +180,38 @@ class TimesheetImportService
             throw new \InvalidArgumentException('No trip rows were found in the calculation sheet.');
         }
 
-        $result = DB::transaction(function () use ($parsed, $tenantId, $warnings, $unmatched, $userId) {
+        $selfDriver = null;
+        if ($restrictDriverId) {
+            $selfQuery = Driver::query()->with('user');
+            if ($tenantId) {
+                $selfQuery->where('tenant_id', $tenantId);
+            }
+            $selfDriver = $selfQuery->find($restrictDriverId);
+            if (! $selfDriver) {
+                throw new \InvalidArgumentException('Driver profile required.');
+            }
+
+            $ownNumber = Driver::normalizeDriverNumber((string) $selfDriver->driver_number);
+            $missingIdRows = [];
+            $mismatchById = [];
+            foreach ($parsed as $p) {
+                $sheetNumber = Driver::normalizeDriverNumber((string) ($p['driver_number'] ?? ''));
+                if ($sheetNumber === null) {
+                    $missingIdRows[] = $p['row'];
+                } elseif ($ownNumber !== null && $sheetNumber !== $ownNumber) {
+                    $mismatchById[$sheetNumber][] = $p['row'];
+                }
+            }
+            if ($missingIdRows !== []) {
+                $warnings[] = 'Driver ID is missing on row(s) '.self::summarizeRows($missingIdRows).'. Those rows were still imported as your timesheet.';
+            }
+            foreach ($mismatchById as $sheetNumber => $rowNums) {
+                $warnings[] = 'Driver ID '.$sheetNumber.' on row(s) '.self::summarizeRows($rowNums)
+                    .' does not match yours ('.$ownNumber.'). Those rows were still imported as your timesheet.';
+            }
+        }
+
+        $result = DB::transaction(function () use ($parsed, $tenantId, $warnings, $unmatched, $userId, $restrictDriverId, $selfDriver) {
             $driverCache = [];
             $employerCache = [];
             $groups = [];
@@ -188,32 +219,35 @@ class TimesheetImportService
             $review = $unmatched;
 
             foreach ($parsed as $p) {
-                $driverKey = strtolower(trim((string) ($p['driver_number'] ?? '')).'|'.self::normalizePersonName((string) ($p['driver_name'] ?? '')));
-                if (! isset($driverCache[$driverKey])) {
-                    $resolved = self::resolveDriverForImport(
-                        $p['driver_number'] ?? null,
-                        $p['driver_name'] ?? null,
-                        $tenantId
-                    );
-                    $driverCache[$driverKey] = $resolved;
-                }
-                $resolved = $driverCache[$driverKey];
-                if (($resolved['status'] ?? '') !== 'matched') {
-                    $review[] = [
-                        'row' => $p['row'],
-                        'driver_number' => $p['driver_number'],
-                        'driver_name' => $p['driver_name'],
-                        'customer' => $p['customer'],
-                        'trip_number' => $p['trip_number'],
-                        'trip_date' => $p['trip_date'],
-                        'reason' => $resolved['reason'] ?? 'Driver could not be matched.',
-                    ];
-                    continue;
-                }
-                /** @var Driver $driver */
-                $driver = $resolved['driver'];
-                if (($resolved['matched_by'] ?? '') === 'name') {
-                    $warnings[] = "Row {$p['row']}: Matched driver by name ({$driver->name}).";
+                if ($selfDriver) {
+                    $driver = $selfDriver;
+                } else {
+                    $driverKey = strtolower(trim((string) ($p['driver_number'] ?? '')).'|'.self::normalizePersonName((string) ($p['driver_name'] ?? '')));
+                    if (! isset($driverCache[$driverKey])) {
+                        $driverCache[$driverKey] = self::resolveDriverForImport(
+                            $p['driver_number'] ?? null,
+                            $p['driver_name'] ?? null,
+                            $tenantId
+                        );
+                    }
+                    $resolved = $driverCache[$driverKey];
+                    if (($resolved['status'] ?? '') !== 'matched') {
+                        $review[] = [
+                            'row' => $p['row'],
+                            'driver_number' => $p['driver_number'],
+                            'driver_name' => $p['driver_name'],
+                            'customer' => $p['customer'],
+                            'trip_number' => $p['trip_number'],
+                            'trip_date' => $p['trip_date'],
+                            'reason' => $resolved['reason'] ?? 'Driver could not be matched.',
+                        ];
+                        continue;
+                    }
+                    /** @var Driver $driver */
+                    $driver = $resolved['driver'];
+                    if (($resolved['matched_by'] ?? '') === 'name') {
+                        $warnings[] = "Row {$p['row']}: Matched driver by name ({$driver->name}).";
+                    }
                 }
 
                 $empKey = strtolower($p['customer']);
@@ -486,6 +520,23 @@ class TimesheetImportService
                 ? 'No driver matched name "'.$name.'".'
                 : 'Driver ID and name are missing.',
         ];
+    }
+
+    /**
+     * @param  list<int|string>  $rows
+     */
+    private static function summarizeRows(array $rows): string
+    {
+        $rows = array_values(array_unique(array_map('intval', $rows)));
+        sort($rows);
+        $shown = array_slice($rows, 0, 8);
+        $text = implode(', ', $shown);
+        $rest = count($rows) - count($shown);
+        if ($rest > 0) {
+            $text .= ' and '.$rest.' more';
+        }
+
+        return $text;
     }
 
     /**

@@ -31,21 +31,23 @@ import { cn } from '@/lib/utils';
 type TimesheetLineItemsTableProps = {
   timesheet: Timesheet;
   taxRules: BillingTaxRule[];
-  canAdjust: boolean;
-  canManageTrips: boolean;
-  onOpenAdjust: (trip: TimesheetTrip) => void;
-  onDeleteTrip: (tripId: number) => void;
+  canAdjust?: boolean;
+  canManageTrips?: boolean;
+  onOpenAdjust?: (trip: TimesheetTrip) => void;
+  onDeleteTrip?: (tripId: number) => void;
   onFocusTrip?: (tripId: number) => void;
+  emptyMessage?: string;
 };
 
 export function TimesheetLineItemsTable({
   timesheet,
   taxRules,
-  canAdjust,
-  canManageTrips,
+  canAdjust = false,
+  canManageTrips = false,
   onOpenAdjust,
   onDeleteTrip,
   onFocusTrip,
+  emptyMessage,
 }: TimesheetLineItemsTableProps) {
   const rows = useMemo(
     () => flattenTimesheetLineItems(timesheet),
@@ -70,7 +72,8 @@ export function TimesheetLineItemsTable({
   if (rows.length === 0) {
     return (
       <p className='py-8 text-center text-sm text-slate-400 border border-dashed border-slate-600 rounded-md'>
-        No line items yet. Add a trip or import a customer timesheet Excel/CSV.
+        {emptyMessage ??
+          'No line items yet. Add a trip or import a customer timesheet Excel/CSV.'}
       </p>
     );
   }
@@ -196,7 +199,7 @@ export function TimesheetLineItemsTable({
                                 View trip
                               </DropdownMenuItem>
                             )}
-                            {canAdjust && (
+                            {canAdjust && onOpenAdjust && (
                               <DropdownMenuItem
                                 className='focus:bg-slate-700 cursor-pointer'
                                 onClick={() => onOpenAdjust(trip)}
@@ -205,7 +208,7 @@ export function TimesheetLineItemsTable({
                                 Adjust
                               </DropdownMenuItem>
                             )}
-                            {canManageTrips && (
+                            {canManageTrips && onDeleteTrip && (
                               <DropdownMenuItem
                                 className='focus:bg-slate-700 cursor-pointer text-red-300'
                                 onClick={() => onDeleteTrip(row.tripId)}

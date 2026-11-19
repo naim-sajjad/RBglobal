@@ -11,6 +11,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Spinner } from '@/components/ui/spinner';
+import { BlockingLoader } from '@/components/ui/blocking-loader';
+import { FileDropzone } from '@/components/ui/file-dropzone';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -41,7 +43,6 @@ import {
   Eye,
   Trash2,
   ChevronDown,
-  FileUp,
   Send,
   Loader2,
   User,
@@ -189,6 +190,17 @@ export function TimesheetDocumentActions({
   const latestReview = reviews[0] ?? null;
 
   const isBusy = !!generatingType || uploading || sendingReview;
+  const busyLabel = generatingType
+    ? generatingType === 'invoice'
+      ? 'Generating invoice…'
+      : generatingType === 'calculation_sheet'
+        ? 'Generating calculation sheet…'
+        : 'Generating timesheet…'
+    : uploading
+      ? 'Uploading document…'
+      : sendingReview
+        ? 'Sending for review…'
+        : null;
   const triggerClass = compact
     ? 'h-8 shrink-0 gap-1 px-2.5 text-xs font-medium'
     : undefined;
@@ -310,6 +322,7 @@ export function TimesheetDocumentActions({
 
   return (
     <>
+      <BlockingLoader open={!!busyLabel} label={busyLabel ?? 'Working…'} />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
@@ -482,52 +495,20 @@ export function TimesheetDocumentActions({
               <Label className='text-slate-300'>
                 {uploadDocumentType === 'invoice' ? 'PDF file' : 'PDF or Excel file'}
               </Label>
-              <input
-                ref={uploadInputRef}
-                type='file'
+              <FileDropzone
+                file={selectedFile}
+                onFile={handleFileSelect}
+                inputRef={uploadInputRef}
+                disabled={uploading}
                 accept={uploadAccept(uploadDocumentType)}
-                className='hidden'
-                onChange={(e) => handleFileSelect(e.target.files?.[0])}
-              />
-              <button
-                type='button'
-                onClick={() => uploadInputRef.current?.click()}
-                className={cn(
-                  'flex w-full flex-col items-center justify-center gap-2 rounded-md border border-dashed px-4 py-8 transition-colors',
+                emptyTitle='Drag and drop a file, or click to browse'
+                emptyHint={uploadHint(uploadDocumentType)}
+                selectedHint={
                   selectedFile
-                    ? 'border-emerald-600/60 bg-emerald-950/20'
-                    : 'border-slate-600 bg-slate-900/40 hover:border-slate-500 hover:bg-slate-900/60',
-                )}
-              >
-                <FileUp
-                  className={cn(
-                    'h-8 w-8',
-                    selectedFile ? 'text-emerald-400' : 'text-slate-400',
-                  )}
-                />
-                {selectedFile ? (
-                  <>
-                    <span
-                      className='w-full max-w-full break-all text-center text-sm font-medium text-white'
-                      title={selectedFile.name}
-                    >
-                      {selectedFile.name}
-                    </span>
-                    <span className='text-xs text-slate-400'>
-                      {formatFileSize(selectedFile.size)} · Click to change file
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <span className='text-sm font-medium text-slate-200'>
-                      Click to choose a file
-                    </span>
-                    <span className='text-xs text-slate-500'>
-                      {uploadHint(uploadDocumentType)}
-                    </span>
-                  </>
-                )}
-              </button>
+                    ? `${formatFileSize(selectedFile.size)} · Drop a new file or click to replace`
+                    : 'Drop a new file or click to replace'
+                }
+              />
             </div>
           </div>
 
@@ -614,6 +595,7 @@ export function TimesheetDocumentsCard({
   reviews = [],
 }: SharedProps) {
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [busyLabel, setBusyLabel] = useState<string | null>(null);
 
   const sortedDocuments = [...documents].sort((a, b) =>
     documentSortKey(a).localeCompare(documentSortKey(b)),
@@ -642,6 +624,7 @@ export function TimesheetDocumentsCard({
 
   const handleView = async (doc: TimesheetDocument) => {
     if (isSpreadsheet(doc)) {
+      setBusyLabel('Downloading document…');
       try {
         await apiClient.downloadTimesheetDocument(
           timesheetId,
@@ -650,17 +633,29 @@ export function TimesheetDocumentsCard({
         );
       } catch (err: unknown) {
         toast.error(getApiErrorMessage(err, 'Failed to open document'));
+      } finally {
+        setBusyLabel(null);
       }
       return;
     }
+    setBusyLabel(
+      doc.document_type === 'invoice' ? 'Opening invoice…' : 'Opening document…',
+    );
     try {
       await apiClient.openTimesheetDocument(timesheetId, doc.id);
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'Failed to open document'));
+    } finally {
+      setBusyLabel(null);
     }
   };
 
   const handleDownload = async (doc: TimesheetDocument) => {
+    setBusyLabel(
+      doc.document_type === 'invoice'
+        ? 'Downloading invoice…'
+        : 'Downloading document…',
+    );
     try {
       await apiClient.downloadTimesheetDocument(
         timesheetId,
@@ -669,10 +664,17 @@ export function TimesheetDocumentsCard({
       );
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'Failed to download document'));
+    } finally {
+      setBusyLabel(null);
     }
   };
 
   return (
+    <>
+    <BlockingLoader
+      open={!!busyLabel || deletingId != null}
+      label={busyLabel ?? 'Deleting document…'}
+    />
     <Card id='timesheet-documents' className='bg-slate-800 border-slate-700'>
       <CardHeader>
         <CardTitle className='flex items-center gap-2 text-white'>
@@ -842,6 +844,7 @@ export function TimesheetDocumentsCard({
         )}
       </CardContent>
     </Card>
+    </>
   );
 }
 
@@ -864,6 +867,7 @@ export function DriverUploadedDocumentsSection({
   onDocumentsChange: () => Promise<void> | void;
 }) {
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [busyLabel, setBusyLabel] = useState<string | null>(null);
   const [preview, setPreview] = useState<CalculationSheetPreview | null>(null);
   const [previewTitle, setPreviewTitle] = useState('Calculation sheet');
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -901,14 +905,24 @@ export function DriverUploadedDocumentsSection({
       }
       return;
     }
+    setBusyLabel(
+      doc.document_type === 'invoice' ? 'Opening invoice…' : 'Opening document…',
+    );
     try {
       await apiClient.openTimesheetDocument(timesheetId, doc.id);
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'Failed to open document'));
+    } finally {
+      setBusyLabel(null);
     }
   };
 
   const handleDownload = async (doc: TimesheetDocument) => {
+    setBusyLabel(
+      doc.document_type === 'invoice'
+        ? 'Downloading invoice…'
+        : 'Downloading document…',
+    );
     try {
       await apiClient.downloadTimesheetDocument(
         timesheetId,
@@ -917,6 +931,8 @@ export function DriverUploadedDocumentsSection({
       );
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'Failed to download document'));
+    } finally {
+      setBusyLabel(null);
     }
   };
 
@@ -937,6 +953,10 @@ export function DriverUploadedDocumentsSection({
 
   return (
     <>
+      <BlockingLoader
+        open={!!busyLabel || deletingId != null}
+        label={busyLabel ?? 'Deleting document…'}
+      />
       <Card
         id='driver-uploads'
         className='min-w-0 overflow-hidden border-slate-700 bg-slate-800'

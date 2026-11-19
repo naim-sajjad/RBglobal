@@ -2,11 +2,12 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Spinner } from '@/components/ui/spinner';
+import { BlockingLoader, TimesheetTableSkeleton } from '@/components/ui/blocking-loader';
 import { Receipt, ChevronRight, Plus } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { ClientInvoice, ClientInvoiceStatus } from '@/lib/types';
@@ -29,8 +30,10 @@ function rowsFromPayload(payload: unknown): ClientInvoice[] {
 }
 
 export default function ClientInvoicesPage() {
+  const router = useRouter();
   const [invoices, setInvoices] = useState<ClientInvoice[]>([]);
   const [loading, setLoading] = useState(true);
+  const [navigatingId, setNavigatingId] = useState<number | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -73,9 +76,7 @@ export default function ClientInvoicesPage() {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="flex justify-center py-12">
-              <Spinner className="h-8 w-8 text-white" />
-            </div>
+            <TimesheetTableSkeleton rows={6} />
           ) : invoices.length === 0 ? (
             <p className="text-slate-400 py-8 text-center">No invoices yet.</p>
           ) : (
@@ -91,7 +92,14 @@ export default function ClientInvoicesPage() {
               </TableHeader>
               <TableBody>
                 {invoices.map((inv) => (
-                  <TableRow key={inv.id} className="border-slate-700">
+                  <TableRow
+                    key={inv.id}
+                    className="border-slate-700 hover:bg-slate-700/60 cursor-pointer"
+                    onClick={() => {
+                      setNavigatingId(inv.id);
+                      router.push(`/admin/billing/invoices/${inv.id}`);
+                    }}
+                  >
                     <TableCell className="text-white">{inv.employer?.name ?? `Employer #${inv.employer_id}`}</TableCell>
                     <TableCell className="text-slate-300">
                       {inv.start_date} → {inv.end_date}
@@ -114,6 +122,10 @@ export default function ClientInvoicesPage() {
           )}
         </CardContent>
       </Card>
+      <BlockingLoader
+        open={navigatingId != null}
+        label="Opening invoice…"
+      />
     </div>
   );
 }

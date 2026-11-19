@@ -15,16 +15,30 @@ class TimesheetDocumentController extends Controller
     protected function getCurrentDriverId(): ?int
     {
         $user = auth()->user();
-        $driver = \App\Models\Driver::where('user_id', $user->id)
-            ->where('tenant_id', tenant('id'))
-            ->first();
+        if (! $user) {
+            return null;
+        }
 
-        return $driver?->id;
+        $query = \App\Models\Driver::where('user_id', $user->id);
+        if (tenant('id')) {
+            $query->where('tenant_id', tenant('id'));
+        }
+
+        $driver = $query->first();
+        if ($driver) {
+            return $driver->id;
+        }
+
+        return \App\Models\Driver::where('user_id', $user->id)->value('id');
     }
 
     protected function isStaff(): bool
     {
-        return (bool) auth()->user()?->hasPermissionTo('drivers.view');
+        try {
+            return (bool) auth()->user()?->hasPermissionTo('drivers.view');
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     /**
@@ -32,10 +46,6 @@ class TimesheetDocumentController extends Controller
      */
     protected function assertTimesheetAccess(Timesheet $timesheet): void
     {
-        if ($timesheet->tenant_id !== tenant('id')) {
-            abort(403, 'Unauthorized');
-        }
-
         if ($this->isStaff()) {
             return;
         }
@@ -45,7 +55,16 @@ class TimesheetDocumentController extends Controller
             return;
         }
 
-        abort(403, 'Unauthorized');
+        $ownsByUser = auth()->id()
+            && \App\Models\Driver::query()
+                ->where('user_id', auth()->id())
+                ->where('id', $timesheet->driver_id)
+                ->exists();
+        if ($ownsByUser) {
+            return;
+        }
+
+        abort(403, 'You can only access documents on your own timesheet.');
     }
 
     /** Generate / regenerate remains staff-only. */
@@ -142,7 +161,7 @@ class TimesheetDocumentController extends Controller
         if (! $this->isStaff()) {
             if ($type === TimesheetDocument::TYPE_INVOICE && ! $isPdf) {
                 return response()->json([
-                    'message' => 'Invoices must be a PDF. Upload a calculation sheet, then request an invoice.',
+                    'message' => 'Invoices must be a PDF, or use Request invoice to generate one from this timesheet.',
                 ], 422);
             }
             if ($type === TimesheetDocument::TYPE_CALCULATION_SHEET && ! $isSpreadsheet) {
@@ -175,21 +194,26 @@ class TimesheetDocumentController extends Controller
     {
         $this->assertTimesheetAccess($timesheet);
 
-        $calculation = $timesheet->documents()
-            ->where('document_type', TimesheetDocument::TYPE_CALCULATION_SHEET)
-            ->orderByDesc('created_at')
-            ->first();
-
-        if (! $calculation) {
+        $timesheet->load(['driver.user', 'employer', 'trips.employer']);
+        if ($timesheet->trips->isEmpty()) {
             return response()->json([
-                'message' => 'Upload a calculation sheet in Excel before requesting an invoice.',
+                'message' => 'Add trips to this timesheet before requesting an invoice.',
             ], 422);
         }
 
+        $existingGenerated = TimesheetDocument::query()
+            ->where('timesheet_id', $timesheet->id)
+            ->where('document_type', TimesheetDocument::TYPE_INVOICE)
+            ->where('source', TimesheetDocument::SOURCE_GENERATED)
+            ->get();
+        foreach ($existingGenerated as $doc) {
+            TimesheetDocumentService::deleteDocument($doc);
+        }
+
         try {
-            $invoice = TimesheetDocumentService::generateInvoiceFromCalculation(
+            $invoice = TimesheetDocumentService::generate(
                 $timesheet,
-                $calculation,
+                TimesheetDocument::TYPE_INVOICE,
                 auth()->id()
             )->load('creator:id,name');
         } catch (\Throwable $exception) {
@@ -198,7 +222,6 @@ class TimesheetDocumentController extends Controller
 
         return response()->json([
             'invoice' => $invoice,
-            'preview' => $calculation->parsed_payload,
         ], 201);
     }
 
